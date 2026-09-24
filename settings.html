@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept School Shibra Campus - System Settings</title>
+    <!-- Tailwind CSS for Responsive Design (Mobile & Desktop) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+
+    <!-- Navbar -->
+    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div>
+                <h1 class="text-base md:text-xl font-bold">🏫 Concept School Shibra Campus</h1>
+                <p class="text-xs text-indigo-200">System Settings & Master Data</p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <a href="index.html" class="text-xs bg-indigo-800 hover:bg-indigo-900 px-3 py-1.5 rounded-lg transition">🏠 Dashboard</a>
+                <button onclick="openSettingsModal()" class="bg-indigo-800 hover:bg-indigo-900 p-2 rounded-full transition text-white" title="API URL Settings">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- SECTION 1: Manage Teachers / Staff Names -->
+        <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <h2 class="text-lg font-semibold mb-3 text-indigo-700 border-b pb-2">👩‍🏫 Manage Teachers / Staff</h2>
+            <form id="addStaffMasterForm" class="space-y-3 mb-4" onsubmit="addMasterItem(event, 'staffList', 'staffInput', 'Staff member added successfully!')">
+                <div class="flex gap-2">
+                    <input type="text" id="staffInput" required placeholder="Enter Teacher/Staff Name" class="w-full border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition">Add</button>
+                </div>
+            </form>
+            <div class="border rounded-lg overflow-hidden">
+                <ul id="staffList" class="divide-y divide-slate-100 text-sm">
+                    <li class="p-3 text-slate-400 text-center">No staff added yet. Add above.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SECTION 2: Manage Classes & Sections -->
+        <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <h2 class="text-lg font-semibold mb-3 text-indigo-700 border-b pb-2">🏫 Manage Classes & Sections</h2>
+            <form id="addClassMasterForm" class="space-y-3 mb-4" onsubmit="addMasterItem(event, 'classList', 'classInput', 'Class added successfully!')">
+                <div class="flex gap-2">
+                    <input type="text" id="classInput" required placeholder="e.g. Class 5 - Section A" class="w-full border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition">Add</button>
+                </div>
+            </form>
+            <div class="border rounded-lg overflow-hidden">
+                <ul id="classList" class="divide-y divide-slate-100 text-sm">
+                    <li class="p-3 text-slate-400 text-center">No classes added yet. Add above.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SECTION 3: Manage Fee Types -->
+        <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <h2 class="text-lg font-semibold mb-3 text-indigo-700 border-b pb-2">💸 Manage Fee Categories</h2>
+            <form id="addFeeMasterForm" class="space-y-3 mb-4" onsubmit="addMasterItem(event, 'feeList', 'feeInput', 'Fee category added successfully!')">
+                <div class="flex gap-2">
+                    <input type="text" id="feeInput" required placeholder="e.g. Library Fund / Lab Charges" class="w-full border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition">Add</button>
+                </div>
+            </form>
+            <div class="border rounded-lg overflow-hidden">
+                <ul id="feeList" class="divide-y divide-slate-100 text-sm">
+                    <li class="p-3 text-slate-400 text-center">No custom fee categories added.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SECTION 4: School General Info -->
+        <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <h2 class="text-lg font-semibold mb-3 text-indigo-700 border-b pb-2">⚙️ School General Configuration</h2>
+            <div class="space-y-3 text-sm">
+                <div>
+                    <label class="block font-medium text-slate-700 mb-1">Campus Name</label>
+                    <input type="text" value="Concept School Shibra Campus" readonly class="w-full bg-slate-100 border rounded-lg p-2 text-slate-600 outline-none">
+                </div>
+                <div>
+                    <label class="block font-medium text-slate-700 mb-1">Currency</label>
+                    <input type="text" value="PKR (Pakistani Rupee)" readonly class="w-full bg-slate-100 border rounded-lg p-2 text-slate-600 outline-none">
+                </div>
+                <div class="pt-2">
+                    <button onclick="openSettingsModal()" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-2 rounded-lg transition text-sm">
+                        Configure SheetDB API URL
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Settings Modal Box (For API URL) -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 class="text-lg font-semibold text-indigo-700">⚙️ Google Sheet API Settings</h3>
+                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 font-bold text-lg">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">SheetDB API URL</label>
+                    <input type="text" id="apiUrlInput" placeholder="https://sheetdb.io/api/v1/your_id_here" class="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <p class="text-xs text-slate-500 mt-1">Yahan apni Google Sheet ka SheetDB URL paste karein.</p>
+                </div>
+                <div class="flex justify-end space-x-2 pt-2">
+                    <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm transition">Cancel</button>
+                    <button onclick="saveApiUrl()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm transition">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="text-center py-6 text-xs text-slate-400">
+        Concept School Shibra Campus &copy; 2026 | System Settings
+    </footer>
+
+    <!-- JavaScript for Master Lists & Modal -->
+    <script>
+        // Generic function to add items to local lists with delete option
+        function addMasterItem(event, listId, inputId, successMsg) {
+            event.preventDefault();
+            const inputField = document.getElementById(inputId);
+            const value = inputField.value.trim();
+            if(!value) return;
+
+            const listContainer = document.getElementById(listId);
+            
+            // Remove 'no items' placeholder if present
+            if(listContainer.querySelector('.text-slate-400')) {
+                listContainer.innerHTML = '';
+            }
+
+            const li = document.createElement('li');
+            li.className = "flex justify-between items-center p-3 hover:bg-slate-50 transition";
+            li.innerHTML = `
+                <span class="font-medium text-slate-700">${value}</span>
+                <button onclick="this.parentElement.remove()" class="text-xs bg-rose-50 text-rose-600 hover:bg-rose-100 px-2 py-1 rounded transition">Delete</button>
+            `;
+            listContainer.appendChild(li);
+            inputField.value = '';
+            alert(successMsg);
+        }
+
+        function openSettingsModal() {
+            const modal = document.getElementById('settingsModal');
+            modal.classList.remove('hidden');
+            const savedUrl = localStorage.getItem('sheetdb_api_url') || '';
+            document.getElementById('apiUrlInput').value = savedUrl;
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function saveApiUrl() {
+            const url = document.getElementById('apiUrlInput').value.trim();
+            if(url) {
+                localStorage.setItem('sheetdb_api_url', url);
+                alert("API URL Saved Successfully!");
+                closeSettingsModal();
+            } else {
+                alert("Please enter a valid URL.");
+            }
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeSettingsModal();
+            }
+        });
+    </script>
+</body>
+</html>
