@@ -13,13 +13,9 @@
         
         <!-- SIDEBAR NAVIGATION -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
-            <div class="p-5 border-b border-indigo-800 flex items-center space-x-3">
-                <!-- User's Original Logo -->
-                <img src="images.jpg" alt="School Logo" class="w-10 h-10 rounded-full bg-white object-cover border-2 border-indigo-300">
-                <div>
-                    <h1 class="font-bold text-sm leading-tight">Concept School</h1>
-                    <p class="text-xs text-indigo-300">Shibra Campus</p>
-                </div>
+            <div class="p-5 border-b border-indigo-850">
+                <h1 class="font-bold text-base leading-tight">Concept School</h1>
+                <p class="text-xs text-indigo-300">Shibra Campus</p>
             </div>
             
             <nav class="flex-1 p-4 space-y-2">
@@ -51,32 +47,21 @@
         <!-- MAIN CONTENT AREA -->
         <main class="flex-1 p-6 md:p-10">
             
-            <!-- Header Banner with User Logo -->
+            <!-- Header Banner (Logo removed, clean title view) -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div class="flex items-center space-x-4">
-                    <img src="images.jpg" alt="Logo" class="w-14 h-14 rounded-xl object-cover shadow-sm border border-indigo-100">
-                    <div>
-                        <h2 class="text-2xl md:text-3xl font-extrabold text-indigo-950 tracking-tight">Concept School Shibra Campus</h2>
-                        <p class="text-sm text-slate-500 font-medium">Professional Management Information System (ERP)</p>
-                    </div>
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-extrabold text-indigo-950 tracking-tight">Concept School Shibra Campus</h2>
+                    <p class="text-sm text-slate-500 font-medium">Professional Management Information System (ERP)</p>
                 </div>
                 <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 p-3 rounded-xl transition shadow-sm flex items-center space-x-2 text-sm font-semibold">
                     <span>⚙️ Settings / API</span>
                 </button>
             </div>
 
-            <!-- Main Page Content with User Logo Watermark -->
-            <div class="relative bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center overflow-hidden">
-                <!-- Background Watermark Logo -->
-                <div class="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-                    <img src="images.jpg" alt="Watermark" class="w-80 h-80 object-contain">
-                </div>
-
-                <!-- Content Over Logo -->
-                <div class="relative z-10">
-                    <h3 class="text-2xl font-bold text-slate-900 mb-3">Welcome to School Management Portal</h3>
-                    <p class="text-sm text-slate-600 max-w-xl mx-auto">Aap left sidebar se kisi bhi zaroori module par click kar ke apna kaam asani se perform kar sakte hain. Yeh system mobile aur desktop dono par mukammal taur par responsive hai.</p>
-                </div>
+            <!-- Main Page Content -->
+            <div class="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center">
+                <h3 class="text-2xl font-bold text-slate-900 mb-3">Welcome to School Management Portal</h3>
+                <p class="text-sm text-slate-600 max-w-xl mx-auto">Aap left sidebar se kisi bhi zaroori module par click kar ke apna kaam asani se perform kar sakte hain. Yeh system mobile aur desktop dono par mukammal taur par responsive hai.</p>
             </div>
 
             <footer class="mt-12 text-center text-xs text-slate-400 border-t pt-6">
