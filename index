@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept School Shibra Campus - ERP Dashboard</title>
+    <!-- Tailwind CSS for Responsive Design (Mobile & Desktop) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+
+    <!-- Navbar -->
+    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-lg md:text-xl font-bold">🏫 Concept School Shibra Campus</h1>
+                <p class="text-xs text-indigo-200">Management Information System (ERP)</p>
+            </div>
+            <span class="text-xs bg-indigo-800 px-3 py-1 rounded-full">Mobile & Desktop Ready</span>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Grid -->
+    <main class="max-w-5xl mx-auto px-4 py-10">
+        <div class="text-center mb-10">
+            <h2 class="text-2xl font-bold text-slate-900 mb-2">Welcome to School ERP Portal</h2>
+            <p class="text-sm text-slate-600">Select any module below to manage operations, records, and accounts.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            
+            <!-- 1. Fee Vouchers Module -->
+            <a href="fees.html" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md transition group">
+                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:bg-indigo-600 group-hover:text-white transition">
+                    💸
+                </div>
+                <h3 class="text-lg font-semibold text-slate-800 mb-1">Fee Vouchers & Collection</h3>
+                <p class="text-xs text-slate-500">Manage monthly tuition fee, admission charges, concessions, and student ledger.</p>
+            </a>
+
+            <!-- 2. Book Store Module -->
+            <a href="books.html" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md transition group">
+                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:bg-indigo-600 group-hover:text-white transition">
+                    📚
+                </div>
+                <h3 class="text-lg font-semibold text-slate-800 mb-1">Book Store & Inventory</h3>
+                <p class="text-xs text-slate-500">Handle book purchases, sales, vendor returns, and item discounts easily.</p>
+            </a>
+
+            <!-- 3. Simplified Accounts Module -->
+            <a href="accounts.html" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md transition group">
+                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:bg-indigo-600 group-hover:text-white transition">
+                    💰
+                </div>
+                <h3 class="text-lg font-semibold text-slate-800 mb-1">Simple Accounting & Daybook</h3>
+                <p class="text-xs text-slate-500">Track cash receipts, expense vouchers, daily income, and overall balance.</p>
+            </a>
+
+            <!-- 4. Staff & Payroll Module -->
+            <a href="staff.html" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-500 hover:shadow-md transition group">
+                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:bg-indigo-600 group-hover:text-white transition">
+                    👩‍🏫
+                </div>
+                <h3 class="text-lg font-semibold text-slate-800 mb-1">Staff & Payroll Management</h3>
+                <p class="text-xs text-slate-500">Manage staff joining dates, designations, monthly salaries, leaves, and fines.</p>
+            </a>
+
+        </div>
+    </main>
+
+    <footer class="text-center py-6 text-xs text-slate-400">
+        Concept School Shibra Campus &copy; 2026 | Powered by Google Sheets & Frontend Web Apps
+    </footer>
+</body>
+</html>
