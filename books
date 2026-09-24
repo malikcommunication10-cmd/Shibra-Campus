@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept School Shibra Campus - Book Store & Inventory</title>
+    <!-- Tailwind CSS for Responsive Design (Mobile & Desktop) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+
+    <!-- Navbar -->
+    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div>
+                <h1 class="text-base md:text-xl font-bold">🏫 Concept School Shibra Campus</h1>
+                <p class="text-xs text-indigo-200">Book Store & Inventory Module</p>
+            </div>
+            <span class="text-xs bg-indigo-800 px-2.5 py-1 rounded-full hidden sm:inline-block">Frontend + Google Sheets API</span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- SECTION 1: Add / Entry Form (Purchase or Sale with Discount) -->
+        <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
+            <h2 class="text-lg font-semibold mb-4 text-indigo-700 border-b pb-2">New Transaction Entry</h2>
+            
+            <form id="transactionForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Transaction Type</label>
+                    <select id="txType" class="w-full border rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <option value="Purchase">Book Purchase (Vendor)</option>
+                        <option value="Sale">Book Sale (Student)</option>
+                        <option value="Purchase Return">Purchase Return</option>
+                        <option value="Sale Return">Sale Return</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Party / Student Name</label>
+                    <input type="text" id="partyName" required placeholder="e.g. Publisher Name / Student Name" class="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Book / Item Title</label>
+                    <input type="text" id="bookTitle" required placeholder="e.g. Mathematics Class 5" class="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
+                        <input type="number" id="qty" required min="1" value="1" oninput="calculateTotal()" class="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Unit Price (PKR)</label>
+                        <input type="number" id="unitPrice" required min="0" placeholder="0" oninput="calculateTotal()" class="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                </div>
+
+                <!-- Discount System Section -->
+                <div class="grid grid-cols-2 gap-3 bg-indigo-50/50 p-3 rounded-lg border border-indigo-100">
+                    <div>
+                        <label class="block text-xs font-medium text-indigo-900 mb-1">Discount Type</label>
+                        <select id="discountType" onchange="calculateTotal()" class="w-full border rounded-lg p-2 text-xs bg-white outline-none">
+                            <option value="percentage">Percentage (%)</option>
+                            <option value="fixed">Fixed Amount (PKR)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-indigo-900 mb-1">Discount Value</label>
+                        <input type="number" id="discountVal" min="0" value="0" oninput="calculateTotal()" class="w-full border rounded-lg p-2 text-xs bg-white outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-slate-900 mb-1">Net Total Amount (PKR)</label>
+                    <input type="text" id="netAmount" readonly class="w-full bg-slate-100 font-bold text-indigo-700 border rounded-lg p-2.5 text-base outline-none" value="0">
+                </div>
+
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-sm">
+                    Save to Google Sheet
+                </button>
+            </form>
+        </section>
+
+        <!-- SECTION 2: Records Table / Display List -->
+        <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-lg font-semibold text-indigo-700">Inventory Transactions History</h2>
+                <button onclick="fetchTransactions()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition">
+                    🔄 Refresh Data
+                </button>
+            </div>
+
+            <!-- Responsive Table Container -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 border-b">
+                            <th class="p-3">Type</th>
+                            <th class="p-3">Party/Student</th>
+                            <th class="p-3">Book Title</th>
+                            <th class="p-3">Qty</th>
+                            <th class="p-3">Net Amount</th>
+                            <th class="p-3 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionTableBody">
+                        <!-- Dynamic rows will load here -->
+                        <tr>
+                            <td colspan="6" class="p-4 text-center text-slate-400">Loading records or no data found...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // REPLACE THIS with your actual SheetDB API URL once you link your Google Sheet
+        const API_URL = 'https://sheetdb.io/api/v1/YOUR_SHEETDB_ID';
+
+        // Automatic Discount & Net Total Calculation Function
+        function calculateTotal() {
+            let qty = parseFloat(document.getElementById('qty').value) || 0;
+            let price = parseFloat(document.getElementById('unitPrice').value) || 0;
+            let grossTotal = qty * price;
+
+            let discountType = document.getElementById('discountType').value;
+            let discountVal = parseFloat(document.getElementById('discountVal').value) || 0;
+            let finalDiscount = 0;
+
+            if (discountType === 'percentage') {
+                finalDiscount = (grossTotal * discountVal) / 100;
+            } else {
+                finalDiscount = discountVal;
+            }
+
+            let netTotal = grossTotal - finalDiscount;
+            document.getElementById('netAmount').value = netTotal > 0 ? netTotal.toFixed(2) : 0;
+        }
+
+        // Form Submit Handler (Sends data directly to SheetDB / Google Sheets)
+        document.getElementById('transactionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const txData = {
+                id: 'TX-' + Date.now(),
+                type: document.getElementById('txType').value,
+                party: document.getElementById('partyName').value,
+                book: document.getElementById('bookTitle').value,
+                qty: document.getElementById('qty').value,
+                net_amount: document.getElementById('netAmount').value,
+                date: new Date().toLocaleDateString()
+            };
+
+            alert("Transaction Calculated Successfully! (Connect SheetDB API URL in script to push to Google Sheets).");
+            console.log("Data to send:", txData);
+        });
+
+        async function fetchTransactions() {
+            console.log("Fetching latest records...");
+        }
+    </script>
+</body>
+</html>
