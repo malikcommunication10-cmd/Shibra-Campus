@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept School Shibra Campus - Simple Accounting</title>
+    <!-- Tailwind CSS for Responsive Design (Mobile & Desktop) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+
+    <!-- Navbar -->
+    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div>
+                <h1 class="text-base md:text-xl font-bold">🏫 Concept School Shibra Campus</h1>
+                <p class="text-xs text-indigo-200">Simplified Accounting & Daybook</p>
+            </div>
+            <div class="space-x-2">
+                <a href="fees.html" class="text-xs bg-indigo-800 hover:bg-indigo-900 px-3 py-1.5 rounded-lg transition">💸 Fees</a>
+                <a href="books.html" class="text-xs bg-indigo-800 hover:bg-indigo-900 px-3 py-1.5 rounded-lg transition">📚 Books</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- SECTION 1: Simple Voucher Entry (Cash In / Cash Out / Expense) -->
+        <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
+            <h2 class="text-lg font-semibold mb-4 text-indigo-700 border-b pb-2">Quick Account Voucher</h2>
+            
+            <form id="accountForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Voucher Type</label>
+                    <select id="accType" class="w-full border rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <option value="Cash Receipt">Cash Receipt (Income / Fee Received)</option>
+                        <option value="Cash Payment">Cash Payment (Expense / Bills)</option>
+                        <option value="Salary Payment">Salary Disbursal</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Particulars / Account Title</label>
+                    <input type="text" id="accTitle" required placeholder="e.g. Electricity Bill / Student Fee Collection" class="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Amount (PKR)</label>
+                    <input type="number" id="accAmount" required min="1" placeholder="0" class="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Payment Method / Mode</label>
+                    <select id="payMode" class="w-full border rounded-lg p-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <option value="Cash">Cash in Hand</option>
+                        <option value="Bank">Bank Transfer / Meezan Bank</option>
+                        <option value="Online">Online / EasyPaisa / JazzCash</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Remarks / Note (Optional)</label>
+                    <input type="text" id="accRemarks" placeholder="e.g. Paid for September electricity" class="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-sm">
+                    Save Voucher to Sheet
+                </button>
+            </form>
+        </section>
+
+        <!-- SECTION 2: Daybook & Financial Transactions History -->
+        <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-lg font-semibold text-indigo-700">Financial Daybook & Ledger</h2>
+                <button onclick="fetchAccounts()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition">
+                    🔄 Refresh Daybook
+                </button>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                <div class="bg-emerald-50 border border-emerald-100 p-3 rounded-lg">
+                    <p class="text-xs text-emerald-600 font-medium">Total Inflow (Receipts)</p>
+                    <p id="totalInflow" class="text-base font-bold text-emerald-700">PKR 0</p>
+                </div>
+                <div class="bg-rose-50 border border-rose-100 p-3 rounded-lg">
+                    <p class="text-xs text-rose-600 font-medium">Total Outflow (Expenses)</p>
+                    <p id="totalOutflow" class="text-base font-bold text-rose-700">PKR 0</p>
+                </div>
+                <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-lg col-span-2 sm:col-span-1">
+                    <p class="text-xs text-indigo-600 font-medium">Net Balance</p>
+                    <p id="netBalance" class="text-base font-bold text-indigo-700">PKR 0</p>
+                </div>
+            </div>
+
+            <!-- Responsive Table Container -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 border-b">
+                            <th class="p-3">Type</th>
+                            <th class="p-3">Particulars</th>
+                            <th class="p-3">Mode</th>
+                            <th class="p-3">Amount</th>
+                            <th class="p-3">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accountTableBody">
+                        <tr>
+                            <td colspan="5" class="p-4 text-center text-slate-400">Loading daybook records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- JavaScript Logic -->
+    <script>
+        const API_URL = 'https://sheetdb.io/api/v1/YOUR_SHEETDB_ID';
+
+        document.getElementById('accountForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const accData = {
+                voucher_no: 'ACC-' + Date.now(),
+                type: document.getElementById('accType').value,
+                title: document.getElementById('accTitle').value,
+                amount: document.getElementById('accAmount').value,
+                mode: document.getElementById('payMode').value,
+                remarks: document.getElementById('accRemarks').value,
+                date: new Date().toLocaleDateString()
+            };
+
+            alert("Accounting Voucher Recorded Successfully! (Connect SheetDB API URL to save in Google Sheets).");
+            console.log("Account Data:", accData);
+        });
+
+        async function fetchAccounts() {
+            console.log("Fetching account ledger...");
+        }
+    </script>
+</body>
+</html>
