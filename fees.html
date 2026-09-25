@@ -95,10 +95,11 @@
                                     <th class="p-3">Period</th>
                                     <th class="p-3">Payable</th>
                                     <th class="p-3">Status</th>
+                                    <th class="p-3 text-center">Action</th>
                                 </tr>
                             </thead>
                             <tbody id="feeTableBody">
-                                <tr><td colspan="5" class="p-4 text-center text-slate-400">Loading records...</td></tr>
+                                <tr><td colspan="6" class="p-4 text-center text-slate-400">Loading records...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -134,7 +135,6 @@
             document.getElementById('netPayable').value = net > 0 ? net.toFixed(2) : 0;
         }
 
-        // Save Data to Google Sheet via SheetDB (specifically for 'fees' tab)
         async function saveFeeVoucher(event) {
             event.preventDefault();
             let apiUrl = getApiUrl();
@@ -170,10 +170,7 @@
             try {
                 let response = await fetch(apiUrl + "?sheet=fees", {
                     method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
@@ -183,28 +180,27 @@
                     document.getElementById('netPayable').value = "0";
                     fetchFees();
                 } else {
-                    alert("Failed to save. Please check your API URL.");
+                    alert("Failed to save voucher.");
                 }
             } catch (error) {
                 console.error("Error:", error);
-                alert("Connection error while saving voucher.");
+                alert("Connection error.");
             } finally {
                 btn.innerText = "Save Voucher";
                 btn.disabled = false;
             }
         }
 
-        // Fetch Data from Google Sheet via SheetDB
         async function fetchFees() {
             let apiUrl = getApiUrl();
             let tbody = document.getElementById('feeTableBody');
             
             if(!apiUrl) {
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-amber-600">API URL not set. Click ⚙️ API Settings above.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-amber-600">API URL not set. Click ⚙️ API Settings above.</td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
 
             try {
                 let response = await fetch(apiUrl + "?sheet=fees");
@@ -213,6 +209,15 @@
                 if(Array.isArray(data) && data.length > 0) {
                     tbody.innerHTML = '';
                     data.forEach(row => {
+                        let isPaid = row.status && row.status.toLowerCase() === 'paid';
+                        let statusBadge = isPaid 
+                            ? `<span class="px-2 py-1 text-xs rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Paid</span>`
+                            : `<span class="px-2 py-1 text-xs rounded bg-amber-50 text-amber-700 border border-amber-200">Unpaid</span>`;
+                        
+                        let actionBtn = isPaid 
+                            ? `<span class="text-xs text-slate-400 font-medium">Completed</span>`
+                            : `<button onclick="markAsPaid('${row.voucher_id}', '${row.student}', '${row.payable}', '${row.period}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded text-xs font-medium transition shadow-sm">Pay Now</button>`;
+
                         let tr = document.createElement('tr');
                         tr.className = "border-b hover:bg-slate-50 transition";
                         tr.innerHTML = `
@@ -220,20 +225,67 @@
                             <td class="p-3 text-slate-600">${row.type || '-'}</td>
                             <td class="p-3 text-slate-600">${row.period || '-'}</td>
                             <td class="p-3 font-bold text-indigo-600">PKR ${row.payable || '0'}</td>
-                            <td class="p-3"><span class="px-2 py-1 text-xs rounded bg-amber-50 text-amber-700 border border-amber-200">${row.status || 'Unpaid'}</span></td>
+                            <td class="p-3">${statusBadge}</td>
+                            <td class="p-3 text-center">${actionBtn}</td>
                         `;
                         tbody.appendChild(tr);
                     });
                 } else {
-                    tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">No vouchers found in Google Sheet.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">No vouchers found.</td></tr>`;
                 }
             } catch (error) {
                 console.error("Error:", error);
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500">Failed to load records from Google Sheet.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-rose-500">Failed to load records.</td></tr>`;
             }
         }
 
-        // Settings Modal Controls
+        // Mark as Paid and Record in Accounts Daybook automatically
+        async function markAsPaid(voucherId, studentName, amount, period) {
+            let apiUrl = getApiUrl();
+            if(!apiUrl) return;
+
+            if(!confirm(`Confirm payment of PKR ${amount} received from ${studentName}?`)) return;
+
+            try {
+                // 1. Update Fee Status to Paid in 'fees' sheet
+                let updateResponse = await fetch(`${apiUrl}/voucher_id/${voucherId}?sheet=fees`, {
+                    method: 'PUT',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: { status: "Paid" } })
+                });
+
+                // 2. Automatically add entry into 'accounts' sheet as Cash Receipt
+                let currentDate = new Date().toISOString().split('T')[0];
+                let accountPayload = {
+                    data: [{
+                        voucher_no: voucherId,
+                        type: "Cash Receipt",
+                        title: `Fee Collection - ${studentName} (${period})`,
+                        amount: amount,
+                        mode: "Cash",
+                        remarks: "Auto generated from Fee Vouchers",
+                        date: currentDate
+                    }]
+                };
+
+                await fetch(apiUrl + "?sheet=accounts", {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify(accountPayload)
+                });
+
+                if(updateResponse.ok) {
+                    alert("Fee Paid Successfully & Recorded in Accounts!");
+                    fetchFees();
+                } else {
+                    alert("Status update failed.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Error while processing payment.");
+            }
+        }
+
         function openSettingsModal() { 
             document.getElementById('settingsModal').classList.remove('hidden'); 
             document.getElementById('apiUrlInput').value = localStorage.getItem('sheetdb_api_url') || ''; 
