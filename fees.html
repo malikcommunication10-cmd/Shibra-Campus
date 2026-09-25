@@ -108,6 +108,72 @@
         </main>
     </div>
 
+    <!-- PAYMENT COLLECTION MODAL -->
+    <div id="paymentModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-2xl p-6 shadow-2xl relative">
+            <h3 class="text-lg font-bold text-indigo-900 mb-4 border-b pb-2">💵 Fee Collection & Payment Desk</h3>
+            <form id="paymentForm" onsubmit="processPayment(event)" class="space-y-4">
+                <input type="hidden" id="payVoucherId">
+                <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border">
+                    <div>
+                        <span class="block text-xs text-slate-500">Student Name</span>
+                        <strong id="payStudentName" class="text-sm text-slate-800"></strong>
+                    </div>
+                    <div>
+                        <span class="block text-xs text-slate-500">Period / Month</span>
+                        <strong id="payPeriod" class="text-sm text-slate-800"></strong>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Voucher Amount</label>
+                        <input type="text" id="payVoucherAmount" readonly class="w-full bg-slate-100 font-bold border rounded-lg p-2 text-sm text-indigo-700">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Previous Arrears</label>
+                        <input type="number" id="payPrevBalance" value="0" min="0" oninput="calculateTotalDue()" class="w-full border rounded-lg p-2 text-sm outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Total Due</label>
+                        <input type="text" id="payTotalDue" readonly class="w-full bg-slate-100 font-bold border rounded-lg p-2 text-sm text-rose-600">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Amount Received (PKR)</label>
+                        <input type="number" id="payReceivedAmount" required min="0" oninput="calculateBalance()" class="w-full border rounded-lg p-2.5 text-sm outline-none font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Pending Balance</label>
+                        <input type="text" id="payPendingBalance" readonly class="w-full bg-slate-100 font-bold border rounded-lg p-2.5 text-sm text-amber-600" value="0">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Payment Mode</label>
+                        <select id="payMode" class="w-full border rounded-lg p-2 text-sm bg-white outline-none">
+                            <option value="Cash">Cash</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="JazzCash / EasyPaisa">JazzCash / EasyPaisa</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Remarks</label>
+                        <input type="text" id="payRemarks" placeholder="e.g. Paid in full / installment" class="w-full border rounded-lg p-2 text-sm outline-none">
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-3 border-t">
+                    <button type="button" onclick="closePaymentModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm font-medium hover:bg-slate-200">Cancel</button>
+                    <button type="submit" id="paySubmitBtn" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition">Confirm & Receive Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
@@ -216,7 +282,7 @@
                         
                         let actionBtn = isPaid 
                             ? `<span class="text-xs text-slate-400 font-medium">Completed</span>`
-                            : `<button onclick="markAsPaid('${row.voucher_id}', '${row.student}', '${row.payable}', '${row.period}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded text-xs font-medium transition shadow-sm">Pay Now</button>`;
+                            : `<button onclick="openPaymentModal('${row.voucher_id}', '${row.student}', '${row.period}', '${row.payable}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded text-xs font-medium transition shadow-sm">Pay Now</button>`;
 
                         let tr = document.createElement('tr');
                         tr.className = "border-b hover:bg-slate-50 transition";
@@ -239,31 +305,75 @@
             }
         }
 
-        // Mark as Paid and Record in Accounts Daybook automatically
-        async function markAsPaid(voucherId, studentName, amount, period) {
+        // Open Payment Modal with pre-filled details
+        function openPaymentModal(voucherId, student, period, payable) {
+            document.getElementById('payVoucherId').value = voucherId;
+            document.getElementById('payStudentName').innerText = student;
+            document.getElementById('payPeriod').innerText = period;
+            document.getElementById('payVoucherAmount').value = payable;
+            document.getElementById('payPrevBalance').value = "0";
+            document.getElementById('payReceivedAmount').value = payable;
+            document.getElementById('payRemarks').value = "Fee received in full";
+            
+            calculateTotalDue();
+            document.getElementById('paymentModal').classList.remove('hidden');
+        }
+
+        function closePaymentModal() {
+            document.getElementById('paymentModal').classList.add('hidden');
+        }
+
+        function calculateTotalDue() {
+            let voucherAmt = parseFloat(document.getElementById('payVoucherAmount').value) || 0;
+            let prevBal = parseFloat(document.getElementById('payPrevBalance').value) || 0;
+            let totalDue = voucherAmt + prevBal;
+            document.getElementById('payTotalDue').value = totalDue.toFixed(2);
+            document.getElementById('payReceivedAmount').value = totalDue.toFixed(2);
+            calculateBalance();
+        }
+
+        function calculateBalance() {
+            let totalDue = parseFloat(document.getElementById('payTotalDue').value) || 0;
+            let received = parseFloat(document.getElementById('payReceivedAmount').value) || 0;
+            let balance = totalDue - received;
+            document.getElementById('payPendingBalance').value = balance > 0 ? balance.toFixed(2) : "0";
+        }
+
+        // Process Payment and record in Accounts
+        async function processPayment(event) {
+            event.preventDefault();
             let apiUrl = getApiUrl();
             if(!apiUrl) return;
 
-            if(!confirm(`Confirm payment of PKR ${amount} received from ${studentName}?`)) return;
+            let voucherId = document.getElementById('payVoucherId').value;
+            let student = document.getElementById('payStudentName').innerText;
+            let period = document.getElementById('payPeriod').innerText;
+            let receivedAmt = document.getElementById('payReceivedAmount').value;
+            let mode = document.getElementById('payMode').value;
+            let remarks = document.getElementById('payRemarks').value.trim();
+
+            let btn = document.getElementById('paySubmitBtn');
+            btn.innerText = "Processing...";
+            btn.disabled = true;
 
             try {
-                // 1. Update Fee Status to Paid in 'fees' sheet
+                // 1. Update status to Paid in 'fees' sheet
                 let updateResponse = await fetch(`${apiUrl}/voucher_id/${voucherId}?sheet=fees`, {
                     method: 'PUT',
                     headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
                     body: JSON.stringify({ data: { status: "Paid" } })
                 });
 
-                // 2. Automatically add entry into 'accounts' sheet as Cash Receipt
+                // 2. Add entry in 'accounts' sheet
                 let currentDate = new Date().toISOString().split('T')[0];
                 let accountPayload = {
                     data: [{
                         voucher_no: voucherId,
                         type: "Cash Receipt",
-                        title: `Fee Collection - ${studentName} (${period})`,
-                        amount: amount,
-                        mode: "Cash",
-                        remarks: "Auto generated from Fee Vouchers",
+                        title: `Fee Collection - ${student} (${period})`,
+                        amount: receivedAmt,
+                        mode: mode,
+                        remarks: remarks || "Fee received",
                         date: currentDate
                     }]
                 };
@@ -275,14 +385,18 @@
                 });
 
                 if(updateResponse.ok) {
-                    alert("Fee Paid Successfully & Recorded in Accounts!");
+                    alert("Payment Received Successfully & Logged into Accounts!");
+                    closePaymentModal();
                     fetchFees();
                 } else {
-                    alert("Status update failed.");
+                    alert("Payment status update failed.");
                 }
             } catch (error) {
                 console.error("Error:", error);
-                alert("Error while processing payment.");
+                alert("Error while processing payment transaction.");
+            } finally {
+                btn.innerText = "Confirm & Receive Payment";
+                btn.disabled = false;
             }
         }
 
@@ -304,7 +418,7 @@
                 alert("Please enter a valid URL.");
             }
         }
-        document.addEventListener('keydown', e => { if(e.key === 'Escape') closeSettingsModal(); });
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closePaymentModal(); } });
     </script>
 </body>
 </html>
