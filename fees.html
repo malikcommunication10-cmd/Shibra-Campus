@@ -6,7 +6,7 @@
     <title>Concept School Shibra Campus - Fee Vouchers</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans">
+<body class="bg-slate-50 text-slate-800 font-sans" onload="fetchFees()">
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
@@ -23,6 +23,7 @@
                 <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚙️ <span>System Settings</span></a>
             </nav>
         </aside>
+
         <!-- MAIN -->
         <main class="flex-1 p-6 md:p-10">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex justify-between items-center">
@@ -32,13 +33,15 @@
                 </div>
                 <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
             </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Form Section -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
                     <h3 class="text-base font-semibold mb-4 text-indigo-700 border-b pb-2">Generate Voucher</h3>
-                    <form id="feeForm" class="space-y-4">
+                    <form id="feeForm" onsubmit="saveFeeVoucher(event)" class="space-y-4">
                         <div>
                             <label class="block text-xs font-medium text-slate-700 mb-1">Student Name & ID</label>
-                            <input type="text" id="studentName" required placeholder="Student Name / Class" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                            <input type="text" id="studentName" required placeholder="Student Name / Class" class="w-full border rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-700 mb-1">Fee Type</label>
@@ -73,13 +76,15 @@
                             <label class="block text-xs font-semibold text-slate-900 mb-1">Net Payable (PKR)</label>
                             <input type="text" id="netPayable" readonly class="w-full bg-slate-100 font-bold text-indigo-700 border rounded-lg p-2.5 text-sm outline-none" value="0">
                         </div>
-                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Voucher</button>
+                        <button type="submit" id="saveBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Voucher</button>
                     </form>
                 </section>
+
+                <!-- Table Section -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
                     <div class="flex justify-between items-center mb-4 border-b pb-2">
                         <h3 class="text-base font-semibold text-indigo-700">Fee Vouchers Record</h3>
-                        <button onclick="fetchFees()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition">🔄 Refresh</button>
+                        <button onclick="fetchFees()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse text-sm">
@@ -93,7 +98,7 @@
                                 </tr>
                             </thead>
                             <tbody id="feeTableBody">
-                                <tr><td colspan="5" class="p-4 text-center text-slate-400">No vouchers found.</td></tr>
+                                <tr><td colspan="5" class="p-4 text-center text-slate-400">Loading records...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -101,18 +106,25 @@
             </div>
         </main>
     </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
-            <h3 class="text-lg font-semibold text-indigo-700 mb-3">API Settings</h3>
-            <input type="text" id="apiUrlInput" placeholder="SheetDB API URL" class="w-full border rounded-lg p-2.5 text-sm mb-4 outline-none">
+            <h3 class="text-lg font-semibold text-indigo-700 mb-3">⚙️ SheetDB API Settings</h3>
+            <input type="text" id="apiUrlInput" placeholder="https://sheetdb.io/api/v1/your_id" class="w-full border rounded-lg p-2.5 text-sm mb-4 outline-none">
             <div class="flex justify-end space-x-2">
                 <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
                 <button onclick="saveApiUrl()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save</button>
             </div>
         </div>
     </div>
+
+    <!-- JavaScript Logic -->
     <script>
+        function getApiUrl() {
+            return localStorage.getItem('sheetdb_api_url') || '';
+        }
+
         function calculateFeeNet() {
             let amount = parseFloat(document.getElementById('standardAmount').value) || 0;
             let discType = document.getElementById('feeDiscType').value;
@@ -121,9 +133,125 @@
             let net = amount - disc;
             document.getElementById('netPayable').value = net > 0 ? net.toFixed(2) : 0;
         }
-        function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('apiUrlInput').value = localStorage.getItem('sheetdb_api_url') || ''; }
-        function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveApiUrl() { localStorage.setItem('sheetdb_api_url', document.getElementById('apiUrlInput').value.trim()); alert("Saved!"); closeSettingsModal(); }
+
+        // Save Data to Google Sheet via SheetDB (specifically for 'fees' tab)
+        async function saveFeeVoucher(event) {
+            event.preventDefault();
+            let apiUrl = getApiUrl();
+            if(!apiUrl) {
+                alert("Please configure your SheetDB API URL in Settings (⚙️) first!");
+                openSettingsModal();
+                return;
+            }
+
+            let student = document.getElementById('studentName').value.trim();
+            let type = document.getElementById('feeType').value;
+            let period = document.getElementById('feeMonth').value.trim();
+            let payable = document.getElementById('netPayable').value;
+            let voucherId = 'V-' + Math.floor(1000 + Math.random() * 9000);
+            let currentDate = new Date().toISOString().split('T')[0];
+
+            let payload = {
+                data: [{
+                    voucher_id: voucherId,
+                    student: student,
+                    type: type,
+                    period: period,
+                    payable: payable,
+                    status: "Unpaid",
+                    date: currentDate
+                }]
+            };
+
+            let btn = document.getElementById('saveBtn');
+            btn.innerText = "Saving...";
+            btn.disabled = true;
+
+            try {
+                let response = await fetch(apiUrl + "?sheet=fees", {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if(response.ok) {
+                    alert("Fee Voucher Saved Successfully!");
+                    document.getElementById('feeForm').reset();
+                    document.getElementById('netPayable').value = "0";
+                    fetchFees();
+                } else {
+                    alert("Failed to save. Please check your API URL.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Connection error while saving voucher.");
+            } finally {
+                btn.innerText = "Save Voucher";
+                btn.disabled = false;
+            }
+        }
+
+        // Fetch Data from Google Sheet via SheetDB
+        async function fetchFees() {
+            let apiUrl = getApiUrl();
+            let tbody = document.getElementById('feeTableBody');
+            
+            if(!apiUrl) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-amber-600">API URL not set. Click ⚙️ API Settings above.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
+
+            try {
+                let response = await fetch(apiUrl + "?sheet=fees");
+                let data = await response.json();
+
+                if(Array.isArray(data) && data.length > 0) {
+                    tbody.innerHTML = '';
+                    data.forEach(row => {
+                        let tr = document.createElement('tr');
+                        tr.className = "border-b hover:bg-slate-50 transition";
+                        tr.innerHTML = `
+                            <td class="p-3 font-medium text-slate-800">${row.student || '-'}</td>
+                            <td class="p-3 text-slate-600">${row.type || '-'}</td>
+                            <td class="p-3 text-slate-600">${row.period || '-'}</td>
+                            <td class="p-3 font-bold text-indigo-600">PKR ${row.payable || '0'}</td>
+                            <td class="p-3"><span class="px-2 py-1 text-xs rounded bg-amber-50 text-amber-700 border border-amber-200">${row.status || 'Unpaid'}</span></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">No vouchers found in Google Sheet.</td></tr>`;
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500">Failed to load records from Google Sheet.</td></tr>`;
+            }
+        }
+
+        // Settings Modal Controls
+        function openSettingsModal() { 
+            document.getElementById('settingsModal').classList.remove('hidden'); 
+            document.getElementById('apiUrlInput').value = localStorage.getItem('sheetdb_api_url') || ''; 
+        }
+        function closeSettingsModal() { 
+            document.getElementById('settingsModal').classList.add('hidden'); 
+        }
+        function saveApiUrl() { 
+            let url = document.getElementById('apiUrlInput').value.trim();
+            if(url) {
+                localStorage.setItem('sheetdb_api_url', url);
+                alert("API URL Saved Successfully!");
+                closeSettingsModal();
+                fetchFees();
+            } else {
+                alert("Please enter a valid URL.");
+            }
+        }
         document.addEventListener('keydown', e => { if(e.key === 'Escape') closeSettingsModal(); });
     </script>
 </body>
