@@ -5,11 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Fee Vouchers Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            body * { visibility: hidden !important; }
+            #ledgerModal, #ledgerModal * { visibility: visible !important; }
+            #ledgerModal { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; height: auto !important; background: white !important; z-index: 9999 !important; padding: 0 !important; margin: 0 !important; }
+            #ledgerModalContent { box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; padding: 20px !important; margin: 0 !important; position: absolute !important; left: 0 !important; top: 0 !important; }
+            .no-print { display: none !important; }
+        }
+    </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans" onload="initFeePage()">
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
-        <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
+        <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl no-print">
             <div class="p-5 border-b border-indigo-800">
                 <h1 class="font-bold text-base leading-tight">Concept School</h1>
                 <p class="text-xs text-indigo-300">Shibra Campus</p>
@@ -27,7 +36,7 @@
 
         <!-- MAIN -->
         <main class="flex-1 p-6 md:p-10">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 flex justify-between items-center">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 flex justify-between items-center no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Fee Vouchers Management</h2>
                     <p class="text-sm text-slate-500">Generate Vouchers & Record Payments</p>
@@ -36,7 +45,7 @@
             </div>
 
             <!-- COLLAPSIBLE GENERATE VOUCHERS ACCORDION -->
-            <div class="space-y-3 mb-6">
+            <div class="space-y-3 mb-6 no-print">
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <button onclick="toggleAccordion('voucherAccordion')" class="w-full p-4 text-left font-semibold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-50 flex justify-between items-center text-sm transition">
                         <span>⚡ Generate Fee Vouchers (Click to expand)</span>
@@ -67,10 +76,16 @@
             </div>
 
             <!-- Vouchers Table Section -->
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 no-print">
                 <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-3 gap-3">
                     <h3 class="text-base font-semibold text-indigo-700">Generated Fee Vouchers List</h3>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <div class="relative flex items-center">
+                            <input type="text" id="searchInput" oninput="filterVouchers()" placeholder="Search Voucher ID or Name..." class="border rounded-lg pl-3 pr-8 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700 w-48 focus:w-60 transition-all">
+                            <button onclick="filterVouchers()" class="absolute right-2 text-slate-400 hover:text-indigo-600 transition" title="Search">
+                                🔍
+                            </button>
+                        </div>
                         <select id="filterPeriod" onchange="filterVouchers()" class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700">
                             <option value="ALL">🔍 All Periods</option>
                         </select>
@@ -98,14 +113,58 @@
                         <tbody id="feesTableBody">
                             <tr><td colspan="12" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>
                         </tbody>
+                        <tfoot id="feesTableFooter" class="sticky bottom-0 bg-slate-100 font-bold border-t text-slate-800">
+                            <!-- Footer totals will be injected here -->
+                        </tfoot>
                     </table>
                 </div>
             </div>
         </main>
     </div>
 
+    <!-- Student Ledger Modal -->
+    <div id="ledgerModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div id="ledgerModalContent" class="bg-white w-full max-w-4xl rounded-2xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-start border-b pb-4 mb-4">
+                <div>
+                    <h3 class="text-lg font-bold text-indigo-950">Concept School - Student Fee Ledger</h3>
+                    <p id="ledgerStudentInfo" class="text-xs text-slate-500 font-medium mt-0.5"></p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="window.print()" class="no-print bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1">🖨️ Print / Save PDF</button>
+                    <button onclick="closeLedgerModal()" class="no-print text-slate-400 hover:text-slate-600 font-bold text-lg px-2">✕</button>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto mb-4">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-slate-100 text-slate-600 border-b">
+                        <tr>
+                            <th class="p-2">Date</th>
+                            <th class="p-2">Voucher ID</th>
+                            <th class="p-2">Period</th>
+                            <th class="p-2">Description / Remarks</th>
+                            <th class="p-2">Payable</th>
+                            <th class="p-2">Paid</th>
+                            <th class="p-2">Running Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ledgerTableBody">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-xl border flex justify-between items-center text-xs font-semibold">
+                <div>Total Payable: <span id="ledgerTotalPayable" class="text-indigo-900">PKR 0</span></div>
+                <div>Total Paid: <span id="ledgerTotalPaid" class="text-emerald-600">PKR 0</span></div>
+                <div>Net Balance: <span id="ledgerTotalBalance" class="text-rose-600">PKR 0</span></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Pay Voucher Modal Form -->
-    <div id="payModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div id="payModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 no-print">
         <div class="bg-white w-full max-w-lg rounded-2xl p-6 shadow-xl relative">
             <h3 class="text-lg font-semibold text-indigo-700 mb-4">💳 Fee Payment Receipt (Accounts Entry)</h3>
             <form id="payForm" onsubmit="submitPayment(event)" class="space-y-3">
@@ -159,7 +218,7 @@
     </div>
 
     <!-- Settings Modal -->
-    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 no-print">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
             <h3 class="text-lg font-semibold text-indigo-700 mb-3">⚙️ SheetDB API Settings</h3>
             <input type="text" id="apiUrlInput" placeholder="https://sheetdb.io/api/v1/your_id" class="w-full border rounded-lg p-2.5 text-sm mb-4 outline-none">
@@ -175,6 +234,7 @@
         let allFeesCache = [];
         let allStudentsCache = [];
         let accountsDataMap = {};
+        let allAccountsRaw = [];
 
         function getApiUrl() {
             return localStorage.getItem('sheetdb_api_url') || '';
@@ -211,21 +271,24 @@
         async function fetchAccountsData() {
             let apiUrl = getApiUrl();
             accountsDataMap = {};
+            allAccountsRaw = [];
             if(!apiUrl) return;
             try {
                 let res = await fetch(apiUrl + "?sheet=accounts");
                 let data = await res.json();
                 if(Array.isArray(data)) {
+                    allAccountsRaw = data;
                     data.forEach(row => {
                         let vId = (row.voucher_id || '').trim();
                         let amtIn = parseFloat(row.amount_in) || 0;
                         let dt = (row.date || '').trim();
                         if(vId) {
                             if(!accountsDataMap[vId]) {
-                                accountsDataMap[vId] = { totalPaid: 0, dates: new Set() };
+                                accountsDataMap[vId] = { totalPaid: 0, dates: new Set(), transactions: [] };
                             }
                             accountsDataMap[vId].totalPaid += amtIn;
                             if(dt) accountsDataMap[vId].dates.add(dt);
+                            accountsDataMap[vId].transactions.push(row);
                         }
                     });
                 }
@@ -251,7 +314,7 @@
                     allFeesCache = data.map((row, idx) => {
                         let vId = (row.voucher_id || '').trim();
                         let payable = parseFloat(row.payable) || 0;
-                        let accObj = accountsDataMap[vId] || { totalPaid: 0, dates: new Set() };
+                        let accObj = accountsDataMap[vId] || { totalPaid: 0, dates: new Set(), transactions: [] };
                         
                         let totalPaid = accObj.totalPaid;
                         let balance = payable - totalPaid;
@@ -303,20 +366,45 @@
 
         function filterVouchers() {
             let period = document.getElementById('filterPeriod').value;
-            let target = period === 'ALL' ? allFeesCache : allFeesCache.filter(r => (r.period || '').trim() === period);
+            let searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
+
+            let target = allFeesCache;
+
+            if(period !== 'ALL') {
+                target = target.filter(r => (r.period || '').trim() === period);
+            }
+
+            if(searchQuery !== '') {
+                target = target.filter(r => {
+                    let vId = (r.voucher_id || '').toLowerCase();
+                    let sName = (r.student_name || '').toLowerCase();
+                    return vId.includes(searchQuery) || sName.includes(searchQuery);
+                });
+            }
+
             renderFeesTable(target);
         }
 
         function renderFeesTable(data) {
             let tbody = document.getElementById('feesTableBody');
+            let tfoot = document.getElementById('feesTableFooter');
             tbody.innerHTML = '';
 
             if(data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-slate-400">No vouchers match the filter.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-slate-400">No vouchers found matching your search.</td></tr>`;
+                tfoot.innerHTML = '';
                 return;
             }
 
+            let sumPayable = 0;
+            let sumPaid = 0;
+            let sumBalance = 0;
+
             data.forEach((row, idx) => {
+                sumPayable += parseFloat(row.payable) || 0;
+                sumPaid += parseFloat(row.totalPaid) || 0;
+                sumBalance += parseFloat(row.balance) || 0;
+
                 let status = row.status || 'Unpaid';
                 let statusBadge = status === 'Paid'
                     ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Paid</span>`
@@ -332,7 +420,9 @@
                 tr.innerHTML = `
                     <td class="p-2.5 font-medium">${idx + 1}</td>
                     <td class="p-2.5 font-mono text-indigo-900">${row.voucher_id || '-'}</td>
-                    <td class="p-2.5 font-semibold text-slate-900">${row.student_name || '-'}</td>
+                    <td class="p-2.5 font-semibold">
+                        <a href="javascript:void(0)" onclick='openStudentLedger(${JSON.stringify(row.student_name)})' class="text-indigo-600 hover:text-indigo-800 underline transition">${row.student_name || '-'}</a>
+                    </td>
                     <td class="p-2.5 text-slate-600">${row.type || 'Tuition Fee'}</td>
                     <td class="p-2.5 text-indigo-600 font-medium">${row.period || '-'}</td>
                     <td class="p-2.5 font-bold text-slate-800">PKR ${row.payable || '0'}</td>
@@ -347,6 +437,88 @@
                 `;
                 tbody.appendChild(tr);
             });
+
+            let balanceColorTotal = sumBalance < 0 ? 'text-indigo-600 font-extrabold' : 'text-rose-600';
+            let balanceTextTotal = sumBalance < 0 ? `Adv ${Math.abs(sumBalance)}` : `${sumBalance}`;
+
+            tfoot.innerHTML = `
+                <tr>
+                    <td colspan="5" class="p-3 text-right font-extrabold text-indigo-950">Total (Filtered):</td>
+                    <td class="p-3 font-extrabold text-slate-900">${sumPayable}</td>
+                    <td class="p-3 font-extrabold text-emerald-600">${sumPaid}</td>
+                    <td class="p-3 font-extrabold ${balanceColorTotal}">${balanceTextTotal}</td>
+                    <td colspan="4"></td>
+                </tr>
+            `;
+        }
+
+        function openStudentLedger(studentName) {
+            let studentVouchers = allFeesCache.filter(r => (r.student_name || '').trim().toLowerCase() === (studentName || '').trim().toLowerCase());
+            let tbody = document.getElementById('ledgerTableBody');
+            tbody.innerHTML = '';
+
+            let totalPayable = 0;
+            let totalPaid = 0;
+            let totalBalance = 0;
+            let studentClass = '';
+
+            studentVouchers.forEach(vRow => {
+                totalPayable += parseFloat(vRow.payable) || 0;
+                totalPaid += parseFloat(vRow.totalPaid) || 0;
+                totalBalance += parseFloat(vRow.balance) || 0;
+                if(!studentClass) studentClass = vRow.class || '-';
+
+                let payableAmt = parseFloat(vRow.payable) || 0;
+                let runningBalance = payableAmt;
+
+                let txns = accountsDataMap[vRow.voucher_id] ? accountsDataMap[vRow.voucher_id].transactions : [];
+
+                if(txns.length > 0) {
+                    txns.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                    txns.forEach(txn => {
+                        let amtIn = parseFloat(txn.amount_in) || 0;
+                        runningBalance -= amtIn;
+
+                        let tr = document.createElement('tr');
+                        tr.className = "border-b";
+                        tr.innerHTML = `
+                            <td class="p-2 font-mono text-slate-600">${txn.date || '-'}</td>
+                            <td class="p-2 font-mono text-indigo-900">${vRow.voucher_id || '-'}</td>
+                            <td class="p-2 text-indigo-600 font-medium">${vRow.period || '-'}</td>
+                            <td class="p-2 text-slate-600">${txn.description || txn.remarks || '-'}</td>
+                            <td class="p-2 font-bold">PKR ${payableAmt}</td>
+                            <td class="p-2 font-bold text-emerald-600">PKR ${amtIn}</td>
+                            <td class="p-2 font-bold text-slate-700">PKR ${runningBalance}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    let tr = document.createElement('tr');
+                    tr.className = "border-b";
+                    tr.innerHTML = `
+                        <td class="p-2 font-mono text-slate-400">-</td>
+                        <td class="p-2 font-mono text-indigo-900">${vRow.voucher_id || '-'}</td>
+                        <td class="p-2 text-indigo-600 font-medium">${vRow.period || '-'}</td>
+                        <td class="p-2 text-slate-400">Unpaid Voucher</td>
+                        <td class="p-2 font-bold">PKR ${payableAmt}</td>
+                        <td class="p-2 font-bold text-emerald-600">PKR 0</td>
+                        <td class="p-2 font-bold text-slate-700">PKR ${runningBalance}</td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            });
+
+            document.getElementById('ledgerStudentInfo').innerText = `Student Name: ${studentName} | Class: ${studentClass}`;
+            document.getElementById('ledgerTotalPayable').innerText = `PKR ${totalPayable}`;
+            document.getElementById('ledgerTotalPaid').innerText = `PKR ${totalPaid}`;
+            document.getElementById('ledgerTotalBalance').innerText = `PKR ${totalBalance}`;
+
+            document.getElementById('ledgerModal').classList.remove('hidden');
+        }
+
+        function closeLedgerModal() {
+            document.getElementById('ledgerModal').classList.add('hidden');
         }
 
         function openPayModal(row) {
@@ -423,14 +595,29 @@
                 "September 2026", "October 2026", "November 2026", "December 2026"
             ] : [selectedPeriod];
 
-            let existingKeys = new Set(allFeesCache.map(f => `${(f.admis_no||'').trim()}_${(f.period||'').trim()}`));
+            let existingKeys = new Set();
+            allFeesCache.forEach(f => {
+                let adm = (f.admis_no || '').trim().toLowerCase();
+                let sName = (f.student_name || '').trim().toLowerCase();
+                let per = (f.period || '').trim();
+                if(adm) existingKeys.add(`${adm}_${per}`);
+                if(sName) existingKeys.add(`${sName}_${per}`);
+            });
+
             let newVouchers = [];
+            let duplicateCount = 0;
 
             periodsToGenerate.forEach(period => {
                 allStudentsCache.forEach(student => {
-                    let adm = (student.admis_no || student.sr_no || '').trim();
-                    let key = `${adm}_${period}`;
-                    if(!existingKeys.has(key)) {
+                    let adm = (student.admis_no || student.sr_no || '').trim().toLowerCase();
+                    let sName = (student.student_name || '').trim().toLowerCase();
+                    
+                    let key1 = `${adm}_${period}`;
+                    let key2 = `${sName}_${period}`;
+
+                    if(existingKeys.has(key1) || existingKeys.has(key2)) {
+                        duplicateCount++;
+                    } else {
                         let voucherId = 'V-' + Math.floor(100000 + Math.random() * 900000);
                         let monthlyFee = parseFloat(student.monthly_tution_fee) || 0;
                         newVouchers.push({
@@ -446,16 +633,22 @@
                             date: new Date().toISOString().split('T')[0],
                             remarks: ''
                         });
+                        if(adm) existingKeys.add(key1);
+                        if(sName) existingKeys.add(key2);
                     }
                 });
             });
 
             if(newVouchers.length === 0) {
-                alert("Selected vouchers already exist for all students! No duplicates created.");
+                alert(`Error: Vouchers for ${selectedPeriod} already exist for all students! No duplicates created.`);
                 return;
             }
 
-            if(!confirm(`Total ${newVouchers.length} new vouchers will be generated. Proceed?`)) return;
+            if(duplicateCount > 0) {
+                alert(`Notice: ${duplicateCount} vouchers were skipped because they already existed. Generating ${newVouchers.length} new vouchers.`);
+            } else {
+                if(!confirm(`Total ${newVouchers.length} new vouchers will be generated. Proceed?`)) return;
+            }
 
             try {
                 let res = await fetch(apiUrl + "?sheet=fees", {
@@ -494,7 +687,7 @@
                 alert("Please enter a valid URL.");
             }
         }
-        document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closePayModal(); } });
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closePayModal(); closeLedgerModal(); } });
     </script>
 </body>
 </html>
