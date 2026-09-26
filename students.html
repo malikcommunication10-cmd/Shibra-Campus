@@ -240,7 +240,6 @@
                 });
             }
 
-            // Sort by Sr No ascending
             targetData.sort((a, b) => {
                 let srA = parseFloat(a.sr_no) || 0;
                 let srB = parseFloat(b.sr_no) || 0;
@@ -324,7 +323,6 @@
 
             try {
                 if(editOriginalAdm !== "") {
-                    // Update using original admission number as unique key
                     let res = await fetch(`${apiUrl}/admis_no/${encodeURIComponent(editOriginalAdm)}?sheet=students`, {
                         method: 'PUT',
                         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
@@ -382,7 +380,6 @@
 
             try {
                 let res;
-                // Try deleting by admission number first if valid, otherwise by row index
                 if(admisNo && admisNo !== '-') {
                     res = await fetch(`${apiUrl}/admis_no/${encodeURIComponent(admisNo)}?sheet=students`, { method: 'DELETE' });
                 }
