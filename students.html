@@ -1,1 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept School Shibra Campus - Students Directory</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans" onload="fetchStudents()">
+    <div class="min-h-screen flex flex-col md:flex-row">
+        <!-- SIDEBAR -->
+        <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
+            <div class="p-5 border-b border-indigo-800">
+                <h1 class="font-bold text-base leading-tight">Concept School</h1>
+                <p class="text-xs text-indigo-300">Shibra Campus</p>
+            </div>
+            <nav class="flex-1 p-4 space-y-2">
+                <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
+                <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">👨‍🎓 <span>Students Directory</span></a>
+                <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💸 <span>Fee Vouchers</span></a>
+                <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
+                <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
+                <a href="staff.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👩‍🏫 <span>Staff & Payroll</span></a>
+                <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚙️ <span>System Settings</span></a>
+            </nav>
+        </aside>
 
+        <!-- MAIN -->
+        <main class="flex-1 p-6 md:p-10">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-extrabold text-indigo-950">Students Management</h2>
+                    <p class="text-sm text-slate-500">Add, Edit & Manage Student Records</p>
+                </div>
+                <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Form Section -->
+                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
+                    <h3 id="formTitle" class="text-base font-semibold mb-4 text-indigo-700 border-b pb-2">Add New Student</h3>
+                    <form id="studentForm" onsubmit="saveStudent(event)" class="space-y-3">
+                        <input type="hidden" id="editOriginalAdm" value="">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Sr No</label>
+                                <input type="number" id="sr_no" required class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Admission No (Unique)</label>
+                                <input type="text" id="admis_no" required class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Student Name</label>
+                            <input type="text" id="student_name" required placeholder="Full Name" class="w-full border rounded-lg p-2 text-sm outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">DOJ</label>
+                                <input type="date" id="doj" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Class</label>
+                                <input type="text" id="class" required placeholder="e.g. Pre-Nursery" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Father Contact</label>
+                                <input type="text" id="contact_no_father" placeholder="03XXXXXXXXX" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Mother Contact</label>
+                                <input type="text" id="contact_no_mother" placeholder="03XXXXXXXXX" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Monthly Tuition Fee</label>
+                                <input type="number" id="monthly_tution_fee" value="0" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Registration Fee</label>
+                                <input type="number" id="regritation_fee" value="0" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Admission Fee</label>
+                                <input type="number" id="admission_fee" value="0" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Annual Fund</label>
+                                <input type="number" id="annual_fund" value="0" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Status</label>
+                                <select id="status" class="w-full border rounded-lg p-2 text-sm bg-white outline-none">
+                                    <option value="Active">Active</option>
+                                    <option value="Left">Left</option>
+                                    <option value="Graduated">Graduated</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Remarks</label>
+                                <input type="text" id="remarks" placeholder="Optional" class="w-full border rounded-lg p-2 text-sm outline-none">
+                            </div>
+                        </div>
+                        <div class="flex gap-2 pt-2">
+                            <button type="submit" id="saveBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg transition text-sm">Save Student</button>
+                            <button type="button" id="cancelBtn" onclick="resetForm()" class="hidden px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm">Cancel</button>
+                        </div>
+                    </form>
+                </section>
+
+                <!-- Table Section -->
+                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2 flex flex-col">
+                    <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-3 gap-3">
+                        <h3 class="text-base font-semibold text-indigo-700">Registered Students Record</h3>
+                        <div class="flex items-center gap-2">
+                            <select id="classFilter" onchange="filterStudents()" class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700">
+                                <option value="ALL">🔍 All Classes</option>
+                            </select>
+                            <button onclick="fetchStudents()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto max-h-[500px] flex-1">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
+                                <tr>
+                                    <th class="p-2.5">Sr/Adm</th>
+                                    <th class="p-2.5">Student Name</th>
+                                    <th class="p-2.5">Class</th>
+                                    <th class="p-2.5">Father Contact</th>
+                                    <th class="p-2.5">Tuition Fee</th>
+                                    <th class="p-2.5">Status</th>
+                                    <th class="p-2.5 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentTableBody">
+                                <tr><td colspan="7" class="p-4 text-center text-slate-400">Loading records...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Footer Total -->
+                    <div class="mt-4 pt-3 border-t flex justify-between items-center bg-indigo-50/50 px-4 py-2.5 rounded-lg">
+                        <span class="text-xs font-bold text-indigo-950">Total Monthly Tuition Fee (Filtered):</span>
+                        <span id="totalTuitionFee" class="text-sm font-extrabold text-indigo-700">PKR 0</span>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
+            <h3 class="text-lg font-semibold text-indigo-700 mb-3">⚙️ SheetDB API Settings</h3>
+            <input type="text" id="apiUrlInput" placeholder="https://sheetdb.io/api/v1/your_id" class="w-full border rounded-lg p-2.5 text-sm mb-4 outline-none">
+            <div class="flex justify-end space-x-2">
+                <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="saveApiUrl()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        let allStudentsCache = [];
+
+        function getApiUrl() {
+            return localStorage.getItem('sheetdb_api_url') || '';
+        }
+
+        async function fetchStudents() {
+            let apiUrl = getApiUrl();
+            let tbody = document.getElementById('studentTableBody');
+            
+            if(!apiUrl) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-amber-600">API URL not set. Click ⚙️ API Settings above.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
+
+            try {
+                let response = await fetch(apiUrl + "?sheet=students");
+                let data = await response.json();
+
+                if(Array.isArray(data) && data.length > 0) {
+                    allStudentsCache = data.map((row, idx) => ({ ...row, _rowIndex: idx }));
+                    populateClassDropdown(data);
+                    filterStudents();
+                } else {
+                    allStudentsCache = [];
+                    tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">No student records found.</td></tr>`;
+                    document.getElementById('totalTuitionFee').innerText = "PKR 0";
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-rose-500">Failed to load records.</td></tr>`;
+            }
+        }
+
+        function populateClassDropdown(data) {
+            let classSet = new Set();
+            data.forEach(row => {
+                let cls = row.class || '';
+                if(cls) classSet.add(cls.trim());
+            });
+
+            let classFilter = document.getElementById('classFilter');
+            let currentSelected = classFilter.value;
+            classFilter.innerHTML = `<option value="ALL">🔍 All Classes</option>`;
+            
+            Array.from(classSet).sort().forEach(cls => {
+                let opt = document.createElement('option');
+                opt.value = cls;
+                opt.innerText = cls;
+                classFilter.appendChild(opt);
+            });
+            if(classSet.has(currentSelected)) {
+                classFilter.value = currentSelected;
+            }
+        }
+
+        function filterStudents() {
+            let selectedClass = document.getElementById('classFilter').value;
+            let targetData = [];
+
+            if(selectedClass === 'ALL') {
+                targetData = [...allStudentsCache];
+            } else {
+                targetData = allStudentsCache.filter(row => {
+                    let cls = row.class || '';
+                    return cls.trim() === selectedClass;
+                });
+            }
+
+            targetData.sort((a, b) => {
+                let srA = parseFloat(a.sr_no) || 0;
+                let srB = parseFloat(b.sr_no) || 0;
+                return srA - srB;
+            });
+
+            renderTable(targetData);
+        }
+
+        function renderTable(data) {
+            let tbody = document.getElementById('studentTableBody');
+            tbody.innerHTML = '';
+
+            let totalFee = 0;
+
+            data.forEach((row, index) => {
+                let sequentialSr = index + 1;
+                let srNo = row.sr_no || '-';
+                let adm = row.admis_no || '-';
+                let name = row.student_name || '-';
+                let cls = row.class || '-';
+                let fContact = row.contact_no_father || '-';
+                let tFee = parseFloat(row.monthly_tution_fee) || 0;
+                let st = row.status || 'Active';
+
+                totalFee += tFee;
+
+                let statusBadge = st === 'Active' 
+                    ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Active</span>` 
+                    : `<span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">${st}</span>`;
+
+                let tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="p-2.5 font-medium">${sequentialSr} / ${adm}</td>
+                    <td class="p-2.5 font-semibold text-indigo-900">${name}</td>
+                    <td class="p-2.5 text-slate-600">${cls}</td>
+                    <td class="p-2.5 text-slate-600">${fContact}</td>
+                    <td class="p-2.5 font-bold text-indigo-600">PKR ${tFee}</td>
+                    <td class="p-2.5">${statusBadge}</td>
+                    <td class="p-2.5 text-center space-x-1">
+                        <button onclick='editStudent(${JSON.stringify(row)})' class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium transition" title="Edit">✏️</button>
+                        <button onclick="deleteStudent('${adm}', '${row._rowIndex}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded font-medium transition" title="Delete">🗑️</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('totalTuitionFee').innerText = `PKR ${totalFee.toLocaleString()}`;
+        }
+
+        async function saveStudent(event) {
+            event.preventDefault();
+            let apiUrl = getApiUrl();
+            if(!apiUrl) {
+                alert("Please configure your SheetDB API URL in Settings (⚙️) first!");
+                openSettingsModal();
+                return;
+            }
+
+            let payloadData = {
+                sr_no: document.getElementById('sr_no').value,
+                admis_no: document.getElementById('admis_no').value.trim(),
+                student_name: document.getElementById('student_name').value.trim(),
+                doj: document.getElementById('doj').value,
+                contact_no_father: document.getElementById('contact_no_father').value.trim(),
+                contact_no_mother: document.getElementById('contact_no_mother').value.trim(),
+                class: document.getElementById('class').value.trim(),
+                monthly_tution_fee: document.getElementById('monthly_tution_fee').value || 0,
+                regritation_fee: document.getElementById('regritation_fee').value || 0,
+                admission_fee: document.getElementById('admission_fee').value || 0,
+                annual_fund: document.getElementById('annual_fund').value || 0,
+                status: document.getElementById('status').value,
+                remarks: document.getElementById('remarks').value.trim()
+            };
+
+            let editOriginalAdm = document.getElementById('editOriginalAdm').value;
+            let btn = document.getElementById('saveBtn');
+            btn.innerText = "Saving...";
+            btn.disabled = true;
+
+            try {
+                if(editOriginalAdm !== "") {
+                    let res = await fetch(`${apiUrl}/admis_no/${encodeURIComponent(editOriginalAdm)}?sheet=students`, {
+                        method: 'PUT',
+                        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ data: payloadData })
+                    });
+                    if(res.ok) {
+                        alert("Student Updated Successfully!");
+                    } else {
+                        alert("Failed to update student.");
+                    }
+                } else {
+                    let res = await fetch(apiUrl + "?sheet=students", {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ data: [payloadData] })
+                    });
+                    if(res.ok) alert("Student Saved Successfully!");
+                }
+                resetForm();
+                fetchStudents();
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Error saving record.");
+            } finally {
+                btn.innerText = "Save Student";
+                btn.disabled = false;
+            }
+        }
+
+        function editStudent(row) {
+            document.getElementById('editOriginalAdm').value = row.admis_no || '';
+            document.getElementById('sr_no').value = row.sr_no || '';
+            document.getElementById('admis_no').value = row.admis_no || '';
+            document.getElementById('student_name').value = row.student_name || '';
+            document.getElementById('doj').value = row.doj || '';
+            document.getElementById('contact_no_father').value = row.contact_no_father || '';
+            document.getElementById('contact_no_mother').value = row.contact_no_mother || '';
+            document.getElementById('class').value = row.class || '';
+            document.getElementById('monthly_tution_fee').value = row.monthly_tution_fee || 0;
+            document.getElementById('regritation_fee').value = row.regritation_fee || 0;
+            document.getElementById('admission_fee').value = row.admission_fee || 0;
+            document.getElementById('annual_fund').value = row.annual_fund || 0;
+            document.getElementById('status').value = row.status || 'Active';
+            document.getElementById('remarks').value = row.remarks || '';
+
+            document.getElementById('formTitle').innerText = "Edit Student Record";
+            document.getElementById('saveBtn').innerText = "Update Student";
+            document.getElementById('cancelBtn').classList.remove('hidden');
+        }
+
+        async function deleteStudent(admisNo, rowIndex) {
+            if(!confirm(`Kya aap is student ko delete karna chahte hain?`)) return;
+            let apiUrl = getApiUrl();
+            if(!apiUrl) return;
+
+            try {
+                let res;
+                if(admisNo && admisNo !== '-') {
+                    res = await fetch(`${apiUrl}/admis_no/${encodeURIComponent(admisNo)}?sheet=students`, { method: 'DELETE' });
+                }
+                
+                if(!res || !res.ok) {
+                    res = await fetch(`${apiUrl}/index/${rowIndex}?sheet=students`, { method: 'DELETE' });
+                }
+
+                if(res && res.ok) {
+                    alert("Student Successfully Delete Ho Gaya!");
+                    fetchStudents();
+                } else {
+                    alert("Failed to delete student from sheet.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Error deleting student.");
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('studentForm').reset();
+            document.getElementById('editOriginalAdm').value = '';
+            document.getElementById('formTitle').innerText = "Add New Student";
+            document.getElementById('saveBtn').innerText = "Save Student";
+            document.getElementById('cancelBtn').classList.add('hidden');
+        }
+
+        function openSettingsModal() { 
+            document.getElementById('settingsModal').classList.remove('hidden'); 
+            document.getElementById('apiUrlInput').value = localStorage.getItem('sheetdb_api_url') || ''; 
+        }
+        function closeSettingsModal() { 
+            document.getElementById('settingsModal').classList.add('hidden'); 
+        }
+        function saveApiUrl() { 
+            let url = document.getElementById('apiUrlInput').value.trim();
+            if(url) {
+                localStorage.setItem('sheetdb_api_url', url);
+                alert("API URL Saved Successfully!");
+                closeSettingsModal();
+                fetchStudents();
+            } else {
+                alert("Please enter a valid URL.");
+            }
+        }
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') closeSettingsModal(); });
+    </script>
+</body>
+</html>
