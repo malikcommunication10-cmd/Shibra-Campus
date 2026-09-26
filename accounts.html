@@ -6,7 +6,7 @@
     <title>Concept School Shibra Campus - Accounts</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans">
+<body class="bg-slate-50 text-slate-800 font-sans" onload="initAccountsPage()">
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
@@ -24,6 +24,7 @@
                 <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚙️ <span>System Settings</span></a>
             </nav>
         </aside>
+
         <!-- MAIN -->
         <main class="flex-1 p-6 md:p-10">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex justify-between items-center">
@@ -33,10 +34,12 @@
                 </div>
                 <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
             </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- FORM SECTION -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
                     <h3 class="text-base font-semibold mb-4 text-indigo-700 border-b pb-2">Quick Voucher Entry</h3>
-                    <form id="accountForm" class="space-y-4">
+                    <form id="accountForm" onsubmit="saveTransaction(event)" class="space-y-4">
                         <div>
                             <label class="block text-xs font-medium text-slate-700 mb-1">Voucher Type</label>
                             <select id="accType" class="w-full border rounded-lg p-2.5 text-sm bg-slate-50 outline-none">
@@ -61,23 +64,34 @@
                                 <option value="Online">Online / JazzCash</option>
                             </select>
                         </div>
-                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Voucher</button>
+                        <button type="submit" id="saveBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Voucher</button>
                     </form>
                 </section>
+
+                <!-- TABLE SECTION -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
                     <div class="flex justify-between items-center mb-4 border-b pb-2">
                         <h3 class="text-base font-semibold text-indigo-700">Daybook Ledger</h3>
                         <button onclick="fetchAccounts()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition">🔄 Refresh</button>
                     </div>
                     <div class="grid grid-cols-3 gap-3 mb-4">
-                        <div class="bg-emerald-50 border border-emerald-100 p-3 rounded-lg text-center"><p class="text-xs text-emerald-600 font-medium">Inflow</p><p id="totalInflow" class="text-sm font-bold text-emerald-700">0</p></div>
-                        <div class="bg-rose-50 border border-rose-100 p-3 rounded-lg text-center"><p class="text-xs text-rose-600 font-medium">Outflow</p><p id="totalOutflow" class="text-sm font-bold text-rose-700">0</p></div>
-                        <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-lg text-center"><p class="text-xs text-indigo-600 font-medium">Balance</p><p id="netBalance" class="text-sm font-bold text-indigo-700">0</p></div>
+                        <div class="bg-emerald-50 border border-emerald-100 p-3 rounded-lg text-center">
+                            <p class="text-xs text-emerald-600 font-medium">Inflow</p>
+                            <p id="totalInflow" class="text-sm font-bold text-emerald-700">PKR 0</p>
+                        </div>
+                        <div class="bg-rose-50 border border-rose-100 p-3 rounded-lg text-center">
+                            <p class="text-xs text-rose-600 font-medium">Outflow</p>
+                            <p id="totalOutflow" class="text-sm font-bold text-rose-700">PKR 0</p>
+                        </div>
+                        <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-lg text-center">
+                            <p class="text-xs text-indigo-600 font-medium">Balance</p>
+                            <p id="netBalance" class="text-sm font-bold text-indigo-700">PKR 0</p>
+                        </div>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto max-h-[450px]">
                         <table class="w-full text-left border-collapse text-sm">
-                            <thead>
-                                <tr class="bg-slate-100 text-slate-600 border-b text-xs">
+                            <thead class="sticky top-0 bg-slate-100">
+                                <tr class="text-slate-600 border-b text-xs">
                                     <th class="p-3">Type</th>
                                     <th class="p-3">Particulars</th>
                                     <th class="p-3">Mode</th>
@@ -85,7 +99,7 @@
                                 </tr>
                             </thead>
                             <tbody id="accountTableBody">
-                                <tr><td colspan="4" class="p-4 text-center text-slate-400">No account entries found.</td></tr>
+                                <tr><td colspan="4" class="p-4 text-center text-slate-400">Loading entries...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -93,21 +107,179 @@
             </div>
         </main>
     </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
-            <h3 class="text-lg font-semibold text-indigo-700 mb-3">API Settings</h3>
-            <input type="text" id="apiUrlInput" placeholder="SheetDB API URL" class="w-full border rounded-lg p-2.5 text-sm mb-4 outline-none">
-            <div class="flex justify-end space-x-2">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative space-y-3">
+            <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚙️ Supabase API Settings</h3>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label>
+                <input type="text" id="apiUrlInput" class="w-full border rounded-lg p-2 text-sm outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label>
+                <input type="text" id="apiKeyInput" class="w-full border rounded-lg p-2 text-sm outline-none">
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveApiUrl()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save</button>
+                <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
             </div>
         </div>
     </div>
+
+    <!-- JavaScript Logic -->
     <script>
-        function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('apiUrlInput').value = localStorage.getItem('sheetdb_api_url') || ''; }
+        function getSupabaseConfig() {
+            let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
+            let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+            return { url, key };
+        }
+
+        function initAccountsPage() {
+            fetchAccounts();
+        }
+
+        async function fetchAccounts() {
+            let config = getSupabaseConfig();
+            let tbody = document.getElementById('accountTableBody');
+            tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">Loading entries...</td></tr>`;
+
+            try {
+                let response = await fetch(`${config.url}/rest/v1/accounts?select=*`, {
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`
+                    }
+                });
+                let data = await response.json();
+
+                if(Array.isArray(data) && data.length > 0) {
+                    renderTable(data);
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">No account entries found.</td></tr>`;
+                    document.getElementById('totalInflow').innerText = "PKR 0";
+                    document.getElementById('totalOutflow').innerText = "PKR 0";
+                    document.getElementById('netBalance').innerText = "PKR 0";
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-rose-500">Failed to load records.</td></tr>`;
+            }
+        }
+
+        function renderTable(data) {
+            let tbody = document.getElementById('accountTableBody');
+            tbody.innerHTML = '';
+
+            let totalIn = 0;
+            let totalOut = 0;
+
+            data.forEach((row) => {
+                let type = row.from_account || row.type || 'Cash Receipt';
+                let title = row.description || row.to_account || '-';
+                let mode = row.remarks || 'Cash';
+                let amtIn = parseFloat(row.amount_in) || 0;
+                let amtOut = parseFloat(row.amount_out) || 0;
+                let netAmt = amtIn > 0 ? amtIn : amtOut;
+
+                totalIn += amtIn;
+                totalOut += amtOut;
+
+                let amountColor = amtIn > 0 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
+                let amountText = amtIn > 0 ? `+ PKR ${amtIn.toLocaleString()}` : `- PKR ${amtOut.toLocaleString()}`;
+
+                let tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-slate-50 text-xs";
+                tr.innerHTML = `
+                    <td class="p-3 font-semibold text-indigo-900">${type}</td>
+                    <td class="p-3 text-slate-700">${title}</td>
+                    <td class="p-3 text-slate-500">${mode}</td>
+                    <td class="p-3 ${amountColor}">${amountText}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            let balance = totalIn - totalOut;
+            document.getElementById('totalInflow').innerText = `PKR ${totalIn.toLocaleString()}`;
+            document.getElementById('totalOutflow').innerText = `PKR ${totalOut.toLocaleString()}`;
+            document.getElementById('netBalance').innerText = `PKR ${balance.toLocaleString()}`;
+        }
+
+        async function saveTransaction(event) {
+            event.preventDefault();
+            let config = getSupabaseConfig();
+
+            let accType = document.getElementById('accType').value;
+            let title = document.getElementById('accTitle').value.trim();
+            let amount = parseFloat(document.getElementById('accAmount').value) || 0;
+            let payMode = document.getElementById('payMode').value;
+
+            let amountIn = (accType === 'Cash Receipt') ? amount : 0;
+            let amountOut = (accType !== 'Cash Receipt') ? amount : 0;
+            let voucherId = 'ACC-' + Math.floor(100000 + Math.random() * 900000);
+
+            let payloadData = {
+                voucher_id: voucherId,
+                from_account: accType,
+                to_account: title,
+                description: title,
+                amount_in: amountIn,
+                amount_out: amountOut,
+                date: new Date().toISOString().split('T')[0],
+                remarks: payMode
+            };
+
+            let btn = event.target.querySelector('button[type="submit"]');
+            btn.innerText = "Saving...";
+            btn.disabled = true;
+
+            try {
+                let res = await fetch(`${config.url}/rest/v1/accounts`, {
+                    method: 'POST',
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify(payloadData)
+                });
+
+                if(res.ok) {
+                    alert("Voucher Saved Successfully!");
+                    document.getElementById('accountForm').reset();
+                    fetchAccounts();
+                } else {
+                    let err = await res.text();
+                    alert("Failed to save: " + err);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Connection error.");
+            } finally {
+                btn.innerText = "Save Voucher";
+                btn.disabled = false;
+            }
+        }
+
+        function openSettingsModal() { 
+            document.getElementById('settingsModal').classList.remove('hidden'); 
+            let config = getSupabaseConfig();
+            document.getElementById('apiUrlInput').value = config.url;
+            document.getElementById('apiKeyInput').value = config.key;
+        }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveApiUrl() { localStorage.setItem('sheetdb_api_url', document.getElementById('apiUrlInput').value.trim()); alert("Saved!"); closeSettingsModal(); }
+        function saveApiCredentials() {
+            let url = document.getElementById('apiUrlInput').value.trim();
+            let key = document.getElementById('apiKeyInput').value.trim();
+            if(url && key) {
+                localStorage.setItem('supabase_url', url);
+                localStorage.setItem('supabase_key', key);
+                alert("Supabase Credentials Saved!");
+                closeSettingsModal();
+                fetchAccounts();
+            } else { alert("Please enter valid URL and Key."); }
+        }
         document.addEventListener('keydown', e => { if(e.key === 'Escape') closeSettingsModal(); });
     </script>
 </body>
