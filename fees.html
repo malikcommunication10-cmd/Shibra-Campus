@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Concept School Shibra Campus - Fee Vouchers</title>
+    <title>Concept School Shibra Campus - Fee Vouchers Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans" onload="fetchFees()">
+<body class="bg-slate-50 text-slate-800 font-sans" onload="initFeePage()">
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
@@ -16,6 +16,7 @@
             </div>
             <nav class="flex-1 p-4 space-y-2">
                 <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
+                <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
                 <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">💸 <span>Fee Vouchers</span></a>
                 <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
                 <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
@@ -26,149 +27,132 @@
 
         <!-- MAIN -->
         <main class="flex-1 p-6 md:p-10">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex justify-between items-center">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 flex justify-between items-center">
                 <div>
-                    <h2 class="text-2xl font-extrabold text-indigo-950">Fee Vouchers & Collection</h2>
-                    <p class="text-sm text-slate-500">Generate Vouchers, Admissions & Tuition Fees</p>
+                    <h2 class="text-2xl font-extrabold text-indigo-950">Fee Vouchers Management</h2>
+                    <p class="text-sm text-slate-500">Generate Vouchers & Record Payments</p>
                 </div>
                 <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Form Section -->
-                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
-                    <h3 class="text-base font-semibold mb-4 text-indigo-700 border-b pb-2">Generate Voucher</h3>
-                    <form id="feeForm" onsubmit="saveFeeVoucher(event)" class="space-y-4">
+            <!-- COLLAPSIBLE GENERATE VOUCHERS ACCORDION -->
+            <div class="space-y-3 mb-6">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <button onclick="toggleAccordion('voucherAccordion')" class="w-full p-4 text-left font-semibold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-50 flex justify-between items-center text-sm transition">
+                        <span>⚡ Generate Fee Vouchers (Click to expand)</span>
+                        <span id="voucherArrow" class="transform transition-transform">▼</span>
+                    </button>
+                    <div id="voucherAccordion" class="p-5 hidden space-y-3 border-t border-slate-100">
                         <div>
-                            <label class="block text-xs font-medium text-slate-700 mb-1">Student Name & ID</label>
-                            <input type="text" id="studentName" required placeholder="Student Name / Class" class="w-full border rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-700 mb-1">Fee Type</label>
-                            <select id="feeType" class="w-full border rounded-lg p-2.5 text-sm bg-slate-50 outline-none">
-                                <option value="Monthly Tuition Fee">Monthly Tuition Fee</option>
-                                <option value="Admission Fee">Admission Fee (One-time)</option>
-                                <option value="Registration Fee">Registration Fee (One-time)</option>
-                                <option value="Annual Charges">Annual Charges</option>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Select Period / Month</label>
+                            <select id="voucherPeriod" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none font-medium">
+                                <option value="January 2026">January 2026</option>
+                                <option value="February 2026">February 2026</option>
+                                <option value="March 2026">March 2026</option>
+                                <option value="April 2026">April 2026</option>
+                                <option value="May 2026">May 2026</option>
+                                <option value="June 2026">June 2026</option>
+                                <option value="July 2026">July 2026</option>
+                                <option value="August 2026">August 2026</option>
+                                <option value="September 2026">September 2026</option>
+                                <option value="October 2026">October 2026</option>
+                                <option value="November 2026">November 2026</option>
+                                <option value="December 2026">December 2026</option>
+                                <option value="ALL_YEAR">🚀 Generate All (Jan to Dec 2026 At Once)</option>
                             </select>
                         </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Month / Period</label>
-                                <input type="text" id="feeMonth" required placeholder="e.g. October 2026" class="w-full border rounded-lg p-2.5 text-sm outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Amount (PKR)</label>
-                                <input type="number" id="standardAmount" required min="0" placeholder="0" oninput="calculateFeeNet()" class="w-full border rounded-lg p-2.5 text-sm outline-none">
-                            </div>
-                        </div>
-                        <div class="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100 space-y-2">
-                            <label class="block text-xs font-semibold text-indigo-900">Concession / Discount</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                <select id="feeDiscType" onchange="calculateFeeNet()" class="border rounded p-1.5 text-xs bg-white outline-none">
-                                    <option value="percentage">Percentage (%)</option>
-                                    <option value="fixed">Fixed (PKR)</option>
-                                </select>
-                                <input type="number" id="feeDiscVal" min="0" value="0" oninput="calculateFeeNet()" placeholder="Value" class="border rounded p-1.5 text-xs bg-white outline-none">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-900 mb-1">Net Payable (PKR)</label>
-                            <input type="text" id="netPayable" readonly class="w-full bg-slate-100 font-bold text-indigo-700 border rounded-lg p-2.5 text-sm outline-none" value="0">
-                        </div>
-                        <button type="submit" id="saveBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Voucher</button>
-                    </form>
-                </section>
+                        <button onclick="generateVouchers()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-sm">Generate Vouchers (Unpaid)</button>
+                    </div>
+                </div>
+            </div>
 
-                <!-- Table Section -->
-                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
-                    <div class="flex justify-between items-center mb-4 border-b pb-2">
-                        <h3 class="text-base font-semibold text-indigo-700">Fee Vouchers Record</h3>
-                        <button onclick="fetchFees()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
+            <!-- Vouchers Table Section -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-3 gap-3">
+                    <h3 class="text-base font-semibold text-indigo-700">Generated Fee Vouchers List</h3>
+                    <div class="flex items-center gap-2">
+                        <select id="filterPeriod" onchange="filterVouchers()" class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700">
+                            <option value="ALL">🔍 All Periods</option>
+                        </select>
+                        <button onclick="initFeePage()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse text-sm">
-                            <thead>
-                                <tr class="bg-slate-100 text-slate-600 border-b text-xs">
-                                    <th class="p-3">Student Name</th>
-                                    <th class="p-3">Type</th>
-                                    <th class="p-3">Period</th>
-                                    <th class="p-3">Payable</th>
-                                    <th class="p-3">Status</th>
-                                    <th class="p-3 text-center">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="feeTableBody">
-                                <tr><td colspan="6" class="p-4 text-center text-slate-400">Loading records...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
+                </div>
+                <div class="overflow-x-auto max-h-[500px]">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
+                            <tr>
+                                <th class="p-2.5">Sr</th>
+                                <th class="p-2.5">Voucher ID</th>
+                                <th class="p-2.5">Student Name</th>
+                                <th class="p-2.5">Type</th>
+                                <th class="p-2.5">Period</th>
+                                <th class="p-2.5">Payable</th>
+                                <th class="p-2.5">Paid</th>
+                                <th class="p-2.5">Balance / (Adv)</th>
+                                <th class="p-2.5">Class</th>
+                                <th class="p-2.5">Status</th>
+                                <th class="p-2.5">Date(s)</th>
+                                <th class="p-2.5 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="feesTableBody">
+                            <tr><td colspan="12" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </main>
     </div>
 
-    <!-- PAYMENT COLLECTION MODAL -->
-    <div id="paymentModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-lg rounded-2xl p-6 shadow-2xl relative">
-            <h3 class="text-lg font-bold text-indigo-900 mb-4 border-b pb-2">💵 Fee Collection & Payment Desk</h3>
-            <form id="paymentForm" onsubmit="processPayment(event)" class="space-y-4">
-                <input type="hidden" id="payVoucherId">
-                <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border">
+    <!-- Pay Voucher Modal Form -->
+    <div id="payModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-2xl p-6 shadow-xl relative">
+            <h3 class="text-lg font-semibold text-indigo-700 mb-4">💳 Fee Payment Receipt (Accounts Entry)</h3>
+            <form id="payForm" onsubmit="submitPayment(event)" class="space-y-3">
+                <div class="grid grid-cols-2 gap-2">
                     <div>
-                        <span class="block text-xs text-slate-500">Student Name</span>
-                        <strong id="payStudentName" class="text-sm text-slate-800"></strong>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Voucher ID</label>
+                        <input type="text" id="payVoucherId" readonly class="w-full border rounded-lg p-2 text-sm bg-slate-100 font-mono">
                     </div>
                     <div>
-                        <span class="block text-xs text-slate-500">Period / Month</span>
-                        <strong id="payPeriod" class="text-sm text-slate-800"></strong>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-3 gap-3">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Voucher Amount</label>
-                        <input type="text" id="payVoucherAmount" readonly class="w-full bg-slate-100 font-bold border rounded-lg p-2 text-sm text-indigo-700">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Previous Arrears</label>
-                        <input type="number" id="payPrevBalance" value="0" min="0" oninput="calculateTotalDue()" class="w-full border rounded-lg p-2 text-sm outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Total Due</label>
-                        <input type="text" id="payTotalDue" readonly class="w-full bg-slate-100 font-bold border rounded-lg p-2 text-sm text-rose-600">
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Student Name</label>
+                        <input type="text" id="payStudentName" readonly class="w-full border rounded-lg p-2 text-sm bg-slate-100 font-semibold">
                     </div>
                 </div>
-
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-2">
                     <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Amount Received (PKR)</label>
-                        <input type="number" id="payReceivedAmount" required min="0" oninput="calculateBalance()" class="w-full border rounded-lg p-2.5 text-sm outline-none font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500">
+                        <label class="block text-xs font-medium text-slate-700 mb-1">From Account (Fee Type)</label>
+                        <input type="text" id="payFromAccount" readonly class="w-full border rounded-lg p-2 text-sm bg-slate-100 font-medium">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Pending Balance</label>
-                        <input type="text" id="payPendingBalance" readonly class="w-full bg-slate-100 font-bold border rounded-lg p-2.5 text-sm text-amber-600" value="0">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Payment Mode</label>
-                        <select id="payMode" class="w-full border rounded-lg p-2 text-sm bg-white outline-none">
-                            <option value="Cash">Cash</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                            <option value="JazzCash / EasyPaisa">JazzCash / EasyPaisa</option>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">To Account (Deposit To)</label>
+                        <select id="payToAccount" class="w-full border rounded-lg p-2 text-sm bg-white outline-none font-medium">
+                            <option value="cash">Cash</option>
+                            <option value="bank">Bank</option>
                         </select>
                     </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
                     <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Remarks</label>
-                        <input type="text" id="payRemarks" placeholder="e.g. Paid in full / installment" class="w-full border rounded-lg p-2 text-sm outline-none">
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Total Payable</label>
+                        <input type="number" id="payPayable" readonly class="w-full border rounded-lg p-2 text-sm bg-slate-100 font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Entering Amount</label>
+                        <input type="number" id="payAmountIn" required class="w-full border rounded-lg p-2 text-sm outline-none font-bold text-emerald-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Payment Date</label>
+                        <input type="date" id="payDate" required class="w-full border rounded-lg p-2 text-sm outline-none">
                     </div>
                 </div>
-
-                <div class="flex justify-end space-x-2 pt-3 border-t">
-                    <button type="button" onclick="closePaymentModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm font-medium hover:bg-slate-200">Cancel</button>
-                    <button type="submit" id="paySubmitBtn" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition">Confirm & Receive Payment</button>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Description / Remarks</label>
+                    <input type="text" id="payRemarks" placeholder="Optional notes (e.g. Partial payment / month fee)" class="w-full border rounded-lg p-2 text-sm outline-none">
+                </div>
+                <div class="flex justify-end space-x-2 pt-3">
+                    <button type="button" onclick="closePayModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm">Save Receipt to Accounts</button>
                 </div>
             </form>
         </div>
@@ -188,215 +172,307 @@
 
     <!-- JavaScript Logic -->
     <script>
+        let allFeesCache = [];
+        let allStudentsCache = [];
+        let accountsDataMap = {};
+
         function getApiUrl() {
             return localStorage.getItem('sheetdb_api_url') || '';
         }
 
-        function calculateFeeNet() {
-            let amount = parseFloat(document.getElementById('standardAmount').value) || 0;
-            let discType = document.getElementById('feeDiscType').value;
-            let discVal = parseFloat(document.getElementById('feeDiscVal').value) || 0;
-            let disc = discType === 'percentage' ? (amount * discVal) / 100 : discVal;
-            let net = amount - disc;
-            document.getElementById('netPayable').value = net > 0 ? net.toFixed(2) : 0;
+        async function initFeePage() {
+            document.getElementById('payDate').value = new Date().toISOString().split('T')[0];
+            await fetchStudentsCache();
+            await fetchAccountsData();
+            await fetchFeesData();
         }
 
-        async function saveFeeVoucher(event) {
-            event.preventDefault();
-            let apiUrl = getApiUrl();
-            if(!apiUrl) {
-                alert("Please configure your SheetDB API URL in Settings (⚙️) first!");
-                openSettingsModal();
-                return;
+        function toggleAccordion(id) {
+            let el = document.getElementById(id);
+            if(el.classList.contains('hidden')) {
+                el.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden');
             }
+        }
 
-            let student = document.getElementById('studentName').value.trim();
-            let type = document.getElementById('feeType').value;
-            let period = document.getElementById('feeMonth').value.trim();
-            let payable = document.getElementById('netPayable').value;
-            let voucherId = 'V-' + Math.floor(1000 + Math.random() * 9000);
-            let currentDate = new Date().toISOString().split('T')[0];
-
-            let payload = {
-                data: [{
-                    voucher_id: voucherId,
-                    student: student,
-                    type: type,
-                    period: period,
-                    payable: payable,
-                    status: "Unpaid",
-                    date: currentDate
-                }]
-            };
-
-            let btn = document.getElementById('saveBtn');
-            btn.innerText = "Saving...";
-            btn.disabled = true;
-
+        async function fetchStudentsCache() {
+            let apiUrl = getApiUrl();
+            if(!apiUrl) return;
             try {
-                let response = await fetch(apiUrl + "?sheet=fees", {
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if(response.ok) {
-                    alert("Fee Voucher Saved Successfully!");
-                    document.getElementById('feeForm').reset();
-                    document.getElementById('netPayable').value = "0";
-                    fetchFees();
-                } else {
-                    alert("Failed to save voucher.");
+                let res = await fetch(apiUrl + "?sheet=students");
+                let data = await res.json();
+                if(Array.isArray(data)) {
+                    allStudentsCache = data;
                 }
-            } catch (error) {
-                console.error("Error:", error);
-                alert("Connection error.");
-            } finally {
-                btn.innerText = "Save Voucher";
-                btn.disabled = false;
-            }
+            } catch(e) { console.error("Error fetching students:", e); }
         }
 
-        async function fetchFees() {
+        async function fetchAccountsData() {
             let apiUrl = getApiUrl();
-            let tbody = document.getElementById('feeTableBody');
+            accountsDataMap = {};
+            if(!apiUrl) return;
+            try {
+                let res = await fetch(apiUrl + "?sheet=accounts");
+                let data = await res.json();
+                if(Array.isArray(data)) {
+                    data.forEach(row => {
+                        let vId = (row.voucher_id || '').trim();
+                        let amtIn = parseFloat(row.amount_in) || 0;
+                        let dt = (row.date || '').trim();
+                        if(vId) {
+                            if(!accountsDataMap[vId]) {
+                                accountsDataMap[vId] = { totalPaid: 0, dates: new Set() };
+                            }
+                            accountsDataMap[vId].totalPaid += amtIn;
+                            if(dt) accountsDataMap[vId].dates.add(dt);
+                        }
+                    });
+                }
+            } catch(e) { console.error("Error fetching accounts:", e); }
+        }
+
+        async function fetchFeesData() {
+            let apiUrl = getApiUrl();
+            let tbody = document.getElementById('feesTableBody');
             
             if(!apiUrl) {
-                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-amber-600">API URL not set. Click ⚙️ API Settings above.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-amber-600">API URL not set. Click ⚙️ API Settings above.</td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>`;
 
             try {
                 let response = await fetch(apiUrl + "?sheet=fees");
                 let data = await response.json();
 
-                if(Array.isArray(data) && data.length > 0) {
-                    tbody.innerHTML = '';
-                    data.forEach(row => {
-                        let isPaid = row.status && row.status.toLowerCase() === 'paid';
-                        let statusBadge = isPaid 
-                            ? `<span class="px-2 py-1 text-xs rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Paid</span>`
-                            : `<span class="px-2 py-1 text-xs rounded bg-amber-50 text-amber-700 border border-amber-200">Unpaid</span>`;
+                if(Array.isArray(data)) {
+                    allFeesCache = data.map((row, idx) => {
+                        let vId = (row.voucher_id || '').trim();
+                        let payable = parseFloat(row.payable) || 0;
+                        let accObj = accountsDataMap[vId] || { totalPaid: 0, dates: new Set() };
                         
-                        let actionBtn = isPaid 
-                            ? `<span class="text-xs text-slate-400 font-medium">Completed</span>`
-                            : `<button onclick="openPaymentModal('${row.voucher_id}', '${row.student}', '${row.period}', '${row.payable}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded text-xs font-medium transition shadow-sm">Pay Now</button>`;
+                        let totalPaid = accObj.totalPaid;
+                        let balance = payable - totalPaid;
+                        
+                        let calculatedStatus = 'Unpaid';
+                        if(totalPaid >= payable && payable > 0) {
+                            calculatedStatus = 'Paid';
+                        } else if(totalPaid > 0 && totalPaid < payable) {
+                            calculatedStatus = 'Partial';
+                        }
 
-                        let tr = document.createElement('tr');
-                        tr.className = "border-b hover:bg-slate-50 transition";
-                        tr.innerHTML = `
-                            <td class="p-3 font-medium text-slate-800">${row.student || '-'}</td>
-                            <td class="p-3 text-slate-600">${row.type || '-'}</td>
-                            <td class="p-3 text-slate-600">${row.period || '-'}</td>
-                            <td class="p-3 font-bold text-indigo-600">PKR ${row.payable || '0'}</td>
-                            <td class="p-3">${statusBadge}</td>
-                            <td class="p-3 text-center">${actionBtn}</td>
-                        `;
-                        tbody.appendChild(tr);
+                        let dateStr = accObj.dates.size > 0 ? Array.from(accObj.dates).join(', ') : '-';
+
+                        return { 
+                            ...row, 
+                            _rowIndex: idx,
+                            totalPaid: totalPaid, 
+                            balance: balance, 
+                            status: calculatedStatus, 
+                            paymentDates: dateStr 
+                        };
                     });
+
+                    populatePeriodDropdown(allFeesCache);
+                    filterVouchers();
                 } else {
-                    tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">No vouchers found.</td></tr>`;
+                    allFeesCache = [];
+                    tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-slate-400">No fee vouchers found. Click Generate above.</td></tr>`;
                 }
             } catch (error) {
                 console.error("Error:", error);
-                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-rose-500">Failed to load records.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-rose-500">Failed to load fee records.</td></tr>`;
             }
         }
 
-        // Open Payment Modal with pre-filled details
-        function openPaymentModal(voucherId, student, period, payable) {
-            document.getElementById('payVoucherId').value = voucherId;
-            document.getElementById('payStudentName').innerText = student;
-            document.getElementById('payPeriod').innerText = period;
-            document.getElementById('payVoucherAmount').value = payable;
-            document.getElementById('payPrevBalance').value = "0";
-            document.getElementById('payReceivedAmount').value = payable;
-            document.getElementById('payRemarks').value = "Fee received in full";
+        function populatePeriodDropdown(data) {
+            let periodSet = new Set();
+            data.forEach(row => { if(row.period) periodSet.add(row.period.trim()); });
+            let filterSelect = document.getElementById('filterPeriod');
+            let current = filterSelect.value;
+            filterSelect.innerHTML = `<option value="ALL">🔍 All Periods</option>`;
+            Array.from(periodSet).sort().forEach(p => {
+                let opt = document.createElement('option');
+                opt.value = p; opt.innerText = p;
+                filterSelect.appendChild(opt);
+            });
+            if(periodSet.has(current)) filterSelect.value = current;
+        }
+
+        function filterVouchers() {
+            let period = document.getElementById('filterPeriod').value;
+            let target = period === 'ALL' ? allFeesCache : allFeesCache.filter(r => (r.period || '').trim() === period);
+            renderFeesTable(target);
+        }
+
+        function renderFeesTable(data) {
+            let tbody = document.getElementById('feesTableBody');
+            tbody.innerHTML = '';
+
+            if(data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-slate-400">No vouchers match the filter.</td></tr>`;
+                return;
+            }
+
+            data.forEach((row, idx) => {
+                let status = row.status || 'Unpaid';
+                let statusBadge = status === 'Paid'
+                    ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Paid</span>`
+                    : status === 'Partial'
+                    ? `<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold">Partial</span>`
+                    : `<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold">Unpaid</span>`;
+
+                let balanceColor = row.balance < 0 ? 'text-indigo-600 font-extrabold' : (row.balance > 0 ? 'text-rose-600 font-bold' : 'text-slate-600');
+                let balanceText = row.balance < 0 ? `Adv ${row.balance}` : `PKR ${row.balance}`;
+
+                let tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="p-2.5 font-medium">${idx + 1}</td>
+                    <td class="p-2.5 font-mono text-indigo-900">${row.voucher_id || '-'}</td>
+                    <td class="p-2.5 font-semibold text-slate-900">${row.student_name || '-'}</td>
+                    <td class="p-2.5 text-slate-600">${row.type || 'Tuition Fee'}</td>
+                    <td class="p-2.5 text-indigo-600 font-medium">${row.period || '-'}</td>
+                    <td class="p-2.5 font-bold text-slate-800">PKR ${row.payable || '0'}</td>
+                    <td class="p-2.5 font-bold text-emerald-600">PKR ${row.totalPaid || '0'}</td>
+                    <td class="p-2.5 ${balanceColor}">${balanceText}</td>
+                    <td class="p-2.5 text-slate-600">${row.class || '-'}</td>
+                    <td class="p-2.5">${statusBadge}</td>
+                    <td class="p-2.5 font-mono text-indigo-700 font-medium">${row.paymentDates || '-'}</td>
+                    <td class="p-2.5 text-center">
+                        <button onclick='openPayModal(${JSON.stringify(row)})' class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-1 rounded font-medium transition text-[11px]">💳 Pay Voucher</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openPayModal(row) {
+            document.getElementById('payVoucherId').value = row.voucher_id || '';
+            document.getElementById('payStudentName').value = row.student_name || '';
+            document.getElementById('payFromAccount').value = `${row.type || 'Tuition Fee'} (${row.period || ''}) - ${row.student_name || ''}`;
             
-            calculateTotalDue();
-            document.getElementById('paymentModal').classList.remove('hidden');
+            let payable = parseFloat(row.payable) || 0;
+            let totalPaid = parseFloat(row.totalPaid) || 0;
+            let remaining = payable - totalPaid;
+            
+            document.getElementById('payPayable').value = payable;
+            document.getElementById('payAmountIn').value = remaining > 0 ? remaining : payable;
+            document.getElementById('payRemarks').value = row.remarks || '';
+            document.getElementById('payModal').classList.remove('hidden');
         }
 
-        function closePaymentModal() {
-            document.getElementById('paymentModal').classList.add('hidden');
+        function closePayModal() {
+            document.getElementById('payModal').classList.add('hidden');
         }
 
-        function calculateTotalDue() {
-            let voucherAmt = parseFloat(document.getElementById('payVoucherAmount').value) || 0;
-            let prevBal = parseFloat(document.getElementById('payPrevBalance').value) || 0;
-            let totalDue = voucherAmt + prevBal;
-            document.getElementById('payTotalDue').value = totalDue.toFixed(2);
-            document.getElementById('payReceivedAmount').value = totalDue.toFixed(2);
-            calculateBalance();
-        }
-
-        function calculateBalance() {
-            let totalDue = parseFloat(document.getElementById('payTotalDue').value) || 0;
-            let received = parseFloat(document.getElementById('payReceivedAmount').value) || 0;
-            let balance = totalDue - received;
-            document.getElementById('payPendingBalance').value = balance > 0 ? balance.toFixed(2) : "0";
-        }
-
-        // Process Payment and record in Accounts
-        async function processPayment(event) {
+        async function submitPayment(event) {
             event.preventDefault();
             let apiUrl = getApiUrl();
             if(!apiUrl) return;
 
             let voucherId = document.getElementById('payVoucherId').value;
-            let student = document.getElementById('payStudentName').innerText;
-            let period = document.getElementById('payPeriod').innerText;
-            let receivedAmt = document.getElementById('payReceivedAmount').value;
-            let mode = document.getElementById('payMode').value;
+            let fromAcc = document.getElementById('payFromAccount').value;
+            let toAcc = document.getElementById('payToAccount').value;
+            let amountIn = parseFloat(document.getElementById('payAmountIn').value) || 0;
+            let paymentDate = document.getElementById('payDate').value;
             let remarks = document.getElementById('payRemarks').value.trim();
 
-            let btn = document.getElementById('paySubmitBtn');
-            btn.innerText = "Processing...";
-            btn.disabled = true;
+            let accountPayload = {
+                voucher_id: voucherId,
+                from_account: fromAcc,
+                to_account: toAcc,
+                description: remarks,
+                amount_in: amountIn,
+                amount_out: 0,
+                date: paymentDate,
+                remarks: remarks
+            };
 
             try {
-                // 1. Update status to Paid in 'fees' sheet
-                let updateResponse = await fetch(`${apiUrl}/voucher_id/${voucherId}?sheet=fees`, {
-                    method: 'PUT',
-                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: { status: "Paid" } })
-                });
-
-                // 2. Add entry in 'accounts' sheet
-                let currentDate = new Date().toISOString().split('T')[0];
-                let accountPayload = {
-                    data: [{
-                        voucher_no: voucherId,
-                        type: "Cash Receipt",
-                        title: `Fee Collection - ${student} (${period})`,
-                        amount: receivedAmt,
-                        mode: mode,
-                        remarks: remarks || "Fee received",
-                        date: currentDate
-                    }]
-                };
-
-                await fetch(apiUrl + "?sheet=accounts", {
+                let accRes = await fetch(apiUrl + "?sheet=accounts", {
                     method: 'POST',
                     headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                    body: JSON.stringify(accountPayload)
+                    body: JSON.stringify({ data: [accountPayload] })
                 });
 
-                if(updateResponse.ok) {
-                    alert("Payment Received Successfully & Logged into Accounts!");
-                    closePaymentModal();
-                    fetchFees();
+                if(accRes.ok) {
+                    alert("Payment Receipt Saved to Accounts Successfully!");
+                    closePayModal();
+                    initFeePage();
                 } else {
-                    alert("Payment status update failed.");
+                    alert("Failed to save payment.");
                 }
-            } catch (error) {
-                console.error("Error:", error);
-                alert("Error while processing payment transaction.");
-            } finally {
-                btn.innerText = "Confirm & Receive Payment";
-                btn.disabled = false;
+            } catch(e) {
+                console.error(e);
+                alert("Error connecting to database.");
+            }
+        }
+
+        async function generateVouchers() {
+            let apiUrl = getApiUrl();
+            if(!apiUrl) { alert("Please configure API URL in Settings!"); openSettingsModal(); return; }
+            if(allStudentsCache.length === 0) { alert("No students found in students sheet!"); return; }
+
+            let selectedPeriod = document.getElementById('voucherPeriod').value;
+            let periodsToGenerate = selectedPeriod === 'ALL_YEAR' ? [
+                "January 2026", "February 2026", "March 2026", "April 2026", 
+                "May 2026", "June 2026", "July 2026", "August 2026", 
+                "September 2026", "October 2026", "November 2026", "December 2026"
+            ] : [selectedPeriod];
+
+            let existingKeys = new Set(allFeesCache.map(f => `${(f.admis_no||'').trim()}_${(f.period||'').trim()}`));
+            let newVouchers = [];
+
+            periodsToGenerate.forEach(period => {
+                allStudentsCache.forEach(student => {
+                    let adm = (student.admis_no || student.sr_no || '').trim();
+                    let key = `${adm}_${period}`;
+                    if(!existingKeys.has(key)) {
+                        let voucherId = 'V-' + Math.floor(100000 + Math.random() * 900000);
+                        let monthlyFee = parseFloat(student.monthly_tution_fee) || 0;
+                        newVouchers.push({
+                            sr_no: student.sr_no || '',
+                            voucher_id: voucherId,
+                            admis_no: student.admis_no || '',
+                            student_name: student.student_name || '',
+                            type: 'Tuition Fee',
+                            period: period,
+                            payable: monthlyFee,
+                            class: student.class || '',
+                            status: 'Unpaid',
+                            date: new Date().toISOString().split('T')[0],
+                            remarks: ''
+                        });
+                    }
+                });
+            });
+
+            if(newVouchers.length === 0) {
+                alert("Selected vouchers already exist for all students! No duplicates created.");
+                return;
+            }
+
+            if(!confirm(`Total ${newVouchers.length} new vouchers will be generated. Proceed?`)) return;
+
+            try {
+                let res = await fetch(apiUrl + "?sheet=fees", {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: newVouchers })
+                });
+                if(res.ok) {
+                    alert("Vouchers Generated Successfully!");
+                    toggleAccordion('voucherAccordion');
+                    initFeePage();
+                } else {
+                    alert("Failed to generate vouchers.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error connecting to database.");
             }
         }
 
@@ -413,12 +489,12 @@
                 localStorage.setItem('sheetdb_api_url', url);
                 alert("API URL Saved Successfully!");
                 closeSettingsModal();
-                fetchFees();
+                initFeePage();
             } else {
                 alert("Please enter a valid URL.");
             }
         }
-        document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closePaymentModal(); } });
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closePayModal(); } });
     </script>
 </body>
 </html>
