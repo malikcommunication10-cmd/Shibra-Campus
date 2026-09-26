@@ -6,7 +6,7 @@
     <title>Concept School Shibra Campus - Book Store</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans">
+<body class="bg-slate-50 text-slate-800 font-sans" onload="initBooksPage()">
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
@@ -24,6 +24,7 @@
                 <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚙️ <span>System Settings</span></a>
             </nav>
         </aside>
+
         <!-- MAIN -->
         <main class="flex-1 p-6 md:p-10">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex justify-between items-center">
@@ -33,10 +34,12 @@
                 </div>
                 <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
             </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- FORM SECTION -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
                     <h3 class="text-base font-semibold mb-4 text-indigo-700 border-b pb-2">New Transaction</h3>
-                    <form id="transactionForm" class="space-y-4">
+                    <form id="transactionForm" onsubmit="saveTransaction(event)" class="space-y-4">
                         <div>
                             <label class="block text-xs font-medium text-slate-700 mb-1">Transaction Type</label>
                             <select id="txType" class="w-full border rounded-lg p-2.5 text-sm bg-slate-50 outline-none">
@@ -81,18 +84,20 @@
                             <label class="block text-xs font-semibold text-slate-900 mb-1">Net Total (PKR)</label>
                             <input type="text" id="netAmount" readonly class="w-full bg-slate-100 font-bold text-indigo-700 border rounded-lg p-2.5 text-sm outline-none" value="0">
                         </div>
-                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Transaction</button>
+                        <button type="submit" id="saveBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Transaction</button>
                     </form>
                 </section>
+
+                <!-- TABLE SECTION -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
                     <div class="flex justify-between items-center mb-4 border-b pb-2">
                         <h3 class="text-base font-semibold text-indigo-700">Inventory Records</h3>
                         <button onclick="fetchTransactions()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition">🔄 Refresh</button>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto max-h-[500px]">
                         <table class="w-full text-left border-collapse text-sm">
-                            <thead>
-                                <tr class="bg-slate-100 text-slate-600 border-b text-xs">
+                            <thead class="sticky top-0 bg-slate-100">
+                                <tr class="text-slate-600 border-b text-xs">
                                     <th class="p-3">Type</th>
                                     <th class="p-3">Party/Student</th>
                                     <th class="p-3">Book Title</th>
@@ -101,7 +106,7 @@
                                 </tr>
                             </thead>
                             <tbody id="transactionTableBody">
-                                <tr><td colspan="5" class="p-4 text-center text-slate-400">No records found.</td></tr>
+                                <tr><td colspan="5" class="p-4 text-center text-slate-400">Loading records...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -109,18 +114,38 @@
             </div>
         </main>
     </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
-            <h3 class="text-lg font-semibold text-indigo-700 mb-3">API Settings</h3>
-            <input type="text" id="apiUrlInput" placeholder="SheetDB API URL" class="w-full border rounded-lg p-2.5 text-sm mb-4 outline-none">
-            <div class="flex justify-end space-x-2">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative space-y-3">
+            <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚙️ Supabase API Settings</h3>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label>
+                <input type="text" id="apiUrlInput" class="w-full border rounded-lg p-2 text-sm outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label>
+                <input type="text" id="apiKeyInput" class="w-full border rounded-lg p-2 text-sm outline-none">
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveApiUrl()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save</button>
+                <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
             </div>
         </div>
     </div>
+
+    <!-- JavaScript Logic -->
     <script>
+        function getSupabaseConfig() {
+            let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
+            let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+            return { url, key };
+        }
+
+        function initBooksPage() {
+            fetchTransactions();
+        }
+
         function calculateTotal() {
             let qty = parseFloat(document.getElementById('qty').value) || 0;
             let price = parseFloat(document.getElementById('unitPrice').value) || 0;
@@ -131,9 +156,128 @@
             let net = gross - disc;
             document.getElementById('netAmount').value = net > 0 ? net.toFixed(2) : 0;
         }
-        function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('apiUrlInput').value = localStorage.getItem('sheetdb_api_url') || ''; }
+
+        async function fetchTransactions() {
+            let config = getSupabaseConfig();
+            let tbody = document.getElementById('transactionTableBody');
+            tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
+
+            try {
+                let response = await fetch(`${config.url}/rest/v1/books?select=*`, {
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`
+                    }
+                });
+                let data = await response.json();
+
+                if(Array.isArray(data) && data.length > 0) {
+                    renderTable(data);
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">No book inventory records found.</td></tr>`;
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500">Failed to load records.</td></tr>`;
+            }
+        }
+
+        function renderTable(data) {
+            let tbody = document.getElementById('transactionTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach((row) => {
+                let type = row.type || row.tx_type || 'Purchase';
+                let party = row.party_name || row.party || '-';
+                let title = row.book_title || row.title || '-';
+                let qty = row.qty || 1;
+                let netAmt = parseFloat(row.net_amount || row.amount) || 0;
+
+                let tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-slate-50 text-xs";
+                tr.innerHTML = `
+                    <td class="p-3 font-semibold text-indigo-900">${type}</td>
+                    <td class="p-3 text-slate-700">${party}</td>
+                    <td class="p-3 text-slate-600">${title}</td>
+                    <td class="p-3 font-medium">${qty}</td>
+                    <td class="p-3 font-bold text-indigo-600">PKR ${netAmt.toLocaleString()}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function saveTransaction(event) {
+            event.preventDefault();
+            let config = getSupabaseConfig();
+
+            let type = document.getElementById('txType').value;
+            let party = document.getElementById('partyName').value.trim();
+            let title = document.getElementById('bookTitle').value.trim();
+            let qty = parseInt(document.getElementById('qty').value) || 1;
+            let unitPrice = parseFloat(document.getElementById('unitPrice').value) || 0;
+            let netAmount = parseFloat(document.getElementById('netAmount').value) || 0;
+
+            let payloadData = {
+                type: type,
+                party_name: party,
+                book_title: title,
+                qty: qty,
+                unit_price: unitPrice,
+                net_amount: netAmount
+            };
+
+            let btn = document.getElementById('saveBtn');
+            btn.innerText = "Saving...";
+            btn.disabled = true;
+
+            try {
+                let res = await fetch(`${config.url}/rest/v1/books`, {
+                    method: 'POST',
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify(payloadData)
+                });
+
+                if(res.ok) {
+                    alert("Book Transaction Saved Successfully!");
+                    document.getElementById('transactionForm').reset();
+                    calculateTotal();
+                    fetchTransactions();
+                } else {
+                    let err = await res.text();
+                    alert("Failed to save: " + err);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Connection error.");
+            } finally {
+                btn.innerText = "Save Transaction";
+                btn.disabled = false;
+            }
+        }
+
+        function openSettingsModal() { 
+            document.getElementById('settingsModal').classList.remove('hidden'); 
+            let config = getSupabaseConfig();
+            document.getElementById('apiUrlInput').value = config.url;
+            document.getElementById('apiKeyInput').value = config.key;
+        }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveApiUrl() { localStorage.setItem('sheetdb_api_url', document.getElementById('apiUrlInput').value.trim()); alert("Saved!"); closeSettingsModal(); }
+        function saveApiCredentials() {
+            let url = document.getElementById('apiUrlInput').value.trim();
+            let key = document.getElementById('apiKeyInput').value.trim();
+            if(url && key) {
+                localStorage.setItem('supabase_url', url);
+                localStorage.setItem('supabase_key', key);
+                alert("Supabase Credentials Saved!");
+                closeSettingsModal();
+                fetchTransactions();
+            } else { alert("Please enter valid URL and Key."); }
+        }
         document.addEventListener('keydown', e => { if(e.key === 'Escape') closeSettingsModal(); });
     </script>
 </body>
