@@ -16,6 +16,13 @@
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans" onload="initFeePage()">
+    
+    <!-- LOADING SPINNER OVERLAY -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/40 z-50 hidden flex flex-col items-center justify-center text-white backdrop-blur-xs">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-3"></div>
+        <p id="loadingText" class="text-sm font-semibold tracking-wide">Processing...</p>
+    </div>
+
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl no-print">
@@ -78,7 +85,10 @@
             <!-- Vouchers Table Section -->
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 no-print">
                 <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-3 gap-3">
-                    <h3 class="text-base font-semibold text-indigo-700">Generated Fee Vouchers List</h3>
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-base font-semibold text-indigo-700">Generated Fee Vouchers List</h3>
+                        <button onclick="deleteSelectedVouchers()" class="bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg text-xs font-semibold border border-rose-200 transition flex items-center gap-1">🗑️ Delete Selected</button>
+                    </div>
                     <div class="flex items-center gap-2 flex-wrap">
                         <div class="relative flex items-center">
                             <input type="text" id="searchInput" oninput="filterVouchers()" placeholder="Search Voucher ID or Name..." class="border rounded-lg pl-3 pr-8 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700 w-48 focus:w-60 transition-all">
@@ -94,6 +104,7 @@
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
                             <tr>
+                                <th class="p-2.5 text-center"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
                                 <th class="p-2.5">Sr</th>
                                 <th class="p-2.5">Voucher ID</th>
                                 <th class="p-2.5">Student Name</th>
@@ -109,7 +120,7 @@
                             </tr>
                         </thead>
                         <tbody id="feesTableBody">
-                            <tr><td colspan="12" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>
+                            <tr><td colspan="13" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>
                         </tbody>
                         <tfoot id="feesTableFooter" class="sticky bottom-0 bg-slate-100 font-bold border-t text-slate-800">
                             <!-- Footer totals -->
@@ -238,6 +249,15 @@
         let allStudentsCache = [];
         let accountsDataMap = {};
 
+        function showLoading(text = "Processing...") {
+            document.getElementById('loadingText').innerText = text;
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+
         function getSupabaseConfig() {
             let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
             let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
@@ -246,9 +266,12 @@
 
         async function initFeePage() {
             document.getElementById('payDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('selectAllCheckbox').checked = false;
+            showLoading("Loading Vouchers Data...");
             await fetchStudentsCache();
             await fetchAccountsData();
             await fetchFeesData();
+            hideLoading();
         }
 
         function toggleAccordion(id) {
@@ -296,7 +319,7 @@
         async function fetchFeesData() {
             let config = getSupabaseConfig();
             let tbody = document.getElementById('feesTableBody');
-            tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>`;
 
             try {
                 let response = await fetch(`${config.url}/rest/v1/fees?select=*`, {
@@ -336,11 +359,11 @@
                     filterVouchers();
                 } else {
                     allFeesCache = [];
-                    tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-slate-400">No fee vouchers found.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">No fee vouchers found.</td></tr>`;
                 }
             } catch (error) {
                 console.error("Error:", error);
-                tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-rose-500">Failed to load fee records.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-rose-500">Failed to load fee records.</td></tr>`;
             }
         }
 
@@ -376,13 +399,19 @@
             renderFeesTable(target);
         }
 
+        function toggleSelectAll(masterCheckbox) {
+            let checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+        }
+
         function renderFeesTable(data) {
             let tbody = document.getElementById('feesTableBody');
             let tfoot = document.getElementById('feesTableFooter');
+            document.getElementById('selectAllCheckbox').checked = false;
             tbody.innerHTML = '';
 
             if(data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="12" class="p-4 text-center text-slate-400">No vouchers found matching your search.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">No vouchers found matching your search.</td></tr>`;
                 tfoot.innerHTML = '';
                 return;
             }
@@ -403,12 +432,14 @@
 
                 let balanceColor = row.balance < 0 ? 'text-indigo-600 font-extrabold' : (row.balance > 0 ? 'text-rose-600 font-bold' : 'text-slate-600');
                 let balanceText = row.balance < 0 ? `Adv ${row.balance}` : `PKR ${row.balance}`;
+                let vId = (row.voucher_id || '').trim();
 
                 let tr = document.createElement('tr');
                 tr.className = "border-b hover:bg-slate-50 transition";
                 tr.innerHTML = `
+                    <td class="p-2.5 text-center"><input type="checkbox" class="row-checkbox" data-voucher="${vId}"></td>
                     <td class="p-2.5 font-medium">${idx + 1}</td>
-                    <td class="p-2.5 font-mono text-indigo-900">${row.voucher_id || '-'}</td>
+                    <td class="p-2.5 font-mono text-indigo-900">${vId || '-'}</td>
                     <td class="p-2.5 font-semibold">
                         <a href="javascript:void(0)" onclick='openStudentLedger(${JSON.stringify(row.student_name)})' class="text-indigo-600 hover:text-indigo-800 underline transition">${row.student_name || '-'}</a>
                     </td>
@@ -432,13 +463,58 @@
 
             tfoot.innerHTML = `
                 <tr>
-                    <td colspan="5" class="p-3 text-right font-extrabold text-indigo-950">Total (Filtered):</td>
+                    <td colspan="6" class="p-3 text-right font-extrabold text-indigo-950">Total (Filtered):</td>
                     <td class="p-3 font-extrabold text-slate-900">${sumPayable}</td>
                     <td class="p-3 font-extrabold text-emerald-600">${sumPaid}</td>
                     <td class="p-3 font-extrabold ${balanceColorTotal}">${balanceTextTotal}</td>
                     <td colspan="4"></td>
                 </tr>
             `;
+        }
+
+        async function deleteSelectedVouchers() {
+            let selectedCheckboxes = document.querySelectorAll('.row-checkbox:checked');
+            if(selectedCheckboxes.length === 0) {
+                alert("Please select at least one voucher to delete.");
+                return;
+            }
+
+            if(!confirm(`Are you sure you want to delete ${selectedCheckboxes.length} selected voucher(s)?`)) return;
+
+            showLoading("Deleting Selected Vouchers Instantly...");
+            let config = getSupabaseConfig();
+            let voucherIds = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-voucher')).filter(id => id);
+
+            if(voucherIds.length === 0) {
+                hideLoading();
+                return;
+            }
+
+            try {
+                // Optimized Bulk Delete using Supabase 'in' operator
+                let idsString = voucherIds.map(id => `"${id}"`).join(',');
+                let res = await fetch(`${config.url}/rest/v1/fees?voucher_id=in.(${idsString})`, {
+                    method: 'DELETE',
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`,
+                        "Prefer": "return=minimal"
+                    }
+                });
+
+                hideLoading();
+                if(res.ok) {
+                    alert("Selected Vouchers Deleted Successfully!");
+                    initFeePage();
+                } else {
+                    let err = await res.text();
+                    alert("Failed to delete vouchers: " + err);
+                }
+            } catch(e) {
+                hideLoading();
+                console.error("Error deleting vouchers:", e);
+                alert("Failed to delete vouchers due to connection error.");
+            }
         }
 
         function openStudentLedger(studentName) {
@@ -518,6 +594,7 @@
 
         async function submitPayment(event) {
             event.preventDefault();
+            showLoading("Saving Payment Receipt...");
             let config = getSupabaseConfig();
             let voucherId = document.getElementById('payVoucherId').value;
             let fromAcc = document.getElementById('payFromAccount').value;
@@ -549,6 +626,7 @@
                     body: JSON.stringify(accountPayload)
                 });
 
+                hideLoading();
                 if(res.ok) {
                     alert("Payment Receipt Saved to Accounts Successfully!");
                     closePayModal();
@@ -556,7 +634,11 @@
                 } else {
                     alert("Failed to save payment.");
                 }
-            } catch(e) { console.error(e); alert("Error connecting to database."); }
+            } catch(e) {
+                hideLoading();
+                console.error(e);
+                alert("Error connecting to database.");
+            }
         }
 
         async function generateVouchers() {
@@ -621,6 +703,7 @@
 
             if(!confirm(`Total ${newVouchers.length} new vouchers will be generated. Proceed?`)) return;
 
+            showLoading("Generating Vouchers...");
             try {
                 let res = await fetch(`${config.url}/rest/v1/fees`, {
                     method: 'POST',
@@ -632,6 +715,7 @@
                     },
                     body: JSON.stringify(newVouchers)
                 });
+                hideLoading();
                 if(res.ok) {
                     alert("Vouchers Generated Successfully!");
                     toggleAccordion('voucherAccordion');
@@ -640,7 +724,11 @@
                     let err = await res.text();
                     alert("Failed to generate: " + err);
                 }
-            } catch (err) { console.error(err); alert("Error connecting to database."); }
+            } catch (err) {
+                hideLoading();
+                console.error(err);
+                alert("Error connecting to database.");
+            }
         }
 
         function openSettingsModal() { 
