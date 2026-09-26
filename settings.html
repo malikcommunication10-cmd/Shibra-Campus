@@ -6,7 +6,7 @@
     <title>Concept School Shibra Campus - System Settings</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans">
+<body class="bg-slate-50 text-slate-800 font-sans" onload="initSettingsPage()">
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
@@ -24,6 +24,7 @@
                 <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">⚙️ <span>System Settings</span></a>
             </nav>
         </aside>
+
         <!-- MAIN -->
         <main class="flex-1 p-6 md:p-10">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex justify-between items-center">
@@ -33,59 +34,218 @@
                 </div>
                 <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
             </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Staff Section -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                     <h3 class="text-base font-semibold mb-3 text-indigo-700 border-b pb-2">👩‍🏫 Manage Teachers / Staff</h3>
-                    <form onsubmit="addMasterItem(event, 'staffList', 'staffInput', 'Added!')" class="flex gap-2 mb-3">
+                    <form onsubmit="addStaffItem(event)" class="flex gap-2 mb-3">
                         <input type="text" id="staffInput" required placeholder="Teacher Name" class="w-full border rounded-lg p-2 text-sm outline-none">
                         <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm">Add</button>
                     </form>
-                    <ul id="staffList" class="divide-y divide-slate-100 text-sm border rounded-lg">
-                        <li class="p-3 text-slate-400 text-center">No staff added yet.</li>
+                    <ul id="staffList" class="divide-y divide-slate-100 text-sm border rounded-lg max-h-60 overflow-y-auto">
+                        <li class="p-3 text-slate-400 text-center">Loading staff...</li>
                     </ul>
                 </section>
+
+                <!-- Classes Section -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                    <h3 class="text-base font-semibold mb-3 text-indigo-700 border-b pb-2">🏫 Manage Classes & Sections</h3>
-                    <form onsubmit="addMasterItem(event, 'classList', 'classInput', 'Added!')" class="flex gap-2 mb-3">
-                        <input type="text" id="classInput" required placeholder="Class Name" class="w-full border rounded-lg p-2 text-sm outline-none">
+                    <h3 class="text-base font-semibold mb-3 text-indigo-700 border-b pb-2">🏫 Manage Settings / Classes</h3>
+                    <form onsubmit="addSettingItem(event)" class="flex gap-2 mb-3">
+                        <input type="text" id="settingKeyInput" required placeholder="Setting Key (e.g. Class)" class="w-1/2 border rounded-lg p-2 text-sm outline-none">
+                        <input type="text" id="settingValInput" required placeholder="Value (e.g. Pre-Nursery)" class="w-1/2 border rounded-lg p-2 text-sm outline-none">
                         <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm">Add</button>
                     </form>
-                    <ul id="classList" class="divide-y divide-slate-100 text-sm border rounded-lg">
-                        <li class="p-3 text-slate-400 text-center">No classes added yet.</li>
+                    <ul id="settingsList" class="divide-y divide-slate-100 text-sm border rounded-lg max-h-60 overflow-y-auto">
+                        <li class="p-3 text-slate-400 text-center">Loading settings...</li>
                     </ul>
                 </section>
             </div>
         </main>
     </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
-            <h3 class="text-lg font-semibold text-indigo-700 mb-3">API Settings</h3>
-            <input type="text" id="apiUrlInput" placeholder="SheetDB API URL" class="w-full border rounded-lg p-2.5 text-sm mb-4 outline-none">
-            <div class="flex justify-end space-x-2">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative space-y-3">
+            <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚙️ Supabase API Settings</h3>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label>
+                <input type="text" id="apiUrlInput" class="w-full border rounded-lg p-2 text-sm outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label>
+                <input type="text" id="apiKeyInput" class="w-full border rounded-lg p-2 text-sm outline-none">
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveApiUrl()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save</button>
+                <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
             </div>
         </div>
     </div>
+
+    <!-- JavaScript Logic -->
     <script>
-        function addMasterItem(e, listId, inputId, msg) {
-            e.preventDefault();
-            let input = document.getElementById(inputId);
-            let val = input.value.trim();
-            if(!val) return;
-            let list = document.getElementById(listId);
-            if(list.querySelector('.text-slate-400')) list.innerHTML = '';
-            let li = document.createElement('li');
-            li.className = "flex justify-between items-center p-3 text-sm";
-            li.innerHTML = `<span>${val}</span><button onclick="this.parentElement.remove()" class="text-rose-600 text-xs bg-rose-50 px-2 py-1 rounded">Delete</button>`;
-            list.appendChild(li);
-            input.value = '';
-            alert(msg);
+        function getSupabaseConfig() {
+            let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
+            let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+            return { url, key };
         }
-        function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('apiUrlInput').value = localStorage.getItem('sheetdb_api_url') || ''; }
+
+        function initSettingsPage() {
+            fetchStaff();
+            fetchSettings();
+        }
+
+        async function fetchStaff() {
+            let config = getSupabaseConfig();
+            let list = document.getElementById('staffList');
+            try {
+                let res = await fetch(`${config.url}/rest/v1/staff?select=*`, {
+                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
+                });
+                let data = await res.json();
+                if(Array.isArray(data) && data.length > 0) {
+                    list.innerHTML = '';
+                    data.forEach(row => {
+                        let name = row.staff_name || row.name || '';
+                        let id = row.staff_id || row.id;
+                        if(name) {
+                            let li = document.createElement('li');
+                            li.className = "flex justify-between items-center p-3 text-sm";
+                            li.innerHTML = `<span>${name}</span><button onclick="deleteStaff('${id}')" class="text-rose-600 text-xs bg-rose-50 px-2 py-1 rounded">Delete</button>`;
+                            list.appendChild(li);
+                        }
+                    });
+                } else {
+                    list.innerHTML = `<li class="p-3 text-slate-400 text-center">No staff added yet.</li>`;
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function addStaffItem(e) {
+            e.preventDefault();
+            let config = getSupabaseConfig();
+            let input = document.getElementById('staffInput');
+            let name = input.value.trim();
+            if(!name) return;
+
+            let staffId = 'STF-' + Math.floor(1000 + Math.random() * 9000);
+            try {
+                let res = await fetch(`${config.url}/rest/v1/staff`, {
+                    method: 'POST',
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify({ staff_id: staffId, staff_name: name })
+                });
+                if(res.ok) {
+                    input.value = '';
+                    fetchStaff();
+                    alert("Staff Added Successfully!");
+                } else { alert("Failed to add staff."); }
+            } catch(err) { console.error(err); }
+        }
+
+        async function deleteStaff(id) {
+            if(!confirm("Delete this staff member?")) return;
+            let config = getSupabaseConfig();
+            try {
+                let res = await fetch(`${config.url}/rest/v1/staff?staff_id=eq.${id}`, {
+                    method: 'DELETE',
+                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
+                });
+                if(res.ok) fetchStaff();
+            } catch(e) { console.error(e); }
+        }
+
+        async function fetchSettings() {
+            let config = getSupabaseConfig();
+            let list = document.getElementById('settingsList');
+            try {
+                let res = await fetch(`${config.url}/rest/v1/settings?select=*`, {
+                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
+                });
+                let data = await res.json();
+                if(Array.isArray(data) && data.length > 0) {
+                    list.innerHTML = '';
+                    data.forEach(row => {
+                        let key = row.setting_key || '';
+                        let val = row.setting_value || '';
+                        if(key) {
+                            let li = document.createElement('li');
+                            li.className = "flex justify-between items-center p-3 text-sm";
+                            li.innerHTML = `<span><b>${key}:</b> ${val}</span><button onclick="deleteSetting('${key}')" class="text-rose-600 text-xs bg-rose-50 px-2 py-1 rounded">Delete</button>`;
+                            list.appendChild(li);
+                        }
+                    });
+                } else {
+                    list.innerHTML = `<li class="p-3 text-slate-400 text-center">No settings added yet.</li>`;
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function addSettingItem(e) {
+            e.preventDefault();
+            let config = getSupabaseConfig();
+            let keyInput = document.getElementById('settingKeyInput');
+            let valInput = document.getElementById('settingValInput');
+            let key = keyInput.value.trim();
+            let val = valInput.value.trim();
+            if(!key || !val) return;
+
+            try {
+                let res = await fetch(`${config.url}/rest/v1/settings`, {
+                    method: 'POST',
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify({ setting_key: key, setting_value: val })
+                });
+                if(res.ok) {
+                    keyInput.value = '';
+                    valInput.value = '';
+                    fetchSettings();
+                    alert("Setting Added Successfully!");
+                } else { alert("Failed to add setting."); }
+            } catch(err) { console.error(err); }
+        }
+
+        async function deleteSetting(key) {
+            if(!confirm("Delete this setting?")) return;
+            let config = getSupabaseConfig();
+            try {
+                let res = await fetch(`${config.url}/rest/v1/settings?setting_key=eq.${encodeURIComponent(key)}`, {
+                    method: 'DELETE',
+                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
+                });
+                if(res.ok) fetchSettings();
+            } catch(e) { console.error(e); }
+        }
+
+        function openSettingsModal() { 
+            document.getElementById('settingsModal').classList.remove('hidden'); 
+            let config = getSupabaseConfig();
+            document.getElementById('apiUrlInput').value = config.url;
+            document.getElementById('apiKeyInput').value = config.key;
+        }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveApiUrl() { localStorage.setItem('sheetdb_api_url', document.getElementById('apiUrlInput').value.trim()); alert("Saved!"); closeSettingsModal(); }
+        function saveApiCredentials() {
+            let url = document.getElementById('apiUrlInput').value.trim();
+            let key = document.getElementById('apiKeyInput').value.trim();
+            if(url && key) {
+                localStorage.setItem('supabase_url', url);
+                localStorage.setItem('supabase_key', key);
+                alert("Supabase Credentials Saved!");
+                closeSettingsModal();
+                initSettingsPage();
+            } else { alert("Please enter valid URL and Key."); }
+        }
         document.addEventListener('keydown', e => { if(e.key === 'Escape') closeSettingsModal(); });
     </script>
 </body>
