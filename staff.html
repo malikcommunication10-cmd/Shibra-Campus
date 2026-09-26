@@ -6,7 +6,7 @@
     <title>Concept School Shibra Campus - Staff & Payroll</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans">
+<body class="bg-slate-50 text-slate-800 font-sans" onload="initStaffPage()">
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
@@ -24,6 +24,7 @@
                 <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚙️ <span>System Settings</span></a>
             </nav>
         </aside>
+
         <!-- MAIN -->
         <main class="flex-1 p-6 md:p-10">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex justify-between items-center">
@@ -33,10 +34,12 @@
                 </div>
                 <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
             </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- FORM SECTION -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
                     <h3 class="text-base font-semibold mb-4 text-indigo-700 border-b pb-2">Staff Payroll Entry</h3>
-                    <form id="staffForm" class="space-y-4">
+                    <form id="staffForm" onsubmit="saveStaffRecord(event)" class="space-y-4">
                         <div>
                             <label class="block text-xs font-medium text-slate-700 mb-1">Staff Member Name</label>
                             <input type="text" id="staffName" required placeholder="Name" class="w-full border rounded-lg p-2.5 text-sm outline-none">
@@ -75,18 +78,20 @@
                             <label class="block text-xs font-semibold text-slate-900 mb-1">Net Payable Salary</label>
                             <input type="text" id="netSalary" readonly class="w-full bg-slate-100 font-bold text-indigo-700 border rounded-lg p-2.5 text-sm outline-none" value="0">
                         </div>
-                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Record</button>
+                        <button type="submit" id="saveBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Record</button>
                     </form>
                 </section>
+
+                <!-- TABLE SECTION -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
                     <div class="flex justify-between items-center mb-4 border-b pb-2">
                         <h3 class="text-base font-semibold text-indigo-700">Staff Directory</h3>
-                        <button onclick="fetchStaff()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition">🔄 Refresh</button>
+                        <button onclick="fetchStaffRecords()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition">🔄 Refresh</button>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto max-h-[500px]">
                         <table class="w-full text-left border-collapse text-sm">
-                            <thead>
-                                <tr class="bg-slate-100 text-slate-600 border-b text-xs">
+                            <thead class="sticky top-0 bg-slate-100">
+                                <tr class="text-slate-600 border-b text-xs">
                                     <th class="p-3">Staff Name</th>
                                     <th class="p-3">Designation</th>
                                     <th class="p-3">Base Salary</th>
@@ -95,7 +100,7 @@
                                 </tr>
                             </thead>
                             <tbody id="staffTableBody">
-                                <tr><td colspan="5" class="p-4 text-center text-slate-400">No staff records found.</td></tr>
+                                <tr><td colspan="5" class="p-4 text-center text-slate-400">Loading staff records...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -103,18 +108,39 @@
             </div>
         </main>
     </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
-            <h3 class="text-lg font-semibold text-indigo-700 mb-3">API Settings</h3>
-            <input type="text" id="apiUrlInput" placeholder="SheetDB API URL" class="w-full border rounded-lg p-2.5 text-sm mb-4 outline-none">
-            <div class="flex justify-end space-x-2">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative space-y-3">
+            <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚙️ Supabase API Settings</h3>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label>
+                <input type="text" id="apiUrlInput" class="w-full border rounded-lg p-2 text-sm outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label>
+                <input type="text" id="apiKeyInput" class="w-full border rounded-lg p-2 text-sm outline-none">
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveApiUrl()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save</button>
+                <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
             </div>
         </div>
     </div>
+
+    <!-- JavaScript Logic -->
     <script>
+        function getSupabaseConfig() {
+            let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
+            let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+            return { url, key };
+        }
+
+        function initStaffPage() {
+            document.getElementById('joiningDate').value = new Date().toISOString().split('T')[0];
+            fetchStaffRecords();
+        }
+
         function calculateNetSalary() {
             let base = parseFloat(document.getElementById('baseSalary').value) || 0;
             let bonus = parseFloat(document.getElementById('bonusVal').value) || 0;
@@ -122,9 +148,133 @@
             let net = base + bonus - fine;
             document.getElementById('netSalary').value = net > 0 ? net.toFixed(2) : 0;
         }
-        function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('apiUrlInput').value = localStorage.getItem('sheetdb_api_url') || ''; }
+
+        async function fetchStaffRecords() {
+            let config = getSupabaseConfig();
+            let tbody = document.getElementById('staffTableBody');
+            tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">Loading staff records...</td></tr>`;
+
+            try {
+                let response = await fetch(`${config.url}/rest/v1/staff?select=*`, {
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`
+                    }
+                });
+                let data = await response.json();
+
+                if(Array.isArray(data) && data.length > 0) {
+                    renderTable(data);
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">No staff records found.</td></tr>`;
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500">Failed to load records.</td></tr>`;
+            }
+        }
+
+        function renderTable(data) {
+            let tbody = document.getElementById('staffTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach((row) => {
+                let name = row.staff_name || row.name || '-';
+                let designation = row.designation || 'Teacher';
+                let baseSalary = parseFloat(row.base_salary || row.salary) || 0;
+                let leaves = row.leaves_count || row.leaves || 0;
+                let netSalary = parseFloat(row.net_salary) || baseSalary;
+
+                let tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-slate-50 text-xs";
+                tr.innerHTML = `
+                    <td class="p-3 font-semibold text-indigo-900">${name}</td>
+                    <td class="p-3 text-slate-700">${designation}</td>
+                    <td class="p-3 text-slate-600">PKR ${baseSalary.toLocaleString()}</td>
+                    <td class="p-3 font-medium text-amber-600">${leaves}</td>
+                    <td class="p-3 font-bold text-indigo-600">PKR ${netSalary.toLocaleString()}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function saveStaffRecord(event) {
+            event.preventDefault();
+            let config = getSupabaseConfig();
+
+            let name = document.getElementById('staffName').value.trim();
+            let designation = document.getElementById('designation').value.trim();
+            let joiningDate = document.getElementById('joiningDate').value;
+            let baseSalary = parseFloat(document.getElementById('baseSalary').value) || 0;
+            let leavesCount = parseInt(document.getElementById('leavesCount').value) || 0;
+            let bonus = parseFloat(document.getElementById('bonusVal').value) || 0;
+            let fine = parseFloat(document.getElementById('fineVal').value) || 0;
+            let netSalary = parseFloat(document.getElementById('netSalary').value) || 0;
+            let staffId = 'STF-' + Math.floor(100000 + Math.random() * 900000);
+
+            let payloadData = {
+                staff_id: staffId,
+                staff_name: name,
+                designation: designation,
+                joining_date: joiningDate,
+                base_salary: baseSalary,
+                leaves_count: leavesCount,
+                bonus: bonus,
+                fine: fine,
+                net_salary: netSalary
+            };
+
+            let btn = document.getElementById('saveBtn');
+            btn.innerText = "Saving...";
+            btn.disabled = true;
+
+            try {
+                let res = await fetch(`${config.url}/rest/v1/staff`, {
+                    method: 'POST',
+                    headers: {
+                        "apikey": config.key,
+                        "Authorization": `Bearer ${config.key}`,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify(payloadData)
+                });
+
+                if(res.ok) {
+                    alert("Staff Record Saved Successfully!");
+                    document.getElementById('staffForm').reset();
+                    initStaffPage();
+                } else {
+                    let err = await res.text();
+                    alert("Failed to save: " + err);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Connection error.");
+            } finally {
+                btn.innerText = "Save Record";
+                btn.disabled = false;
+            }
+        }
+
+        function openSettingsModal() { 
+            document.getElementById('settingsModal').classList.remove('hidden'); 
+            let config = getSupabaseConfig();
+            document.getElementById('apiUrlInput').value = config.url;
+            document.getElementById('apiKeyInput').value = config.key;
+        }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveApiUrl() { localStorage.setItem('sheetdb_api_url', document.getElementById('apiUrlInput').value.trim()); alert("Saved!"); closeSettingsModal(); }
+        function saveApiCredentials() {
+            let url = document.getElementById('apiUrlInput').value.trim();
+            let key = document.getElementById('apiKeyInput').value.trim();
+            if(url && key) {
+                localStorage.setItem('supabase_url', url);
+                localStorage.setItem('supabase_key', key);
+                alert("Supabase Credentials Saved!");
+                closeSettingsModal();
+                fetchStaffRecords();
+            } else { alert("Please enter valid URL and Key."); }
+        }
         document.addEventListener('keydown', e => { if(e.key === 'Escape') closeSettingsModal(); });
     </script>
 </body>
