@@ -23,7 +23,7 @@
             <nav class="flex-1 p-4 space-y-2">
                 <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
                 <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
-                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">⚡ <span>Bulk Annual Increment</span></a>
+                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">⚡ <span>Bulk Updation</span></a>
                 <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💸 <span>Fee Vouchers</span></a>
                 <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
                 <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
@@ -36,8 +36,8 @@
         <main class="flex-1 p-6 md:p-10 flex flex-col">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 flex justify-between items-center flex-wrap gap-4">
                 <div>
-                    <h2 class="text-2xl font-extrabold text-indigo-950">⚡ Bulk Annual Fee Increments Manager</h2>
-                    <p class="text-sm text-slate-500">Apply bulk increments to selected rows and manage entries easily</p>
+                    <h2 class="text-2xl font-extrabold text-indigo-950">⚡ Bulk Updation & Annual Increments</h2>
+                    <p class="text-sm text-slate-500">Apply bulk increments, manage separate fee & annual fund entries with remarks</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="bulkDeleteSelected()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm">🗑️ Bulk Delete</button>
@@ -114,11 +114,12 @@
                                 <th class="p-2.5">Old Fee</th>
                                 <th class="p-2.5">Fee Increment</th>
                                 <th class="p-2.5">Annual Fund</th>
+                                <th class="p-2.5">Remarks</th>
                                 <th class="p-2.5 text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody id="incrementTableBody">
-                            <tr><td colspan="11" class="p-6 text-center text-slate-400">Loading student records...</td></tr>
+                            <tr><td colspan="12" class="p-6 text-center text-slate-400">Loading student records...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -272,7 +273,7 @@
             document.getElementById('selectAllCheckbox').checked = false;
 
             if(studentsList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-slate-400">No student records found.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="12" class="p-6 text-center text-slate-400">No student records found.</td></tr>`;
                 document.getElementById('incCountInfo').innerText = `Total Students: 0`;
                 return;
             }
@@ -291,6 +292,7 @@
                 let newFee = existingInc ? (existingInc.new_fee || (oldFee + (parseFloat(feeInc) || 0))) : '';
                 let effPeriod = existingInc ? (existingInc.effective_period || 'March 2026') : 'March 2026';
                 let annualFund = existingInc ? (existingInc.annual_fund || st.annual_fund || '') : (st.annual_fund || '');
+                let remarks = existingInc ? (existingInc.remarks || '') : '';
 
                 let tr = document.createElement('tr');
                 tr.className = "border-b hover:bg-slate-50 inc-row";
@@ -307,6 +309,7 @@
                     <td class="p-2.5 font-bold text-slate-700">PKR <input type="number" id="oldfee_${idx}" value="${oldFee}" class="w-20 border rounded p-1 text-xs bg-slate-100 font-bold" readonly></td>
                     <td class="p-2.5"><input type="number" id="feeinc_${idx}" value="${feeInc}" placeholder="Increment" oninput="calculateNewFee(${idx})" class="w-24 border rounded p-1 text-xs bg-white outline-none font-bold text-indigo-700"></td>
                     <td class="p-2.5"><input type="number" id="annualfund_${idx}" value="${annualFund}" placeholder="Annual Fund" class="w-24 border rounded p-1 text-xs bg-white outline-none font-bold text-emerald-700"></td>
+                    <td class="p-2.5"><input type="text" id="remarks_${idx}" value="${remarks}" placeholder="Remarks" class="w-28 border rounded p-1 text-xs bg-white outline-none"></td>
                     <td class="p-2.5 text-center">
                         <button onclick='saveOrUpdateIncrement("${admNo}", "${sName}", ${idx})' class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1 rounded font-semibold transition text-[11px] border border-indigo-200">💾 Save</button>
                     </td>
@@ -352,6 +355,7 @@
             let oldFee = parseFloat(document.getElementById(`oldfee_${idx}`).value) || 0;
             let feeInc = parseFloat(document.getElementById(`feeinc_${idx}`).value) || 0;
             let annualFund = parseFloat(document.getElementById(`annualfund_${idx}`).value) || 0;
+            let remarks = document.getElementById(`remarks_${idx}`).value.trim();
 
             let payload = { 
                 admis_no: admNo, 
@@ -361,7 +365,8 @@
                 effective_period: effPeriod, 
                 old_fee: oldFee, 
                 fee_increament: feeInc, 
-                annual_fund: annualFund 
+                annual_fund: annualFund,
+                remarks: remarks
             };
 
             showLoading("Saving Increment Record...");
@@ -425,6 +430,7 @@
                     let oldFee = parseFloat(document.getElementById(`oldfee_${idx}`).value) || 0;
                     let feeInc = parseFloat(document.getElementById(`feeinc_${idx}`).value) || 0;
                     let annualFund = parseFloat(document.getElementById(`annualfund_${idx}`).value) || 0;
+                    let remarks = document.getElementById(`remarks_${idx}`).value.trim();
 
                     let payload = { 
                         admis_no: admNo, 
@@ -434,7 +440,8 @@
                         effective_period: effPeriod, 
                         old_fee: oldFee, 
                         fee_increament: feeInc, 
-                        annual_fund: annualFund 
+                        annual_fund: annualFund,
+                        remarks: remarks
                     };
 
                     let existing = incrementsCache.find(i => (i.admis_no || '').trim() === admNo);
