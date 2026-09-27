@@ -7,6 +7,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans" onload="initPage()">
+    
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/40 z-50 hidden flex flex-col items-center justify-center text-white backdrop-blur-xs">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-3"></div>
+        <p id="loadingText" class="text-sm font-semibold tracking-wide">Processing...</p>
+    </div>
+
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
@@ -17,7 +23,8 @@
             <nav class="flex-1 p-4 space-y-2">
                 <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
                 <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">👨‍🎓 <span>Students Directory</span></a>
-                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">👨‍🎓 <span>Bulk Updation</span></a>
+                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Updation</span></a>
+                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Annual Increment</span></a>
                 <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💸 <span>Fee Vouchers</span></a>
                 <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
                 <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
@@ -33,8 +40,7 @@
                     <h2 class="text-2xl font-extrabold text-indigo-950">Students Management</h2>
                     <p class="text-sm text-slate-500">Add, Edit & Manage Student Records</p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button onclick="openIncrementModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm">⚡ Bulk Annual Increment</button>
+                <div>
                     <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
                 </div>
             </div>
@@ -186,14 +192,13 @@
                             <select id="classFilter" onchange="filterStudents()" class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700">
                                 <option value="ALL">🔍 All Classes</option>
                             </select>
-                            <button onclick="fetchStudents()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
+                            <button onclick="initPage()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
                         </div>
                     </div>
                     <div class="overflow-x-auto max-h-[500px] flex-1">
                         <table class="w-full text-left border-collapse text-xs">
                             <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
                                 <tr>
-                                    <th class="p-2.5 w-8 text-center"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
                                     <th class="p-2.5">Sr/Adm</th>
                                     <th class="p-2.5">Student Name</th>
                                     <th class="p-2.5">Class</th>
@@ -204,7 +209,7 @@
                                 </tr>
                             </thead>
                             <tbody id="studentTableBody">
-                                <tr><td colspan="8" class="p-4 text-center text-slate-400">Loading records...</td></tr>
+                                <tr><td colspan="7" class="p-4 text-center text-slate-400">Loading records...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -215,54 +220,6 @@
                 </section>
             </div>
         </main>
-    </div>
-
-    <!-- Bulk Increment Modal -->
-    <div id="incrementModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl relative space-y-4">
-            <h3 class="text-lg font-bold text-indigo-900 border-b pb-2">⚡ Apply Bulk Annual Increment</h3>
-            <div class="space-y-3 text-xs">
-                <div>
-                    <label class="block font-medium text-slate-700 mb-1">Select Fee Type</label>
-                    <select id="incFeeType" class="w-full border rounded-lg p-2 bg-white outline-none font-medium">
-                        <option value="monthly_tution_fee">Monthly Tuition Fee</option>
-                        <option value="annual_fund">Annual Fund</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-medium text-slate-700 mb-1">Increment Type</label>
-                    <select id="incType" class="w-full border rounded-lg p-2 bg-white outline-none font-medium">
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed">Fixed Amount (PKR)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-medium text-slate-700 mb-1">Increment Value</label>
-                    <input type="number" id="incValue" placeholder="Enter value" class="w-full border rounded-lg p-2 outline-none font-bold text-indigo-700">
-                </div>
-                <div>
-                    <label class="block font-medium text-slate-700 mb-1">Effective Period / Month</label>
-                    <select id="incPeriod" class="w-full border rounded-lg p-2 bg-white outline-none font-medium">
-                        <option value="January 2026">January 2026</option>
-                        <option value="February 2026">February 2026</option>
-                        <option value="March 2026" selected>March 2026</option>
-                        <option value="April 2026">April 2026</option>
-                        <option value="May 2026">May 2026</option>
-                        <option value="June 2026">June 2026</option>
-                        <option value="July 2026">July 2026</option>
-                        <option value="August 2026">August 2026</option>
-                        <option value="September 2026">September 2026</option>
-                        <option value="October 2026">October 2026</option>
-                        <option value="November 2026">November 2026</option>
-                        <option value="December 2026">December 2026</option>
-                    </select>
-                </div>
-            </div>
-            <div class="flex justify-end space-x-2 pt-3 border-t">
-                <button onclick="closeIncrementModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-xs font-semibold">Cancel</button>
-                <button onclick="submitBulkIncrement()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm">Apply Increment to Checked</button>
-            </div>
-        </div>
     </div>
 
     <!-- Settings Modal -->
@@ -284,9 +241,14 @@
         </div>
     </div>
 
-    <!-- JavaScript Logic -->
     <script>
         let allStudentsCache = [];
+
+        function showLoading(text = "Processing...") {
+            document.getElementById('loadingText').innerText = text;
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+        function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
 
         function getSupabaseConfig() {
             let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
@@ -294,12 +256,13 @@
             return { url, key };
         }
 
-        function initPage() {
+        async function initPage() {
             let config = getSupabaseConfig();
-            if(!config.url || !config.key) {
-                openSettingsModal();
-            } else {
-                fetchStudents();
+            if(!config.url || !config.key) { openSettingsModal(); } 
+            else {
+                showLoading("Loading Students Record...");
+                await fetchStudents();
+                hideLoading();
             }
         }
 
@@ -324,80 +287,53 @@
         async function fetchStudents() {
             let config = getSupabaseConfig();
             let tbody = document.getElementById('studentTableBody');
-            tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
 
             try {
                 let response = await fetch(`${config.url}/rest/v1/students?select=*`, {
-                    headers: {
-                        "apikey": config.key,
-                        "Authorization": `Bearer ${config.key}`
-                    }
+                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
                 });
                 let data = await response.json();
 
                 if(Array.isArray(data) && data.length > 0) {
-                    allStudentsCache = data.map((row, idx) => ({ ...row, _rowIndex: idx }));
+                    allStudentsCache = data;
                     populateClassDropdown(data);
                     filterStudents();
                 } else {
                     allStudentsCache = [];
-                    tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400">No student records found.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">No student records found.</td></tr>`;
                     document.getElementById('totalTuitionFee').innerText = "PKR 0";
                 }
             } catch (error) {
                 console.error("Error:", error);
-                tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-rose-500">Failed to load records. Check API Settings.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-rose-500">Failed to load records. Check API Settings.</td></tr>`;
             }
         }
 
         function populateClassDropdown(data) {
             let classSet = new Set();
-            data.forEach(row => {
-                let cls = row.class || '';
-                if(cls) classSet.add(cls.trim());
-            });
-
+            data.forEach(row => { if(row.class) classSet.add(row.class.trim()); });
             let classFilter = document.getElementById('classFilter');
             let currentSelected = classFilter.value;
             classFilter.innerHTML = `<option value="ALL">🔍 All Classes</option>`;
-            
             Array.from(classSet).sort().forEach(cls => {
                 let opt = document.createElement('option');
-                opt.value = cls;
-                opt.innerText = cls;
+                opt.value = cls; opt.innerText = cls;
                 classFilter.appendChild(opt);
             });
-            if(classSet.has(currentSelected)) {
-                classFilter.value = currentSelected;
-            }
+            if(classSet.has(currentSelected)) classFilter.value = currentSelected;
         }
 
         function filterStudents() {
             let selectedClass = document.getElementById('classFilter').value;
-            let targetData = [];
-
-            if(selectedClass === 'ALL') {
-                targetData = [...allStudentsCache];
-            } else {
-                targetData = allStudentsCache.filter(row => {
-                    let cls = row.class || '';
-                    return cls.trim() === selectedClass;
-                });
-            }
-
-            targetData.sort((a, b) => {
-                let srA = parseFloat(a.sr_no) || 0;
-                let srB = parseFloat(b.sr_no) || 0;
-                return srA - srB;
-            });
-
+            let targetData = selectedClass === 'ALL' ? [...allStudentsCache] : allStudentsCache.filter(row => (row.class || '').trim() === selectedClass);
+            targetData.sort((a, b) => (parseFloat(a.sr_no) || 0) - (parseFloat(b.sr_no) || 0));
             renderTable(targetData);
         }
 
         function renderTable(data) {
             let tbody = document.getElementById('studentTableBody');
             tbody.innerHTML = '';
-
             let totalFee = 0;
 
             data.forEach((row, index) => {
@@ -408,7 +344,6 @@
                 let fContact = row.contact_no_father || '-';
                 let tFee = parseFloat(row.monthly_tution_pay) || parseFloat(row.monthly_tution_fee) || 0;
                 let st = row.status || 'Active';
-
                 totalFee += tFee;
 
                 let statusBadge = st === 'Active' 
@@ -418,7 +353,6 @@
                 let tr = document.createElement('tr');
                 tr.className = "border-b hover:bg-slate-50 transition";
                 tr.innerHTML = `
-                    <td class="p-2.5 text-center"><input type="checkbox" class="studentCheckbox" data-row-index="${row._rowIndex}"></td>
                     <td class="p-2.5 font-medium">${sequentialSr} / ${adm || '-'}</td>
                     <td class="p-2.5 font-semibold text-indigo-900">${name}</td>
                     <td class="p-2.5 text-slate-600">${cls}</td>
@@ -432,88 +366,12 @@
                 `;
                 tbody.appendChild(tr);
             });
-
             document.getElementById('totalTuitionFee').innerText = `PKR ${totalFee.toLocaleString()}`;
-        }
-
-        function toggleSelectAll(source) {
-            let checkboxes = document.querySelectorAll('.studentCheckbox');
-            checkboxes.forEach(cb => cb.checked = source.checked);
-        }
-
-        function openIncrementModal() {
-            let checked = document.querySelectorAll('.studentCheckbox:checked');
-            if(checked.length === 0) {
-                alert("Please select at least one student from the table checkboxes!");
-                return;
-            }
-            document.getElementById('incrementModal').classList.remove('hidden');
-        }
-
-        function closeIncrementModal() {
-            document.getElementById('incrementModal').classList.add('hidden');
-        }
-
-        async function submitBulkIncrement() {
-            let config = getSupabaseConfig();
-            let checkedBoxes = document.querySelectorAll('.studentCheckbox:checked');
-            if(checkedBoxes.length === 0) { alert("No students selected!"); return; }
-
-            let feeType = document.getElementById('incFeeType').value;
-            let incType = document.getElementById('incType').value;
-            let incVal = parseFloat(document.getElementById('incValue').value) || 0;
-            let effectivePeriod = document.getElementById('incPeriod').value;
-
-            if(incVal <= 0) { alert("Please enter a valid increment value."); return; }
-
-            let incrementPayloads = [];
-            checkedBoxes.forEach(cb => {
-                let rowIndex = parseInt(cb.getAttribute('data-row-index'));
-                let student = allStudentsCache[rowIndex];
-
-                if(student) {
-                    let currentAmount = parseFloat(student.monthly_tution_fee) || 0;
-                    let newAmount = incType === 'percentage' ? Math.round(currentAmount + (currentAmount * incVal / 100)) : currentAmount + incVal;
-
-                    incrementPayloads.push({
-                        admis_no: String(student.admis_no || ''),
-                        student_name: String(student.student_name || ''),
-                        fee_type: String(feeType),
-                        new_amount: Number(newAmount),
-                        effective_period: String(effectivePeriod)
-                    });
-                }
-            });
-
-            if(!confirm(`Apply increment to ${incrementPayloads.length} students?`)) return;
-
-            try {
-                let res = await fetch(`${config.url}/rest/v1/increments`, {
-                    method: 'POST',
-                    headers: {
-                        "apikey": config.key,
-                        "Authorization": `Bearer ${config.key}`,
-                        "Content-Type": "application/json",
-                        "Prefer": "return=minimal"
-                    },
-                    body: JSON.stringify(incrementPayloads)
-                });
-
-                if(res.ok) {
-                    alert("Bulk Increment Applied Successfully!");
-                    closeIncrementModal();
-                    fetchStudents();
-                } else {
-                    let err = await res.text();
-                    alert("Failed: " + err);
-                }
-            } catch(e) { console.error(e); alert("Connection error."); }
         }
 
         async function saveStudent(event) {
             event.preventDefault();
             let config = getSupabaseConfig();
-
             let payloadData = {
                 sr_no: parseInt(document.getElementById('sr_no').value) || 0,
                 admis_no: document.getElementById('admis_no').value.trim(),
@@ -531,45 +389,31 @@
             };
 
             let editOriginalAdm = document.getElementById('editOriginalAdm').value;
-            let btn = document.getElementById('saveBtn');
-            btn.innerText = "Saving...";
-            btn.disabled = true;
-
+            showLoading("Saving Student Record...");
             try {
                 let res;
                 if(editOriginalAdm !== "") {
                     res = await fetch(`${config.url}/rest/v1/students?admis_no=eq.${encodeURIComponent(editOriginalAdm)}`, {
                         method: 'PATCH',
-                        headers: {
-                            "apikey": config.key,
-                            "Authorization": `Bearer ${config.key}`,
-                            "Content-Type": "application/json",
-                            "Prefer": "return=minimal"
-                        },
+                        headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
                         body: JSON.stringify(payloadData)
                     });
                     if(res.ok) alert("Student Updated Successfully!");
                 } else {
                     res = await fetch(`${config.url}/rest/v1/students`, {
                         method: 'POST',
-                        headers: {
-                            "apikey": config.key,
-                            "Authorization": `Bearer ${config.key}`,
-                            "Content-Type": "application/json",
-                            "Prefer": "return=minimal"
-                        },
+                        headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
                         body: JSON.stringify(payloadData)
                     });
                     if(res.ok) alert("Student Saved Successfully!");
                 }
+                hideLoading();
                 resetForm();
                 fetchStudents();
             } catch (error) {
+                hideLoading();
                 console.error("Error:", error);
                 alert("Error saving record.");
-            } finally {
-                btn.innerText = "Save Student";
-                btn.disabled = false;
             }
         }
 
@@ -582,17 +426,13 @@
             document.getElementById('contact_no_father').value = row.contact_no_father || '';
             document.getElementById('contact_no_mother').value = row.contact_no_mother || '';
             document.getElementById('class').value = row.class || '';
-            
             document.getElementById('monthly_tution_fee').value = row.monthly_tution_fee || 0;
             document.getElementById('regritation_fee').value = row.regritation_fee || 0;
             document.getElementById('admission_fee').value = row.admission_fee || 0;
             document.getElementById('annual_fund').value = row.annual_fund || 0;
-
             calculatePayables();
-
             document.getElementById('status').value = row.status || 'Active';
             document.getElementById('remarks').value = row.remarks || '';
-
             document.getElementById('formTitle').innerText = "Edit Student Record";
             document.getElementById('saveBtn').innerText = "Update Student";
             document.getElementById('cancelBtn').classList.remove('hidden');
@@ -601,20 +441,16 @@
         async function deleteStudent(admisNo) {
             if(!confirm(`Kya aap is student ko delete karna chahte hain?`)) return;
             let config = getSupabaseConfig();
-
+            showLoading("Deleting Student...");
             try {
                 let res = await fetch(`${config.url}/rest/v1/students?admis_no=eq.${encodeURIComponent(admisNo)}`, {
                     method: 'DELETE',
-                    headers: {
-                        "apikey": config.key,
-                        "Authorization": `Bearer ${config.key}`
-                    }
+                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
                 });
-                if(res.ok) {
-                    alert("Student Successfully Delete Ho Gaya!");
-                    fetchStudents();
-                } else { alert("Failed to delete student."); }
-            } catch (error) { console.error(error); }
+                hideLoading();
+                if(res.ok) { alert("Student Successfully Delete Ho Gaya!"); fetchStudents(); }
+                else { alert("Failed to delete student."); }
+            } catch (error) { hideLoading(); console.error(error); }
         }
 
         function resetForm() {
@@ -626,25 +462,14 @@
             document.getElementById('cancelBtn').classList.add('hidden');
         }
 
-        function openSettingsModal() { 
-            document.getElementById('settingsModal').classList.remove('hidden'); 
-            let config = getSupabaseConfig();
-            document.getElementById('apiUrlInput').value = config.url;
-            document.getElementById('apiKeyInput').value = config.key;
-        }
+        function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); let config = getSupabaseConfig(); document.getElementById('apiUrlInput').value = config.url; document.getElementById('apiKeyInput').value = config.key; }
         function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
         function saveApiCredentials() {
             let url = document.getElementById('apiUrlInput').value.trim();
             let key = document.getElementById('apiKeyInput').value.trim();
-            if(url && key) {
-                localStorage.setItem('supabase_url', url);
-                localStorage.setItem('supabase_key', key);
-                alert("Supabase Credentials Saved!");
-                closeSettingsModal();
-                fetchStudents();
-            } else { alert("Please enter valid URL and Key."); }
+            if(url && key) { localStorage.setItem('supabase_url', url); localStorage.setItem('supabase_key', key); alert("Credentials Saved!"); closeSettingsModal(); initPage(); }
+            else { alert("Please enter valid URL and Key."); }
         }
-        document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closeIncrementModal(); } });
     </script>
 </body>
 </html>
