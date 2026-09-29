@@ -23,6 +23,27 @@
         <p id="loadingText" class="text-sm font-semibold tracking-wide">Processing...</p>
     </div>
 
+    <!-- CUSTOM ALERT MODAL -->
+    <div id="customAlertModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 no-print">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center space-y-4">
+            <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">ℹ️</div>
+            <p id="customAlertMessage" class="text-sm font-medium text-slate-700"></p>
+            <button onclick="closeCustomAlert()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-sm font-semibold transition shadow-sm">OK</button>
+        </div>
+    </div>
+
+    <!-- CUSTOM CONFIRM MODAL -->
+    <div id="customConfirmModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex items-center justify-center p-4 no-print">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center space-y-4">
+            <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">❓</div>
+            <p id="customConfirmMessage" class="text-sm font-medium text-slate-700"></p>
+            <div class="flex space-x-2 pt-2">
+                <button id="confirmCancelBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold transition">Cancel</button>
+                <button id="confirmOkBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-semibold transition shadow-sm">Proceed</button>
+            </div>
+        </div>
+    </div>
+
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl no-print">
@@ -33,6 +54,7 @@
             <nav class="flex-1 p-4 space-y-2">
                 <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
                 <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
+                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Updation</span></a>
                 <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">💸 <span>Fee Vouchers</span></a>
                 <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
                 <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
@@ -46,7 +68,7 @@
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 flex justify-between items-center no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Fee Vouchers Management</h2>
-                    <p class="text-sm text-slate-500">Generate Vouchers & Record Payments</p>
+                    <p class="text-sm text-slate-500">Generate Vouchers linked with Increments & Record Payments</p>
                 </div>
                 <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
             </div>
@@ -55,29 +77,37 @@
             <div class="space-y-3 mb-6 no-print">
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <button onclick="toggleAccordion('voucherAccordion')" class="w-full p-4 text-left font-semibold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-50 flex justify-between items-center text-sm transition">
-                        <span>⚡ Generate Fee Vouchers (Click to expand)</span>
+                        <span>⚡ Generate Fee Vouchers (Linked with Increments)</span>
                         <span id="voucherArrow" class="transform transition-transform">▼</span>
                     </button>
                     <div id="voucherAccordion" class="p-5 hidden space-y-3 border-t border-slate-100">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-700 mb-1">Select Period / Month</label>
-                            <select id="voucherPeriod" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none font-medium">
-                                <option value="January 2026">January 2026</option>
-                                <option value="February 2026">February 2026</option>
-                                <option value="March 2026">March 2026</option>
-                                <option value="April 2026">April 2026</option>
-                                <option value="May 2026">May 2026</option>
-                                <option value="June 2026">June 2026</option>
-                                <option value="July 2026">July 2026</option>
-                                <option value="August 2026">August 2026</option>
-                                <option value="September 2026">September 2026</option>
-                                <option value="October 2026">October 2026</option>
-                                <option value="November 2026">November 2026</option>
-                                <option value="December 2026">December 2026</option>
-                                <option value="ALL_YEAR">🚀 Generate All (Jan to Dec 2026 At Once)</option>
-                            </select>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Select Period / Month</label>
+                                <select id="voucherPeriod" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none font-medium">
+                                    <option value="January 2026">January 2026</option>
+                                    <option value="February 2026">February 2026</option>
+                                    <option value="March 2026">March 2026</option>
+                                    <option value="April 2026">April 2026</option>
+                                    <option value="May 2026">May 2026</option>
+                                    <option value="June 2026">June 2026</option>
+                                    <option value="July 2026">July 2026</option>
+                                    <option value="August 2026">August 2026</option>
+                                    <option value="September 2026">September 2026</option>
+                                    <option value="October 2026">October 2026</option>
+                                    <option value="November 2026">November 2026</option>
+                                    <option value="December 2026">December 2026</option>
+                                    <option value="ALL_YEAR">🚀 Generate All (Jan to Dec 2026 At Once)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">Select Class</label>
+                                <select id="voucherClassSelect" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none font-medium text-slate-700">
+                                    <option value="ALL">🔍 All Classes</option>
+                                </select>
+                            </div>
                         </div>
-                        <button onclick="generateVouchers()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-sm">Generate Vouchers (Unpaid)</button>
+                        <button onclick="generateVouchers()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-sm">Generate Vouchers with Updated Increments</button>
                     </div>
                 </div>
             </div>
@@ -170,6 +200,35 @@
         </div>
     </div>
 
+    <!-- Bulk Pay Modal Form (FIFO) -->
+    <div id="bulkPayModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 no-print">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative space-y-4">
+            <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚡ Bulk Pay (FIFO Distribution)</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Total Filtered Unpaid Dues</label>
+                    <input type="text" id="bulkTotalDues" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 font-bold text-rose-600">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Received Amount (Enter Cash)</label>
+                    <input type="number" id="bulkReceivedAmount" placeholder="Enter amount..." class="w-full border rounded-lg p-2.5 text-sm outline-none font-bold text-emerald-600 focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Payment Date</label>
+                    <input type="date" id="bulkPayDate" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Remarks / Note</label>
+                    <input type="text" id="bulkPayRemarks" placeholder="Bulk payment via FIFO" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 pt-3 border-t">
+                <button type="button" onclick="closeBulkPayModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button type="button" onclick="submitBulkFifoPayment()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm shadow-sm">Save & Distribute (FIFO)</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Pay Voucher Modal Form -->
     <div id="payModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 no-print">
         <div class="bg-white w-full max-w-lg rounded-2xl p-6 shadow-xl relative">
@@ -247,7 +306,15 @@
     <script>
         let allFeesCache = [];
         let allStudentsCache = [];
+        let incrementsCacheMap = {};
         let accountsDataMap = {};
+        let currentFilteredVouchersCache = [];
+
+        const monthOrder = {
+            "January 2026": 1, "February 2026": 2, "March 2026": 3, "April 2026": 4,
+            "May 2026": 5, "June 2026": 6, "July 2026": 7, "August 2026": 8,
+            "September 2026": 9, "October 2026": 10, "November 2026": 11, "December 2026": 12
+        };
 
         function showLoading(text = "Processing...") {
             document.getElementById('loadingText').innerText = text;
@@ -258,6 +325,39 @@
             document.getElementById('loadingOverlay').classList.add('hidden');
         }
 
+        // Custom Alert & Confirm Helper Functions
+        function showCustomAlert(message) {
+            document.getElementById('customAlertMessage').innerText = message;
+            document.getElementById('customAlertModal').classList.remove('hidden');
+        }
+
+        function closeCustomAlert() {
+            document.getElementById('customAlertModal').classList.add('hidden');
+        }
+
+        function showCustomConfirm(message, onConfirm) {
+            document.getElementById('customConfirmMessage').innerText = message;
+            let modal = document.getElementById('customConfirmModal');
+            modal.classList.remove('hidden');
+
+            let okBtn = document.getElementById('confirmOkBtn');
+            let cancelBtn = document.getElementById('confirmCancelBtn');
+
+            let newOkBtn = okBtn.cloneNode(true);
+            let newCancelBtn = cancelBtn.cloneNode(true);
+            okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+            cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+            newOkBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                onConfirm(true);
+            });
+
+            newCancelBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+            });
+        }
+
         function getSupabaseConfig() {
             let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
             let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
@@ -265,42 +365,48 @@
         }
 
         async function initFeePage() {
-            document.getElementById('payDate').value = new Date().toISOString().split('T')[0];
+            let todayStr = new Date().toISOString().split('T')[0];
+            document.getElementById('payDate').value = todayStr;
+            document.getElementById('bulkPayDate').value = todayStr;
             document.getElementById('selectAllCheckbox').checked = false;
-            showLoading("Loading Vouchers Data...");
-            await fetchStudentsCache();
-            await fetchAccountsData();
-            await fetchFeesData();
-            hideLoading();
-        }
-
-        function toggleAccordion(id) {
-            let el = document.getElementById(id);
-            el.classList.toggle('hidden');
-        }
-
-        async function fetchStudentsCache() {
+            
+            showLoading("Lightning Fast Loading Data...");
             let config = getSupabaseConfig();
-            try {
-                let res = await fetch(`${config.url}/rest/v1/students?select=*`, {
-                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
-                });
-                let data = await res.json();
-                if(Array.isArray(data)) { allStudentsCache = data; }
-            } catch(e) { console.error("Error fetching students:", e); }
-        }
+            
+            let tbody = document.getElementById('feesTableBody');
+            tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">Loading vouchers instantly...</td></tr>`;
 
-        async function fetchAccountsData() {
-            let config = getSupabaseConfig();
-            accountsDataMap = {};
             try {
-                let res = await fetch(`${config.url}/rest/v1/accounts?select=*`, {
-                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
-                });
-                let data = await res.json();
-                if(Array.isArray(data)) {
-                    data.forEach(row => {
-                        let vId = (row.voucher_id || '').trim();
+                let [studentsRes, incrementsRes, accountsRes, feesRes] = await Promise.all([
+                    fetch(`${config.url}/rest/v1/students?select=*`, { headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` } }),
+                    fetch(`${config.url}/rest/v1/increments?select=*`, { headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` } }),
+                    fetch(`${config.url}/rest/v1/accounts?select=*`, { headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` } }),
+                    fetch(`${config.url}/rest/v1/fees?select=*`, { headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` } })
+                ]);
+
+                let studentsData = await studentsRes.json();
+                let incrementsData = await incrementsRes.json();
+                let accountsData = await accountsRes.json();
+                let feesData = await feesRes.json();
+
+                if(Array.isArray(studentsData)) {
+                    allStudentsCache = studentsData;
+                    populateVoucherClassDropdown(studentsData);
+                }
+
+                incrementsCacheMap = {};
+                if(Array.isArray(incrementsData)) {
+                    incrementsData.forEach(inc => {
+                        let adm = (inc.admis_no || '').trim().toLowerCase();
+                        if(adm) incrementsCacheMap[adm] = inc;
+                    });
+                }
+
+                accountsDataMap = {};
+                if(Array.isArray(accountsData)) {
+                    accountsData.forEach(row => {
+                        let fullVId = (row.voucher_id || '').trim();
+                        let vId = fullVId.split('-').slice(0, 2).join('-');
                         let amtIn = parseFloat(row.amount_in) || 0;
                         let dt = (row.date || '').trim();
                         if(vId) {
@@ -313,22 +419,9 @@
                         }
                     });
                 }
-            } catch(e) { console.error("Error fetching accounts:", e); }
-        }
 
-        async function fetchFeesData() {
-            let config = getSupabaseConfig();
-            let tbody = document.getElementById('feesTableBody');
-            tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>`;
-
-            try {
-                let response = await fetch(`${config.url}/rest/v1/fees?select=*`, {
-                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
-                });
-                let data = await response.json();
-
-                if(Array.isArray(data)) {
-                    allFeesCache = data.map((row, idx) => {
+                if(Array.isArray(feesData)) {
+                    allFeesCache = feesData.map((row, idx) => {
                         let vId = (row.voucher_id || '').trim();
                         let payable = parseFloat(row.payable) || 0;
                         let accObj = accountsDataMap[vId] || { totalPaid: 0, dates: new Set(), transactions: [] };
@@ -361,10 +454,30 @@
                     allFeesCache = [];
                     tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">No fee vouchers found.</td></tr>`;
                 }
+
             } catch (error) {
-                console.error("Error:", error);
-                tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-rose-500">Failed to load fee records.</td></tr>`;
+                console.error("Error fetching data concurrently:", error);
+                tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-rose-500">Failed to load records. Check internet or API credentials.</td></tr>`;
             }
+
+            hideLoading();
+        }
+
+        function toggleAccordion(id) {
+            let el = document.getElementById(id);
+            el.classList.toggle('hidden');
+        }
+
+        function populateVoucherClassDropdown(data) {
+            let classSet = new Set();
+            data.forEach(row => { if(row.class) classSet.add(row.class.trim()); });
+            let classSelect = document.getElementById('voucherClassSelect');
+            classSelect.innerHTML = `<option value="ALL">🔍 All Classes</option>`;
+            Array.from(classSet).sort().forEach(cls => {
+                let opt = document.createElement('option');
+                opt.value = cls; opt.innerText = cls;
+                classSelect.appendChild(opt);
+            });
         }
 
         function populatePeriodDropdown(data) {
@@ -396,6 +509,7 @@
                     return vId.includes(searchQuery) || sName.includes(searchQuery);
                 });
             }
+            currentFilteredVouchersCache = target;
             renderFeesTable(target);
         }
 
@@ -467,54 +581,262 @@
                     <td class="p-3 font-extrabold text-slate-900">${sumPayable}</td>
                     <td class="p-3 font-extrabold text-emerald-600">${sumPaid}</td>
                     <td class="p-3 font-extrabold ${balanceColorTotal}">${balanceTextTotal}</td>
-                    <td colspan="4"></td>
+                    <td class="text-right">
+                        <button onclick="openBulkPayModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition flex items-center gap-1 ml-auto">⚡ Bulk Pay</button>
+                    </td>
+                    <td colspan="2" class="text-left">
+                        <button onclick="sendWhatsAppReminders()" title="Send WhatsApp Reminders for Pending Dues" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition flex items-center gap-1.5">
+                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                            WhatsApp Reminders
+                        </button>
+                    </td>
+                    <td colspan="2"></td>
                 </tr>
             `;
+        }
+
+        function openBulkPayModal() {
+            if(!currentFilteredVouchersCache || currentFilteredVouchersCache.length === 0) {
+                showCustomAlert("No vouchers available in the current filter to pay!");
+                return;
+            }
+            let totalRemainingDues = 0;
+            currentFilteredVouchersCache.forEach(r => {
+                let bal = parseFloat(r.balance) || 0;
+                if(bal > 0) totalRemainingDues += bal;
+            });
+
+            document.getElementById('bulkTotalDues').value = `PKR ${totalRemainingDues}`;
+            document.getElementById('bulkReceivedAmount').value = totalRemainingDues > 0 ? totalRemainingDues : '';
+            document.getElementById('bulkPayModal').classList.remove('hidden');
+        }
+
+        function closeBulkPayModal() {
+            document.getElementById('bulkPayModal').classList.add('hidden');
+        }
+
+        // WhatsApp Reminders Function
+        function sendWhatsAppReminders() {
+            if(!currentFilteredVouchersCache || currentFilteredVouchersCache.length === 0) {
+                showCustomAlert("No students found in current filter!");
+                return;
+            }
+
+            // Group pending dues by student name and admission number
+            let studentPendingMap = {};
+            currentFilteredVouchersCache.forEach(r => {
+                let sName = (r.student_name || '').trim();
+                let admNo = (r.admis_no || '').trim();
+                let balance = parseFloat(r.balance) || 0;
+                
+                if(sName && balance > 0) {
+                    if(!studentPendingMap[sName]) {
+                        studentPendingMap[sName] = { admis_no: admNo, totalBalance: 0, details: [] };
+                    }
+                    studentPendingMap[sName].totalBalance += balance;
+                    studentPendingMap[sName].details.push(`${r.period} (${r.type}): PKR ${balance}`);
+                }
+            });
+
+            let studentNamesList = Object.keys(studentPendingMap);
+            if(studentNamesList.length === 0) {
+                showCustomAlert("No pending dues found for students in the current filter!");
+                return;
+            }
+
+            showCustomConfirm(`Found ${studentNamesList.length} student(s) with pending dues. Do you want to prepare WhatsApp reminder messages?`, (confirmed) => {
+                if(!confirmed) return;
+
+                // Pick first student or loop through students
+                // Yahan hum pehle student ka WhatsApp message open kar rahe hain ya student directory se mobile number match kar sakte hain
+                let targetStudentName = studentNamesList[0];
+                let info = studentPendingMap[targetStudentName];
+                
+                // Students cache se mobile number dhoondna
+                let studentObj = allStudentsCache.find(st => 
+                    (st.student_name || '').trim().toLowerCase() === targetStudentName.toLowerCase() ||
+                    (st.admis_no || '').trim().toLowerCase() === info.admis_no.toLowerCase()
+                );
+
+                let mobileNo = studentObj ? (studentObj.phone || studentObj.mobile || studentObj.whatsapp || '') : '';
+                // Clean mobile number (remove spaces, hyphens, etc.)
+                mobileNo = mobileNo.replace(/\D/g, '');
+
+                let message = `Assalam-o-Alaikum! Dear Parent, this is a fee reminder from Concept School (Shibra Campus) for student *${targetStudentName}*. Your total pending dues amount to *PKR ${info.totalBalance}*. Kindly clear the dues at your earliest convenience. Thank you!`;
+
+                let whatsappUrl = `https://wa.me/${mobileNo}?text=${encodeURIComponent(message)}`;
+                window.open(whatsappUrl, '_blank');
+            });
+        }
+
+        async function submitBulkFifoPayment() {
+            let receivedAmt = parseFloat(document.getElementById('bulkReceivedAmount').value) || 0;
+            let payDate = document.getElementById('bulkPayDate').value;
+            let remarks = document.getElementById('bulkPayRemarks').value.trim() || "Bulk payment via FIFO";
+
+            if(receivedAmt <= 0) {
+                showCustomAlert("Please enter a valid received amount greater than 0.");
+                return;
+            }
+
+            showCustomConfirm(`Total PKR ${receivedAmt} will be distributed via FIFO (Extra amount will be adjusted as Advance on latest voucher). Proceed?`, async (confirmed) => {
+                if(!confirmed) return;
+
+                closeBulkPayModal();
+
+                let sortedVouchers = [...currentFilteredVouchersCache].sort((a, b) => {
+                    let m1 = monthOrder[(a.period || '').trim()] || 99;
+                    let m2 = monthOrder[(b.period || '').trim()] || 99;
+                    return m1 - m2;
+                });
+
+                let newestVoucherToSave = [...currentFilteredVouchersCache].sort((a, b) => {
+                    let m1 = monthOrder[(a.period || '').trim()] || 0;
+                    let m2 = monthOrder[(b.period || '').trim()] || 0;
+                    return m2 - m1;
+                })[0];
+
+                let accountsPayloads = [];
+                let remainingMoney = receivedAmt;
+                let timeNonce = Date.now();
+
+                for(let v of sortedVouchers) {
+                    if(remainingMoney <= 0) break;
+                    let currentBalance = parseFloat(v.balance) || 0;
+                    
+                    let amountToAllocate = 0;
+                    if(currentBalance > 0) {
+                        amountToAllocate = remainingMoney >= currentBalance ? currentBalance : remainingMoney;
+                    } else if(v.voucher_id === newestVoucherToSave.voucher_id && remainingMoney > 0) {
+                        amountToAllocate = remainingMoney;
+                    }
+
+                    if(amountToAllocate > 0) {
+                        let uniqueVoucherId = `${(v.voucher_id || '').trim()}-${timeNonce}-${Math.floor(Math.random() * 1000)}`;
+                        
+                        accountsPayloads.push({
+                            voucher_id: uniqueVoucherId,
+                            from_account: `${v.type || 'Tuition Fee'} (${v.period || ''}) - ${v.student_name || ''}`,
+                            to_account: 'cash',
+                            description: remarks,
+                            amount_in: amountToAllocate,
+                            amount_out: 0,
+                            date: payDate,
+                            remarks: remarks
+                        });
+
+                        remainingMoney -= amountToAllocate;
+                    }
+                }
+
+                if(remainingMoney > 0 && newestVoucherToSave) {
+                    let uniqueVoucherId = `${(newestVoucherToSave.voucher_id || '').trim()}-${timeNonce}-adv`;
+                    accountsPayloads.push({
+                        voucher_id: uniqueVoucherId,
+                        from_account: `${newestVoucherToSave.type || 'Tuition Fee'} (${newestVoucherToSave.period || ''}) - ${newestVoucherToSave.student_name || ''}`,
+                        to_account: 'cash',
+                        description: remarks + " (Advance)",
+                        amount_in: remainingMoney,
+                        amount_out: 0,
+                        date: payDate,
+                        remarks: remarks + " (Advance)"
+                    });
+                }
+
+                if(accountsPayloads.length === 0) {
+                    if(receivedAmt > 0 && newestVoucherToSave) {
+                        let uniqueVoucherId = `${(newestVoucherToSave.voucher_id || '').trim()}-${timeNonce}-direct`;
+                        accountsPayloads.push({
+                            voucher_id: uniqueVoucherId,
+                            from_account: `${newestVoucherToSave.type || 'Tuition Fee'} (${newestVoucherToSave.period || ''}) - ${newestVoucherToSave.student_name || ''}`,
+                            to_account: 'cash',
+                            description: remarks,
+                            amount_in: receivedAmt,
+                            amount_out: 0,
+                            date: payDate,
+                            remarks: remarks
+                        });
+                    } else {
+                        showCustomAlert("No valid voucher found to apply payment.");
+                        return;
+                    }
+                }
+
+                showLoading("Applying Bulk FIFO Payments & Advance...");
+                let config = getSupabaseConfig();
+
+                try {
+                    let res = await fetch(`${config.url}/rest/v1/accounts`, {
+                        method: 'POST',
+                        headers: {
+                            "apikey": config.key,
+                            "Authorization": `Bearer ${config.key}`,
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify(accountsPayloads)
+                    });
+
+                    hideLoading();
+                    if(res.ok) {
+                        showCustomAlert("Bulk FIFO Payments & Advance Recorded Successfully!");
+                        initFeePage();
+                    } else {
+                        let err = await res.text();
+                        showCustomAlert("Failed to save FIFO payments: " + err);
+                    }
+                } catch(e) {
+                    hideLoading();
+                    console.error("FIFO payment error:", e);
+                    showCustomAlert("Error connecting to database.");
+                }
+            });
         }
 
         async function deleteSelectedVouchers() {
             let selectedCheckboxes = document.querySelectorAll('.row-checkbox:checked');
             if(selectedCheckboxes.length === 0) {
-                alert("Please select at least one voucher to delete.");
+                showCustomAlert("Please select at least one voucher to delete.");
                 return;
             }
 
-            if(!confirm(`Are you sure you want to delete ${selectedCheckboxes.length} selected voucher(s)?`)) return;
+            showCustomConfirm(`Are you sure you want to delete ${selectedCheckboxes.length} selected voucher(s)?`, async (confirmed) => {
+                if(!confirmed) return;
 
-            showLoading("Deleting Selected Vouchers Instantly...");
-            let config = getSupabaseConfig();
-            let voucherIds = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-voucher')).filter(id => id);
+                showLoading("Deleting Selected Vouchers Instantly...");
+                let config = getSupabaseConfig();
+                let voucherIds = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-voucher')).filter(id => id);
 
-            if(voucherIds.length === 0) {
-                hideLoading();
-                return;
-            }
-
-            try {
-                // Optimized Bulk Delete using Supabase 'in' operator
-                let idsString = voucherIds.map(id => `"${id}"`).join(',');
-                let res = await fetch(`${config.url}/rest/v1/fees?voucher_id=in.(${idsString})`, {
-                    method: 'DELETE',
-                    headers: {
-                        "apikey": config.key,
-                        "Authorization": `Bearer ${config.key}`,
-                        "Prefer": "return=minimal"
-                    }
-                });
-
-                hideLoading();
-                if(res.ok) {
-                    alert("Selected Vouchers Deleted Successfully!");
-                    initFeePage();
-                } else {
-                    let err = await res.text();
-                    alert("Failed to delete vouchers: " + err);
+                if(voucherIds.length === 0) {
+                    hideLoading();
+                    return;
                 }
-            } catch(e) {
-                hideLoading();
-                console.error("Error deleting vouchers:", e);
-                alert("Failed to delete vouchers due to connection error.");
-            }
+
+                try {
+                    let idsString = voucherIds.map(id => `"${id}"`).join(',');
+                    let res = await fetch(`${config.url}/rest/v1/fees?voucher_id=in.(${idsString})`, {
+                        method: 'DELETE',
+                        headers: {
+                            "apikey": config.key,
+                            "Authorization": `Bearer ${config.key}`,
+                            "Prefer": "return=minimal"
+                        }
+                    });
+
+                    hideLoading();
+                    if(res.ok) {
+                        showCustomAlert("Selected Vouchers Deleted Successfully!");
+                        initFeePage();
+                    } else {
+                        let err = await res.text();
+                        showCustomAlert("Failed to delete vouchers: " + err);
+                    }
+                } catch(e) {
+                    hideLoading();
+                    console.error("Error deleting vouchers:", e);
+                    showCustomAlert("Failed to delete vouchers due to connection error.");
+                }
+            });
         }
 
         function openStudentLedger(studentName) {
@@ -596,7 +918,7 @@
             event.preventDefault();
             showLoading("Saving Payment Receipt...");
             let config = getSupabaseConfig();
-            let voucherId = document.getElementById('payVoucherId').value;
+            let voucherId = document.getElementById('payVoucherId').value.trim() + '-' + Date.now();
             let fromAcc = document.getElementById('payFromAccount').value;
             let toAcc = document.getElementById('payToAccount').value;
             let amountIn = parseFloat(document.getElementById('payAmountIn').value) || 0;
@@ -628,107 +950,167 @@
 
                 hideLoading();
                 if(res.ok) {
-                    alert("Payment Receipt Saved to Accounts Successfully!");
+                    showCustomAlert("Payment Receipt Saved to Accounts Successfully!");
                     closePayModal();
                     initFeePage();
                 } else {
-                    alert("Failed to save payment.");
+                    showCustomAlert("Failed to save payment.");
                 }
             } catch(e) {
                 hideLoading();
                 console.error(e);
-                alert("Error connecting to database.");
+                showCustomAlert("Error connecting to database.");
             }
         }
 
         async function generateVouchers() {
             let config = getSupabaseConfig();
-            if(allStudentsCache.length === 0) { alert("No students found in students directory!"); return; }
+            if(allStudentsCache.length === 0) { showCustomAlert("No students found in students directory!"); return; }
 
             let selectedPeriod = document.getElementById('voucherPeriod').value;
+            let selectedClass = document.getElementById('voucherClassSelect').value;
+
             let periodsToGenerate = selectedPeriod === 'ALL_YEAR' ? [
                 "January 2026", "February 2026", "March 2026", "April 2026", 
                 "May 2026", "June 2026", "July 2026", "August 2026", 
                 "September 2026", "October 2026", "November 2026", "December 2026"
             ] : [selectedPeriod];
 
+            let targetStudents = allStudentsCache;
+            if(selectedClass !== 'ALL') {
+                targetStudents = allStudentsCache.filter(st => (st.class || '').trim() === selectedClass);
+            }
+
+            if(targetStudents.length === 0) {
+                showCustomAlert("No students found for the selected class!");
+                return;
+            }
+
             let existingKeys = new Set();
             allFeesCache.forEach(f => {
                 let adm = (f.admis_no || '').trim().toLowerCase();
                 let sName = (f.student_name || '').trim().toLowerCase();
                 let per = (f.period || '').trim();
-                if(adm) existingKeys.add(`${adm}_${per}`);
-                if(sName) existingKeys.add(`${sName}_${per}`);
+                let fType = (f.type || '').trim().toLowerCase();
+                if(adm) existingKeys.add(`${adm}_${per}_${fType}`);
+                if(sName) existingKeys.add(`${sName}_${per}_${fType}`);
             });
 
             let newVouchers = [];
-            let duplicateCount = 0;
 
             periodsToGenerate.forEach(period => {
-                allStudentsCache.forEach(student => {
+                targetStudents.forEach(student => {
                     let adm = (student.admis_no || student.sr_no || '').trim().toLowerCase();
                     let sName = (student.student_name || '').trim().toLowerCase();
-                    
-                    let key1 = `${adm}_${period}`;
-                    let key2 = `${sName}_${period}`;
+                    let incRecord = incrementsCacheMap[adm];
 
-                    if(existingKeys.has(key1) || existingKeys.has(key2)) {
-                        duplicateCount++;
-                    } else {
+                    let currentMonthNum = monthOrder[period] || 0;
+                    let effPeriod = incRecord ? (incRecord.effective_period || '').trim() : '';
+                    let effMonthNum = monthOrder[effPeriod] || 0;
+
+                    let tKey1 = `${adm}_${period}_tuition fee`;
+                    let tKey2 = `${sName}_${period}_tuition fee`;
+
+                    if(!existingKeys.has(tKey1) && !existingKeys.has(tKey2)) {
                         let voucherId = 'V-' + Math.floor(100000 + Math.random() * 900000);
-                        let monthlyFee = parseFloat(student.monthly_tution_pay) || parseFloat(student.monthly_tution_fee) || 0;
+                        let tuitionPayable = parseFloat(student.monthly_tution_fee) || 0;
+                        let remarksStr = '';
+
+                        if (incRecord) {
+                            if (effMonthNum > 0 && currentMonthNum >= effMonthNum) {
+                                if (incRecord.new_fee && parseFloat(incRecord.new_fee) > 0) {
+                                    tuitionPayable = parseFloat(incRecord.new_fee);
+                                }
+                            } else {
+                                tuitionPayable = parseFloat(incRecord.old_fee) || parseFloat(student.monthly_tution_fee) || 0;
+                            }
+                            if (incRecord.remarks) remarksStr = incRecord.remarks;
+                        }
+
                         newVouchers.push({
                             sr_no: student.sr_no || '',
                             voucher_id: voucherId,
                             admis_no: student.admis_no || '',
                             student_name: student.student_name || '',
-                            type: 'Tuition Fee',
+                            type: 'tuition fee',
                             period: period,
-                            payable: monthlyFee,
+                            payable: tuitionPayable,
                             class: student.class || '',
                             status: 'Unpaid',
                             date: new Date().toISOString().split('T')[0],
-                            remarks: ''
+                            remarks: remarksStr
                         });
-                        if(adm) existingKeys.add(key1);
-                        if(sName) existingKeys.add(key2);
+                        existingKeys.add(tKey1);
+                        existingKeys.add(tKey2);
+                    }
+
+                    if (incRecord && incRecord.annual_fund && parseFloat(incRecord.annual_fund) > 0) {
+                        let incFeeType = (incRecord.fee_type || '').trim().toLowerCase();
+                        
+                        if (incFeeType === 'annual fund' && effMonthNum > 0 && currentMonthNum === effMonthNum) {
+                            let aKey1 = `${adm}_${period}_annual fund`;
+                            let aKey2 = `${sName}_${period}_annual fund`;
+
+                            if(!existingKeys.has(aKey1) && !existingKeys.has(aKey2)) {
+                                let voucherId = 'V-' + Math.floor(100000 + Math.random() * 900000);
+                                let annualPayable = parseFloat(incRecord.annual_fund) || 0;
+
+                                newVouchers.push({
+                                    sr_no: student.sr_no || '',
+                                    voucher_id: voucherId,
+                                    admis_no: student.admis_no || '',
+                                    student_name: student.student_name || '',
+                                    type: 'annual fund',
+                                    period: period,
+                                    payable: annualPayable,
+                                    class: student.class || '',
+                                    status: 'Unpaid',
+                                    date: new Date().toISOString().split('T')[0],
+                                    remarks: incRecord.remarks || ''
+                                });
+                                existingKeys.add(aKey1);
+                                existingKeys.add(aKey2);
+                            }
+                        }
                     }
                 });
             });
 
             if(newVouchers.length === 0) {
-                alert(`Error: Vouchers for ${selectedPeriod} already exist for all students! No duplicates created.`);
+                showCustomAlert(`Error: Vouchers for the selected period & class already exist! No duplicates created.`);
                 return;
             }
 
-            if(!confirm(`Total ${newVouchers.length} new vouchers will be generated. Proceed?`)) return;
+            showCustomConfirm(`Total ${newVouchers.length} new vouchers will be generated. Proceed?`, async (confirmed) => {
+                if(!confirmed) return;
 
-            showLoading("Generating Vouchers...");
-            try {
-                let res = await fetch(`${config.url}/rest/v1/fees`, {
-                    method: 'POST',
-                    headers: {
-                        "apikey": config.key,
-                        "Authorization": `Bearer ${config.key}`,
-                        "Content-Type": "application/json",
-                        "Prefer": "return=minimal"
-                    },
-                    body: JSON.stringify(newVouchers)
-                });
-                hideLoading();
-                if(res.ok) {
-                    alert("Vouchers Generated Successfully!");
-                    toggleAccordion('voucherAccordion');
-                    initFeePage();
-                } else {
-                    let err = await res.text();
-                    alert("Failed to generate: " + err);
+                showLoading("Generating Vouchers Properly...");
+                try {
+                    let res = await fetch(`${config.url}/rest/v1/fees`, {
+                        method: 'POST',
+                        headers: {
+                            "apikey": config.key,
+                            "Authorization": `Bearer ${config.key}`,
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify(newVouchers)
+                    });
+                    hideLoading();
+                    if(res.ok) {
+                        showCustomAlert("Vouchers Generated Successfully!");
+                        toggleAccordion('voucherAccordion');
+                        initFeePage();
+                    } else {
+                        let err = await res.text();
+                        showCustomAlert("Failed to generate: " + err);
+                    }
+                } catch (err) {
+                    hideLoading();
+                    console.error(err);
+                    showCustomAlert("Error connecting to database.");
                 }
-            } catch (err) {
-                hideLoading();
-                console.error(err);
-                alert("Error connecting to database.");
-            }
+            });
         }
 
         function openSettingsModal() { 
@@ -744,12 +1126,12 @@
             if(url && key) {
                 localStorage.setItem('supabase_url', url);
                 localStorage.setItem('supabase_key', key);
-                alert("Supabase Credentials Saved!");
+                showCustomAlert("Supabase Credentials Saved!");
                 closeSettingsModal();
                 initFeePage();
-            } else { alert("Please enter valid URL and Key."); }
+            } else { showCustomAlert("Please enter valid URL and Key."); }
         }
-        document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closePayModal(); closeLedgerModal(); } });
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closePayModal(); closeLedgerModal(); closeBulkPayModal(); closeCustomAlert(); } });
     </script>
 </body>
 </html>
