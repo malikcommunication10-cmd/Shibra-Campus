@@ -56,6 +56,7 @@
                 <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
                 <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Updation</span></a>
                 <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">💸 <span>Fee Vouchers</span></a>
+                <a href="followups.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📞 <span>Follow-up Calls</span></a>
                 <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
                 <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
                 <a href="staff.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👩‍🏫 <span>Staff & Payroll</span></a>
@@ -137,7 +138,9 @@
                                 <th class="p-2.5 text-center"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
                                 <th class="p-2.5">Sr</th>
                                 <th class="p-2.5">Voucher ID</th>
+                                <th class="p-2.5">Admis No</th>
                                 <th class="p-2.5">Student Name</th>
+                                <th class="p-2.5">Siblings</th>
                                 <th class="p-2.5">Type</th>
                                 <th class="p-2.5">Period</th>
                                 <th class="p-2.5">Payable</th>
@@ -150,7 +153,7 @@
                             </tr>
                         </thead>
                         <tbody id="feesTableBody">
-                            <tr><td colspan="13" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>
+                            <tr><td colspan="15" class="p-4 text-center text-slate-400">Loading vouchers...</td></tr>
                         </tbody>
                         <tfoot id="feesTableFooter" class="sticky bottom-0 bg-slate-100 font-bold border-t text-slate-800">
                             <!-- Footer totals -->
@@ -316,6 +319,28 @@
             "September 2026": 9, "October 2026": 10, "November 2026": 11, "December 2026": 12
         };
 
+        // ================= COLUMN NAMES (spelling yahan se change karein) =================
+        // fees table k columns:
+        const FEES_ARREARS_COL  = 'arrears2025';
+        const FEES_SIBLINGS_COL = 'siblings';
+        // students table ka arrears column (agar naam alag ho to yahan likh dein; pehla jo mil jaye wo use hoga):
+        const STUDENT_ARREARS_COLS  = ['arrears2025'];
+        const STUDENT_SIBLINGS_COL  = 'siblings';
+        // Arrears sirf is period k voucher mein lagenge:
+        const ARREARS_PERIOD = 'January 2026';
+        // ===================================================================================
+
+        function getStudentArrears(st) {
+            let v = null;
+            for(let c of STUDENT_ARREARS_COLS) { if(st[c] !== undefined && st[c] !== null) { v = st[c]; break; } }
+            if(v === null || v === undefined || String(v).trim() === '') return null;
+            return String(v).trim();
+        }
+        function getStudentSiblings(st) {
+            let v = st[STUDENT_SIBLINGS_COL] ?? null;
+            if(v === null || v === undefined || String(v).trim() === '') return null;
+            return String(v).trim();
+        }
         function showLoading(text = "Processing...") {
             document.getElementById('loadingText').innerText = text;
             document.getElementById('loadingOverlay').classList.remove('hidden');
@@ -374,7 +399,7 @@
             let config = getSupabaseConfig();
             
             let tbody = document.getElementById('feesTableBody');
-            tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">Loading vouchers instantly...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="15" class="p-4 text-center text-slate-400">Loading vouchers instantly...</td></tr>`;
 
             try {
                 let [studentsRes, incrementsRes, accountsRes, feesRes] = await Promise.all([
@@ -452,12 +477,12 @@
                     filterVouchers();
                 } else {
                     allFeesCache = [];
-                    tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">No fee vouchers found.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="15" class="p-4 text-center text-slate-400">No fee vouchers found.</td></tr>`;
                 }
 
             } catch (error) {
                 console.error("Error fetching data concurrently:", error);
-                tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-rose-500">Failed to load records. Check internet or API credentials.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="15" class="p-4 text-center text-rose-500">Failed to load records. Check internet or API credentials.</td></tr>`;
             }
 
             hideLoading();
@@ -518,6 +543,28 @@
             checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
         }
 
+        // Arrears row ko usi student (admis_no) ki usi month ki tuition row k bilkul neeche rakhta hai
+        function groupArrearsUnderTuition(data) {
+            let isArr = r => (r.type || '').trim().toLowerCase() === 'arrears';
+            let keyOf = r => `${(r.admis_no || r.student_name || '').trim().toLowerCase()}__${(r.period || '').trim()}`;
+            let arrearsMap = {};
+            data.forEach(r => { if(isArr(r)) { (arrearsMap[keyOf(r)] = arrearsMap[keyOf(r)] || []).push(r); } });
+
+            let result = [], placed = new Set();
+            data.forEach(r => {
+                if(isArr(r)) return;
+                result.push(r);
+                let k = keyOf(r);
+                if(arrearsMap[k] && !placed.has(k)) {
+                    result.push(...arrearsMap[k]);
+                    placed.add(k);
+                }
+            });
+            // jin arrears rows ki tuition row filter mein nahi hai, wo end mein
+            data.forEach(r => { if(isArr(r) && !placed.has(keyOf(r))) result.push(r); });
+            return result;
+        }
+
         function renderFeesTable(data) {
             let tbody = document.getElementById('feesTableBody');
             let tfoot = document.getElementById('feesTableFooter');
@@ -525,12 +572,14 @@
             tbody.innerHTML = '';
 
             if(data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="13" class="p-4 text-center text-slate-400">No vouchers found matching your search.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="15" class="p-4 text-center text-slate-400">No vouchers found matching your search.</td></tr>`;
                 tfoot.innerHTML = '';
                 return;
             }
 
             let sumPayable = 0, sumPaid = 0, sumBalance = 0;
+            data = groupArrearsUnderTuition(data);
+            let srCounter = 0;
 
             data.forEach((row, idx) => {
                 sumPayable += parseFloat(row.payable) || 0;
@@ -549,15 +598,18 @@
                 let vId = (row.voucher_id || '').trim();
 
                 let tr = document.createElement('tr');
-                tr.className = "border-b hover:bg-slate-50 transition";
+                let isArrearsRow = (row.type || '').trim().toLowerCase() === 'arrears';
+                tr.className = isArrearsRow ? "border-b bg-rose-50/60 hover:bg-rose-50 transition" : "border-b hover:bg-slate-50 transition";
                 tr.innerHTML = `
                     <td class="p-2.5 text-center"><input type="checkbox" class="row-checkbox" data-voucher="${vId}"></td>
-                    <td class="p-2.5 font-medium">${idx + 1}</td>
+                    <td class="p-2.5 font-medium">${isArrearsRow ? '<span class="text-rose-400">↳</span>' : ++srCounter}</td>
                     <td class="p-2.5 font-mono text-indigo-900">${vId || '-'}</td>
+                    <td class="p-2.5 font-mono text-slate-700">${row.admis_no || '-'}</td>
                     <td class="p-2.5 font-semibold">
                         <a href="javascript:void(0)" onclick='openStudentLedger(${JSON.stringify(row.student_name)})' class="text-indigo-600 hover:text-indigo-800 underline transition">${row.student_name || '-'}</a>
                     </td>
-                    <td class="p-2.5 text-slate-600">${row.type || 'Tuition Fee'}</td>
+                    <td class="p-2.5 text-slate-600">${row[FEES_SIBLINGS_COL] || '-'}</td>
+                    <td class="p-2.5 ${isArrearsRow ? 'text-rose-700 font-bold' : 'text-slate-600'}">${isArrearsRow ? 'Arrears 2025' : (row.type || 'Tuition Fee')}</td>
                     <td class="p-2.5 text-indigo-600 font-medium">${row.period || '-'}</td>
                     <td class="p-2.5 font-bold text-slate-800">PKR ${row.payable || '0'}</td>
                     <td class="p-2.5 font-bold text-emerald-600">PKR ${row.totalPaid || '0'}</td>
@@ -577,7 +629,7 @@
 
             tfoot.innerHTML = `
                 <tr>
-                    <td colspan="6" class="p-3 text-right font-extrabold text-indigo-950">Total (Filtered):</td>
+                    <td colspan="8" class="p-3 text-right font-extrabold text-indigo-950">Total (Filtered):</td>
                     <td class="p-3 font-extrabold text-slate-900">${sumPayable}</td>
                     <td class="p-3 font-extrabold text-emerald-600">${sumPaid}</td>
                     <td class="p-3 font-extrabold ${balanceColorTotal}">${balanceTextTotal}</td>
@@ -590,7 +642,7 @@
                             WhatsApp Reminders
                         </button>
                     </td>
-                    <td colspan="2"></td>
+                    <td></td>
                 </tr>
             `;
         }
@@ -687,13 +739,17 @@
                 let sortedVouchers = [...currentFilteredVouchersCache].sort((a, b) => {
                     let m1 = monthOrder[(a.period || '').trim()] || 99;
                     let m2 = monthOrder[(b.period || '').trim()] || 99;
-                    return m1 - m2;
+                    let a1 = (a.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
+                    let a2 = (b.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
+                    return (m1 - m2) || (a2 - a1);   // same month mein arrears pehle deduct
                 });
 
                 let newestVoucherToSave = [...currentFilteredVouchersCache].sort((a, b) => {
                     let m1 = monthOrder[(a.period || '').trim()] || 0;
                     let m2 = monthOrder[(b.period || '').trim()] || 0;
-                    return m2 - m1;
+                    let a1 = (a.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
+                    let a2 = (b.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
+                    return (m2 - m1) || (a1 - a2);   // advance arrears row par nahi, tuition voucher par jaye
                 })[0];
 
                 let accountsPayloads = [];
@@ -846,6 +902,15 @@
 
             let totalPayable = 0, totalPaid = 0, totalBalance = 0, studentClass = '';
 
+            // Same month mein arrears wala row pehle
+            studentVouchers.sort((a, b) => {
+                let m1 = monthOrder[(a.period || '').trim()] || 99;
+                let m2 = monthOrder[(b.period || '').trim()] || 99;
+                let a1 = (a.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
+                let a2 = (b.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
+                return (m1 - m2) || (a2 - a1);
+            });
+
             studentVouchers.forEach(vRow => {
                 totalPayable += parseFloat(vRow.payable) || 0;
                 totalPaid += parseFloat(vRow.totalPaid) || 0;
@@ -867,7 +932,7 @@
                             <td class="p-2 font-mono text-slate-600">${txn.date || '-'}</td>
                             <td class="p-2 font-mono text-indigo-900">${vRow.voucher_id || '-'}</td>
                             <td class="p-2 text-indigo-600 font-medium">${vRow.period || '-'}</td>
-                            <td class="p-2 text-slate-600">${txn.description || txn.remarks || '-'}</td>
+                            <td class="p-2 text-slate-600">${txn.description || txn.remarks || '-'}${(vRow.type || '').trim().toLowerCase() === 'arrears' ? ' <span class="text-rose-600 font-semibold">(Previous Year Arrears 2025)</span>' : ''}</td>
                             <td class="p-2 font-bold">PKR ${payableAmt}</td>
                             <td class="p-2 font-bold text-emerald-600">PKR ${amtIn}</td>
                             <td class="p-2 font-bold text-slate-700">PKR ${runningBalance}</td>
@@ -881,7 +946,7 @@
                         <td class="p-2 font-mono text-slate-400">-</td>
                         <td class="p-2 font-mono text-indigo-900">${vRow.voucher_id || '-'}</td>
                         <td class="p-2 text-indigo-600 font-medium">${vRow.period || '-'}</td>
-                        <td class="p-2 text-slate-400">Unpaid Voucher</td>
+                        <td class="p-2 text-slate-400">${(vRow.type || '').trim().toLowerCase() === 'arrears' ? '<span class="text-rose-600 font-semibold">Previous Year Arrears 2025 (Unpaid)</span>' : 'Unpaid Voucher'}</td>
                         <td class="p-2 font-bold">PKR ${payableAmt}</td>
                         <td class="p-2 font-bold text-emerald-600">PKR 0</td>
                         <td class="p-2 font-bold text-slate-700">PKR ${runningBalance}</td>
@@ -890,7 +955,11 @@
                 }
             });
 
-            document.getElementById('ledgerStudentInfo').innerText = `Student Name: ${studentName} | Class: ${studentClass}`;
+            let ledgerRef = studentVouchers[0] || {};
+            let ledgerExtra = '';
+            if(ledgerRef.admis_no) ledgerExtra += ` | Admis No: ${ledgerRef.admis_no}`;
+            if(ledgerRef[FEES_SIBLINGS_COL]) ledgerExtra += ` | Siblings: ${ledgerRef[FEES_SIBLINGS_COL]}`;
+            document.getElementById('ledgerStudentInfo').innerText = `Student Name: ${studentName} | Class: ${studentClass}${ledgerExtra}`;
             document.getElementById('ledgerTotalPayable').innerText = `PKR ${totalPayable}`;
             document.getElementById('ledgerTotalPaid').innerText = `PKR ${totalPaid}`;
             document.getElementById('ledgerTotalBalance').innerText = `PKR ${totalBalance}`;
@@ -1038,10 +1107,38 @@
                             class: student.class || '',
                             status: 'Unpaid',
                             date: new Date().toISOString().split('T')[0],
-                            remarks: remarksStr
+                            remarks: remarksStr,
+                            [FEES_SIBLINGS_COL]: getStudentSiblings(student),
+                            [FEES_ARREARS_COL]: null
                         });
                         existingKeys.add(tKey1);
                         existingKeys.add(tKey2);
+                    }
+
+                    // Previous year arrears: SIRF January mein, alag row (voucher) ki surat mein
+                    if (period === ARREARS_PERIOD) {
+                        let arrNum = parseFloat(getStudentArrears(student)) || 0;
+                        let arKey1 = `${adm}_${period}_arrears`;
+                        let arKey2 = `${sName}_${period}_arrears`;
+                        if (arrNum > 0 && !existingKeys.has(arKey1) && !existingKeys.has(arKey2)) {
+                            newVouchers.push({
+                                sr_no: student.sr_no || '',
+                                voucher_id: 'V-' + Math.floor(100000 + Math.random() * 900000),
+                                admis_no: student.admis_no || '',
+                                student_name: student.student_name || '',
+                                type: 'arrears',
+                                period: period,
+                                payable: arrNum,
+                                class: student.class || '',
+                                status: 'Unpaid',
+                                date: new Date().toISOString().split('T')[0],
+                                remarks: 'Previous year arrears (2025)',
+                                [FEES_SIBLINGS_COL]: getStudentSiblings(student),
+                                [FEES_ARREARS_COL]: String(arrNum)
+                            });
+                            existingKeys.add(arKey1);
+                            existingKeys.add(arKey2);
+                        }
                     }
 
                     if (incRecord && incRecord.annual_fund && parseFloat(incRecord.annual_fund) > 0) {
@@ -1066,7 +1163,9 @@
                                     class: student.class || '',
                                     status: 'Unpaid',
                                     date: new Date().toISOString().split('T')[0],
-                                    remarks: incRecord.remarks || ''
+                                    remarks: incRecord.remarks || '',
+                                    [FEES_SIBLINGS_COL]: getStudentSiblings(student),
+                                    [FEES_ARREARS_COL]: null
                                 });
                                 existingKeys.add(aKey1);
                                 existingKeys.add(aKey2);
