@@ -73,7 +73,7 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-5 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Follow-up Calls</h2>
-                    <p class="text-sm text-slate-500">Family-wise dues, contact numbers, promise dates aur call remarks</p>
+                    <p class="text-sm text-slate-500">Family-wise dues, contact numbers, promise dates and call remarks</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button onclick="initFollowups()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
@@ -84,8 +84,8 @@
 
             <!-- SETUP BANNER (call_logs table missing) -->
             <div id="setupBanner" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-5 mb-5 no-print">
-                <h3 class="font-bold text-amber-900 mb-1">Pehle ek baar Supabase mein call_logs table banayein</h3>
-                <p class="text-sm text-amber-800 mb-3">Supabase → SQL Editor kholein, ye code paste karke Run karein, phir page Refresh karein.</p>
+                <h3 class="font-bold text-amber-900 mb-1">One-time setup: create the call_logs table in Supabase</h3>
+                <p class="text-sm text-amber-800 mb-3">Open Supabase → SQL Editor, paste this code and run it, then refresh this page.</p>
                 <pre id="setupSql" class="bg-white border border-amber-200 rounded-xl p-3 text-xs overflow-x-auto whitespace-pre"></pre>
                 <button onclick="copySetupSql()" class="mt-3 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">Copy SQL</button>
             </div>
@@ -103,11 +103,11 @@
             <section id="tabFamilies">
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
                     <div class="flex flex-wrap gap-2 items-center">
-                        <input id="fSearch" oninput="renderFamilies()" type="text" placeholder="Family code, bachay ka naam, admis no, phone..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[220px]">
+                        <input id="fSearch" oninput="renderFamilies()" type="text" placeholder="Family code, student name, admission no, phone..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[220px]">
                         <select id="fClass" onchange="renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All Classes</option></select>
                         <select id="fStatus" onchange="renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
                             <option value="ALL">All Status</option>
-                            <option value="calltoday">Aaj call karni hai (Today + Overdue)</option>
+                            <option value="calltoday">Call today (Today + Overdue)</option>
                             <option value="overdue">Overdue promise</option>
                             <option value="today">Promise today</option>
                             <option value="new">Not called yet</option>
@@ -125,8 +125,8 @@
                     <div class="flex justify-between items-center mt-3">
                         <p id="famCount" class="text-xs text-slate-500"></p>
                         <div class="flex gap-2">
-                            <button onclick="setAllDetails(true)" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg">Sab expand</button>
-                            <button onclick="setAllDetails(false)" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg">Sab collapse</button>
+                            <button onclick="setAllDetails(true)" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg">Expand all</button>
+                            <button onclick="setAllDetails(false)" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg">Collapse all</button>
                         </div>
                     </div>
                 </div>
@@ -137,7 +137,7 @@
             <section id="tabHistory" class="hidden">
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
                     <div class="flex flex-wrap gap-2 items-center">
-                        <input id="hSearch" oninput="renderHistory()" type="text" placeholder="Family, bachay ka naam ya remarks mein search..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[220px]">
+                        <input id="hSearch" oninput="renderHistory()" type="text" placeholder="Search family, student name or remarks..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[220px]">
                         <select id="hOutcome" onchange="renderHistory()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All outcomes</option></select>
                         <label class="text-xs text-slate-500">From <input id="hFrom" type="date" onchange="renderHistory()" class="border rounded-lg px-2 py-1.5 text-sm bg-slate-50 ml-1"></label>
                         <label class="text-xs text-slate-500">To <input id="hTo" type="date" onchange="renderHistory()" class="border rounded-lg px-2 py-1.5 text-sm bg-slate-50 ml-1"></label>
@@ -152,7 +152,7 @@
                                 <th class="p-2.5">Date / Time</th>
                                 <th class="p-2.5">Family</th>
                                 <th class="p-2.5">Outcome</th>
-                                <th class="p-2.5">Baat kis se</th>
+                                <th class="p-2.5">Spoke with</th>
                                 <th class="p-2.5">Promise</th>
                                 <th class="p-2.5">Remarks</th>
                                 <th class="p-2.5">Pending (call time)</th>
@@ -172,7 +172,7 @@
         <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl max-h-[94vh] overflow-y-auto">
             <div class="p-5 border-b flex justify-between items-start">
                 <div>
-                    <h3 class="text-lg font-bold text-indigo-950">Call record karein</h3>
+                    <h3 class="text-lg font-bold text-indigo-950">Record call</h3>
                     <p id="cmFamily" class="text-sm font-semibold text-slate-700 mt-0.5"></p>
                     <p id="cmKids" class="text-xs text-slate-500"></p>
                 </div>
@@ -180,35 +180,35 @@
             </div>
             <div class="p-5 space-y-4">
                 <div class="flex flex-wrap gap-3 text-sm">
-                    <div class="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2"><span class="text-xs text-rose-700">Abhi ka baqaya</span><div id="cmPending" class="font-extrabold text-rose-700"></div></div>
+                    <div class="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2"><span class="text-xs text-rose-700">Current balance due</span><div id="cmPending" class="font-extrabold text-rose-700"></div></div>
                     <div id="cmContacts" class="flex flex-wrap gap-2 items-center"></div>
                 </div>
                 <div id="cmLast" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600"></div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Call ka nateeja</label>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Call outcome</label>
                         <select id="cmOutcome" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-700 mb-1">Baat kis se hui</label>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Spoke with</label>
                         <input id="cmSpokeWith" type="text" placeholder="Father / Mother / Bhai..." class="w-full border rounded-lg p-2.5 text-sm outline-none">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Promise date (parent ne kab tak fee dene ka kaha)</label>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Promise date (when the parent promised to pay)</label>
                     <div class="flex flex-wrap gap-2 items-center">
                         <input id="cmPromiseDate" type="date" class="border rounded-lg p-2.5 text-sm outline-none">
-                        <button type="button" onclick="setPromiseOffset(0)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">Aaj</button>
-                        <button type="button" onclick="setPromiseOffset(1)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">Kal</button>
-                        <button type="button" onclick="setPromiseOffset(3)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">3 din</button>
-                        <button type="button" onclick="setPromiseOffset(7)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">1 hafta</button>
+                        <button type="button" onclick="setPromiseOffset(0)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">Today</button>
+                        <button type="button" onclick="setPromiseOffset(1)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">Tomorrow</button>
+                        <button type="button" onclick="setPromiseOffset(3)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">3 days</button>
+                        <button type="button" onclick="setPromiseOffset(7)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">1 week</button>
                         <button type="button" onclick="setPromiseOffset(null)" class="text-xs text-slate-400 hover:text-slate-600 px-2 py-2">Clear</button>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Kitni rakam dene ka wada (optional)</label>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Promised amount (optional)</label>
                     <input id="cmPromiseAmt" type="number" min="0" placeholder="PKR" class="w-full sm:w-48 border rounded-lg p-2.5 text-sm outline-none">
                 </div>
 
@@ -217,21 +217,21 @@
                         <label class="text-xs font-medium text-slate-700">Remarks</label>
                         <div class="flex flex-wrap items-center gap-2">
                             <select id="voiceLang" onchange="onVoiceLangChange()" class="border rounded-lg px-2 py-1 text-xs bg-white">
-                                <option value="ur-PK">Awaaz: Urdu (ur-PK)</option>
-                                <option value="en-IN">Awaaz: English</option>
+                                <option value="ur-PK">Voice: Urdu (ur-PK)</option>
+                                <option value="en-IN">Voice: English</option>
                             </select>
                             <label id="romanWrap" class="flex items-center gap-1 text-xs text-slate-600"><input id="romanToggle" type="checkbox" checked> Roman Urdu</label>
-                            <button id="micBtn" type="button" onclick="toggleVoice()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition">🎤 Bolein</button>
-                            <button type="button" onclick="convertRemarksToRoman()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold" title="Textbox mein jo Urdu script hai usay Roman Urdu mein badal deta hai">🔤 Roman</button>
+                            <button id="micBtn" type="button" onclick="toggleVoice()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition">🎤 Speak</button>
+                            <button type="button" onclick="convertRemarksToRoman()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold" title="Converts any Urdu script in the box into Roman Urdu">🔤 Roman</button>
                         </div>
                     </div>
-                    <textarea id="cmRemarks" rows="4" placeholder="Maslan: Walid ne kaha tankhwah 5 tarikh ko milti hai, 6 tarikh tak aadhi fee jama karwa dein ge." class="w-full border rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400"></textarea>
-                    <p id="micStatus" class="text-xs text-slate-400 mt-1">🎤 dabayein aur Urdu mein bolein. Text khud Roman Urdu mein aa jayega, save se pehle theek bhi kar sakte hain.</p>
+                    <textarea id="cmRemarks" rows="4" placeholder="e.g. Father said salary arrives on the 5th; he will deposit half the fee by the 6th." class="w-full border rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400"></textarea>
+                    <p id="micStatus" class="text-xs text-slate-400 mt-1">Tap 🎤 Speak and talk in Urdu. The text appears in Roman Urdu automatically; you can edit it before saving.</p>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Call karne wale ka naam</label>
-                    <input id="cmCaller" type="text" placeholder="Aap ka naam" class="w-full sm:w-64 border rounded-lg p-2.5 text-sm outline-none">
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Caller name</label>
+                    <input id="cmCaller" type="text" placeholder="Your name" class="w-full sm:w-64 border rounded-lg p-2.5 text-sm outline-none">
                 </div>
             </div>
             <div class="p-5 border-t flex justify-end gap-2">
@@ -262,11 +262,11 @@
 
 <script>
 // ====================================================================================
-//  CONFIG  (spelling / naam yahan se badlein)
+//  CONFIG  (change column names here)
 // ====================================================================================
-const SIBLINGS_COL = 'siblings';                 // students + fees table ka siblings (family code) column
-const PHONE_COL_REGEX  = /phone|mobile|contact|whatsapp|cell|\btel\b/i;   // students table ke jin columns mein phone number ho
-const PARENT_COL_REGEX = /father|guardian|parent/i;                        // walid / guardian ka naam wale columns
+const SIBLINGS_COL = 'siblings';                 // siblings (family code) column of the students + fees tables
+const PHONE_COL_REGEX  = /phone|mobile|contact|whatsapp|cell|\btel\b/i;   // students table columns that contain phone numbers
+const PARENT_COL_REGEX = /father|guardian|parent/i;                        // columns that hold the father / guardian name
 
 const SETUP_SQL = `create table if not exists public.call_logs (
   id bigint generated by default as identity primary key,
@@ -286,12 +286,12 @@ create index if not exists call_logs_family_idx on public.call_logs (family_key,
 alter table public.call_logs disable row level security;`;
 
 const OUTCOMES = {
-    promised:  { label: 'Baat hui – promise li',          cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-    callback:  { label: 'Baad mein call karne ko kaha',   cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-    no_answer: { label: 'Phone nahi uthaya',              cls: 'bg-slate-100 text-slate-600 border-slate-200' },
-    off_wrong: { label: 'Phone band / number ghalat',     cls: 'bg-slate-100 text-slate-600 border-slate-200' },
-    refused:   { label: 'Inkar / masla bataya',           cls: 'bg-rose-50 text-rose-700 border-rose-200' },
-    paid:      { label: 'Payment aa gayi',                cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    promised:  { label: 'Spoke – promise taken',          cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+    callback:  { label: 'Asked to call back later',   cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+    no_answer: { label: 'Did not answer',              cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+    off_wrong: { label: 'Phone off / wrong number',     cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+    refused:   { label: 'Refused / raised an issue',           cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+    paid:      { label: 'Payment received',                cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
     other:     { label: 'Other',                          cls: 'bg-slate-100 text-slate-600 border-slate-200' }
 };
 
@@ -377,7 +377,7 @@ function waNumber(raw) {
 //  DATA LOADING
 // ====================================================================================
 async function initFollowups() {
-    showLoading('Data load ho raha hai...');
+    showLoading('Loading data...');
     let c = getSupabaseConfig();
     try {
         let [sRes, fRes, aRes] = await Promise.all([
@@ -406,7 +406,7 @@ async function initFollowups() {
         refreshAll();
     } catch (e) {
         console.error(e);
-        showCustomAlert('Data load nahi ho saka. Internet ya API settings check karein.');
+        showCustomAlert('Could not load data. Check your internet connection or API settings.');
     }
     hideLoading();
 }
@@ -429,7 +429,7 @@ async function loadLogs(rerender = true) {
 }
 
 function copySetupSql() {
-    navigator.clipboard.writeText(SETUP_SQL).then(() => showCustomAlert('SQL copy ho gayi. Supabase SQL Editor mein paste karke Run karein.'));
+    navigator.clipboard.writeText(SETUP_SQL).then(() => showCustomAlert('SQL copied. Paste it in the Supabase SQL Editor and run it.'));
 }
 
 // ====================================================================================
@@ -528,7 +528,7 @@ function renderSummary() {
     let cards = [
         { t: 'Families with dues', v: withDues.length, c: 'text-indigo-900' },
         { t: 'Total pending', v: 'PKR ' + fmt(totalPending), c: 'text-rose-600' },
-        { t: 'Aaj call karni hai', v: cnt('today') + cnt('overdue'), c: 'text-amber-700', sub: `${cnt('overdue')} overdue · ${cnt('today')} aaj` },
+        { t: 'Call today', v: cnt('today') + cnt('overdue'), c: 'text-amber-700', sub: `${cnt('overdue')} overdue · ${cnt('today')} today` },
         { t: 'Not called yet', v: cnt('new'), c: 'text-slate-700' },
         { t: 'Promise upcoming', v: cnt('upcoming'), c: 'text-blue-700' }
     ];
@@ -578,7 +578,7 @@ function getFilteredFamilies() {
 //  RENDER: FAMILY CARDS
 // ====================================================================================
 function contactsHtml(f, big) {
-    if(!f.contacts.length) return `<span class="text-xs text-slate-400">Contact number students table mein nahi mila</span>`;
+    if(!f.contacts.length) return `<span class="text-xs text-slate-400">No contact number found in the students table</span>`;
     return f.contacts.map(c => `
         <span class="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg pl-2 pr-1 py-1 ${big ? 'text-sm' : 'text-xs'}">
             <span class="text-slate-400">${esc(c.label)}:</span>
@@ -601,12 +601,12 @@ function famCardHtml(f) {
     if(f.status !== 'clear' && f.lastLog) {
         if(f.promiseDate) {
             let dd = dayDiff(f.promiseDate, todayStr());
-            let rel = dd === 0 ? 'aaj' : (dd > 0 ? `${dd} din baad` : `${Math.abs(dd)} din pehle`);
-            promiseLine = `<div class="text-sm"><span class="text-slate-500">Promise:</span> <b>${fmtDate(f.promiseDate)}</b> <span class="text-xs text-slate-400">(${rel})</span>${f.lastLog.promise_amount ? ` · <span class="text-slate-500">rakam</span> <b>PKR ${fmt(f.lastLog.promise_amount)}</b>` : ''}</div>`;
-        } else promiseLine = `<div class="text-sm text-orange-700">Pichli call mein koi promise date nahi li gayi</div>`;
+            let rel = dd === 0 ? 'today' : (dd > 0 ? `in ${dd} day${dd > 1 ? 's' : ''}` : `${Math.abs(dd)} day${Math.abs(dd) > 1 ? 's' : ''} ago`);
+            promiseLine = `<div class="text-sm"><span class="text-slate-500">Promise:</span> <b>${fmtDate(f.promiseDate)}</b> <span class="text-xs text-slate-400">(${rel})</span>${f.lastLog.promise_amount ? ` · <span class="text-slate-500">amount</span> <b>PKR ${fmt(f.lastLog.promise_amount)}</b>` : ''}</div>`;
+        } else promiseLine = `<div class="text-sm text-orange-700">No promise date was taken on the last call</div>`;
     }
-    let paidNote = f.paidSince > 0 && f.status !== 'clear' ? `<div class="text-xs text-emerald-700 mt-0.5">Pichli call ke baad PKR ${fmt(f.paidSince)} jama hue hain</div>` : '';
-    let lastCall = f.lastLog ? `<div class="text-xs text-slate-500 mt-1">Pichli call: ${fmtDateTime(f.lastLog.call_date)} · ${esc((OUTCOMES[f.lastLog.outcome] || OUTCOMES.other).label)}${f.lastLog.remarks ? ` — “${esc(f.lastLog.remarks.length > 110 ? f.lastLog.remarks.slice(0, 110) + '…' : f.lastLog.remarks)}”` : ''}</div>` : '';
+    let paidNote = f.paidSince > 0 && f.status !== 'clear' ? `<div class="text-xs text-emerald-700 mt-0.5">PKR ${fmt(f.paidSince)} received since the last call</div>` : '';
+    let lastCall = f.lastLog ? `<div class="text-xs text-slate-500 mt-1">Last call: ${fmtDateTime(f.lastLog.call_date)} · ${esc((OUTCOMES[f.lastLog.outcome] || OUTCOMES.other).label)}${f.lastLog.remarks ? ` — “${esc(f.lastLog.remarks.length > 110 ? f.lastLog.remarks.slice(0, 110) + '…' : f.lastLog.remarks)}”` : ''}</div>` : '';
     let isOpen = expanded.has(f.key);
 
     return `
@@ -617,21 +617,21 @@ function famCardHtml(f) {
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="text-base font-extrabold text-indigo-950">${esc(f.displayLabel)}</span>
                         <span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold ${sm.cls}">${sm.label}</span>
-                        ${f.parent ? `<span class="text-xs text-slate-500">Walid/Guardian: ${esc(f.parent)}</span>` : ''}
+                        ${f.parent ? `<span class="text-xs text-slate-500">Father / Guardian: ${esc(f.parent)}</span>` : ''}
                     </div>
                     <div class="flex flex-wrap gap-1.5 mt-2">${kidsHtml}</div>
                 </div>
                 <div class="text-right">
-                    <div class="text-xs text-slate-500">Total baqaya</div>
+                    <div class="text-xs text-slate-500">Total due</div>
                     <div class="text-xl font-extrabold ${pendingCls}">${pendingTxt}</div>
                 </div>
             </div>
             <div class="flex flex-wrap gap-1.5 mt-3">${contactsHtml(f, false)}</div>
             <div class="mt-3">${promiseLine}${paidNote}${lastCall}</div>
             <div class="flex flex-wrap gap-2 mt-3 no-print">
-                <button onclick="openCallModal(this.closest('.fam-card').dataset.key)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">📞 Call record karein</button>
+                <button onclick="openCallModal(this.closest('.fam-card').dataset.key)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">📞 Record call</button>
                 <button onclick="sendFamilyWhatsApp(this.closest('.fam-card').dataset.key)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold transition">💬 WhatsApp reminder</button>
-                <button onclick="toggleDetails(this)" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg text-sm font-semibold transition">${isOpen ? '▲ Tafseel band' : '▼ Tafseel & call history'} (${f.logs.length})</button>
+                <button onclick="toggleDetails(this)" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg text-sm font-semibold transition">${isOpen ? '▲ Hide details' : '▼ Details & call history'} (${f.logs.length})</button>
             </div>
         </div>
         <div class="fam-details ${isOpen ? '' : 'hidden'} border-t border-slate-100 p-4 bg-slate-50/60 rounded-b-2xl">${detailsHtml(f)}</div>
@@ -645,7 +645,7 @@ function detailsHtml(f) {
             let ar = isArrearsType(v.type);
             let ann = /annual/i.test(v.type || '');
             return `<span class="inline-block mr-1 mb-1 px-2 py-0.5 rounded-md text-[11px] border ${ar ? 'bg-rose-50 border-rose-200 text-rose-700 font-semibold' : (ann ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-700')}">${ar ? 'Arrears 2025' : esc(shortPeriod(v.period)) + (ann ? ' (Annual)' : '')}: ${fmt(v.balance)}</span>`;
-        }).join('') : '<span class="text-emerald-600 text-xs">Koi baqaya nahi</span>';
+        }).join('') : '<span class="text-emerald-600 text-xs">No dues</span>';
         let advTxt = k.net < 0 ? `<span class="text-indigo-600 font-bold">Adv ${fmt(Math.abs(k.net))}</span>` : (k.net > 0 ? `<span class="text-rose-600 font-bold">${fmt(k.net)}</span>` : '<span class="text-emerald-600">0</span>');
         let kc = k.contacts.length ? k.contacts.map(c => `${esc(c.number)}`).join(', ') : '-';
         return `<tr class="border-b border-slate-200 align-top">
@@ -663,20 +663,20 @@ function detailsHtml(f) {
             <div class="flex flex-wrap items-center gap-2 text-xs">
                 <b class="text-slate-700">${fmtDateTime(l.call_date)}</b>
                 <span class="px-2 py-0.5 rounded-md border ${oc.cls}">${esc(oc.label)}</span>
-                ${l.spoke_with ? `<span class="text-slate-500">baat: ${esc(l.spoke_with)}</span>` : ''}
+                ${l.spoke_with ? `<span class="text-slate-500">spoke with: ${esc(l.spoke_with)}</span>` : ''}
                 ${l.caller ? `<span class="text-slate-400">caller: ${esc(l.caller)}</span>` : ''}
             </div>
             ${l.promise_date ? `<div class="text-xs mt-1 text-blue-700">Promise: <b>${fmtDate(l.promise_date)}</b>${l.promise_amount ? ` (PKR ${fmt(l.promise_amount)})` : ''}</div>` : ''}
             ${l.remarks ? `<div class="text-sm mt-1 text-slate-700 whitespace-pre-line">${esc(l.remarks)}</div>` : ''}
-            <div class="text-[11px] text-slate-400 mt-0.5">Us waqt baqaya: PKR ${fmt(l.pending_at_call)}</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Balance at that time: PKR ${fmt(l.pending_at_call)}</div>
         </div>`;
-    }).join('') : '<p class="text-xs text-slate-400">Abhi tak koi call record nahi hui.</p>';
+    }).join('') : '<p class="text-xs text-slate-400">No calls recorded yet.</p>';
 
     return `
         <div class="overflow-x-auto mb-4">
             <table class="w-full text-left text-xs border-collapse">
                 <thead class="text-slate-500 border-b border-slate-300"><tr>
-                    <th class="p-2">Bachcha</th><th class="p-2">Monthly fee</th><th class="p-2">Baqaya (month-wise)</th><th class="p-2 text-right">Total</th><th class="p-2">Numbers</th>
+                    <th class="p-2">Student</th><th class="p-2">Monthly fee</th><th class="p-2">Dues (month-wise)</th><th class="p-2 text-right">Total</th><th class="p-2">Numbers</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
@@ -687,9 +687,9 @@ function detailsHtml(f) {
 
 function renderFamilies() {
     let list = getFilteredFamilies();
-    $('famCount').innerText = `${list.length} families (kul ${families.length}) · filtered baqaya: PKR ${fmt(list.reduce((s, f) => s + Math.max(f.pending, 0), 0))}`;
+    $('famCount').innerText = `${list.length} families (of ${families.length} total) · filtered dues: PKR ${fmt(list.reduce((s, f) => s + Math.max(f.pending, 0), 0))}`;
     $('famList').innerHTML = list.length ? list.map(famCardHtml).join('') :
-        `<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 text-sm">Is filter mein koi family nahi mili.</div>`;
+        `<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 text-sm">No families match this filter.</div>`;
 }
 
 function toggleDetails(btn) {
@@ -698,7 +698,7 @@ function toggleDetails(btn) {
     det.classList.toggle('hidden');
     if(det.classList.contains('hidden')) expanded.delete(key); else expanded.add(key);
     let f = familyMap[key];
-    btn.innerText = `${det.classList.contains('hidden') ? '▼ Tafseel & call history' : '▲ Tafseel band'} (${f ? f.logs.length : 0})`;
+    btn.innerText = `${det.classList.contains('hidden') ? '▼ Details & call history' : '▲ Hide details'} (${f ? f.logs.length : 0})`;
 }
 function setAllDetails(open) {
     expanded = new Set();
@@ -711,12 +711,12 @@ function setAllDetails(open) {
 // ====================================================================================
 function sendFamilyWhatsApp(key) {
     let f = familyMap[key]; if(!f) return;
-    if(f.pending <= 0) { showCustomAlert('Is family ka koi baqaya nahi hai.'); return; }
+    if(f.pending <= 0) { showCustomAlert('This family has no outstanding dues.'); return; }
     let lines = f.kids.filter(k => k.net > 0).map(k => {
         let ar = k.vouchers.filter(v => isArrearsType(v.type) && v.balance > 0).reduce((s, v) => s + v.balance, 0);
-        return `• ${k.name} (${k.cls || '-'}): PKR ${fmt(k.net)}${ar > 0 ? ` (isme pichle saal ka baqaya PKR ${fmt(ar)} shamil hai)` : ''}`;
+        return `• ${k.name} (${k.cls || '-'}): PKR ${fmt(k.net)}${ar > 0 ? ` (includes last year's arrears of PKR ${fmt(ar)})` : ''}`;
     });
-    let msg = `Assalam-o-Alaikum! Concept School (Shibra Campus) ki taraf se fee reminder.\n\nAap ke bachon ka fee baqaya:\n${lines.join('\n')}\n\nTotal baqaya: PKR ${fmt(f.pending)}\n\nMeherbani farma kar jald az jald ada kar dein. Shukriya!`;
+    let msg = `Assalam-o-Alaikum! This is a fee reminder from Concept School (Shibra Campus).\n\nOutstanding fee for your children:\n${lines.join('\n')}\n\nTotal outstanding: PKR ${fmt(f.pending)}\n\nKindly clear the dues at your earliest convenience. Thank you!`;
     let num = f.contacts.length ? waNumber(f.contacts[0].number) : '';
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank');
 }
@@ -737,10 +737,10 @@ function openCallModal(key) {
     $('cmPromiseAmt').value = '';
     $('cmRemarks').value = '';
     $('cmCaller').value = localStorage.getItem('caller_name') || '';
-    $('micStatus').innerText = '🎤 dabayein aur Urdu mein bolein. Text khud Roman Urdu mein aa jayega, save se pehle theek bhi kar sakte hain.';
+    $('micStatus').innerText = 'Tap 🎤 Speak and talk in Urdu. The text appears in Roman Urdu automatically; you can edit it before saving.';
     let last = $('cmLast');
     if(f.lastLog) {
-        last.innerHTML = `<b>Pichli call</b> (${fmtDateTime(f.lastLog.call_date)}): ${esc((OUTCOMES[f.lastLog.outcome] || OUTCOMES.other).label)}${f.promiseDate ? ` · promise <b>${fmtDate(f.promiseDate)}</b>` : ''}${f.lastLog.remarks ? `<div class="mt-1 text-slate-700 whitespace-pre-line">${esc(f.lastLog.remarks)}</div>` : ''}${f.paidSince > 0 ? `<div class="mt-1 text-emerald-700">Us ke baad PKR ${fmt(f.paidSince)} jama hue.</div>` : ''}`;
+        last.innerHTML = `<b>Last call</b> (${fmtDateTime(f.lastLog.call_date)}): ${esc((OUTCOMES[f.lastLog.outcome] || OUTCOMES.other).label)}${f.promiseDate ? ` · promise <b>${fmtDate(f.promiseDate)}</b>` : ''}${f.lastLog.remarks ? `<div class="mt-1 text-slate-700 whitespace-pre-line">${esc(f.lastLog.remarks)}</div>` : ''}${f.paidSince > 0 ? `<div class="mt-1 text-emerald-700">PKR ${fmt(f.paidSince)} received since then.</div>` : ''}`;
         last.classList.remove('hidden');
     } else last.classList.add('hidden');
     onVoiceLangChange();
@@ -755,13 +755,13 @@ function setPromiseOffset(days) {
 
 async function saveCall() {
     let f = familyMap[currentCallKey]; if(!f) return;
-    if(logsTableMissing) { showCustomAlert('Pehle call_logs table banayein (page ke upar wala peela box dekhein), phir dobara try karein.'); return; }
+    if(logsTableMissing) { showCustomAlert('Please create the call_logs table first (see the yellow box at the top of the page), then try again.'); return; }
     stopVoice();
     let outcome = $('cmOutcome').value;
     let promiseDate = $('cmPromiseDate').value;
     let remarks = $('cmRemarks').value.trim();
-    if((outcome === 'promised' || outcome === 'callback') && !promiseDate) { showCustomAlert('Is nateeje ke liye promise / dobara call ki date likhna zaroori hai.'); return; }
-    if(!remarks && !promiseDate && outcome === 'other') { showCustomAlert('Kam az kam remarks ya promise date likhein.'); return; }
+    if((outcome === 'promised' || outcome === 'callback') && !promiseDate) { showCustomAlert('A promise / call-back date is required for this outcome.'); return; }
+    if(!remarks && !promiseDate && outcome === 'other') { showCustomAlert('Please enter at least remarks or a promise date.'); return; }
     let caller = $('cmCaller').value.trim();
     if(caller) localStorage.setItem('caller_name', caller);
 
@@ -779,7 +779,7 @@ async function saveCall() {
         caller: caller || null
     };
 
-    showLoading('Call save ho rahi hai...');
+    showLoading('Saving call...');
     try {
         let c = getSupabaseConfig();
         let res = await fetch(`${c.url}/rest/v1/call_logs`, {
@@ -787,21 +787,21 @@ async function saveCall() {
             headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
             body: JSON.stringify(payload)
         });
-        if(!res.ok) { let t = await res.text(); hideLoading(); showCustomAlert('Save nahi ho saka: ' + t); return; }
+        if(!res.ok) { let t = await res.text(); hideLoading(); showCustomAlert('Could not save: ' + t); return; }
         expanded.add(f.key);
         await loadLogs(true);
         hideLoading();
         closeCallModal();
-    } catch (e) { hideLoading(); console.error(e); showCustomAlert('Database se connect nahi ho saka.'); }
+    } catch (e) { hideLoading(); console.error(e); showCustomAlert('Could not connect to the database.'); }
 }
 
 function deleteLog(id) {
-    showCustomConfirm('Ye call record hamesha ke liye delete ho jayega. Proceed?', async () => {
-        showLoading('Delete ho raha hai...');
+    showCustomConfirm('This call record will be permanently deleted. Proceed?', async () => {
+        showLoading('Deleting...');
         try {
             let c = getSupabaseConfig();
             let res = await fetch(`${c.url}/rest/v1/call_logs?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
-            if(!res.ok) showCustomAlert('Delete nahi ho saka: ' + await res.text());
+            if(!res.ok) showCustomAlert('Could not delete: ' + await res.text());
             await loadLogs(true);
         } catch (e) { showCustomAlert('Connection error.'); }
         hideLoading();
@@ -849,12 +849,12 @@ function renderHistory() {
             <td class="p-2.5">${esc(l.caller || '-')}</td>
             <td class="p-2.5 no-print"><button onclick="deleteLog(${JSON.stringify(l.id)})" class="text-rose-500 hover:text-rose-700" title="Delete">🗑️</button></td>
         </tr>`;
-    }).join('') : `<tr><td colspan="9" class="p-6 text-center text-slate-400">Koi call record nahi mila.</td></tr>`;
+    }).join('') : `<tr><td colspan="9" class="p-6 text-center text-slate-400">No call records found.</td></tr>`;
 }
 
 function exportHistoryCsv() {
     let list = getFilteredLogs();
-    if(!list.length) { showCustomAlert('Export karne ke liye koi record nahi.'); return; }
+    if(!list.length) { showCustomAlert('No records to export.'); return; }
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
     let rows = [['Date','Time','Family','Children','Outcome','Spoke with','Promise date','Promise amount','Remarks','Pending at call','Caller']];
     list.forEach(l => {
@@ -913,7 +913,7 @@ function urduCharLevel(w) {
     let out = '';
     toks.forEach((t, i) => {
         out += t[0];
-        if(t[1] === 'c' && toks[i + 1] && toks[i + 1][1] === 'c') out += 'a';   // do consonants k beech chhota 'a' (kl -> kal)
+        if(t[1] === 'c' && toks[i + 1] && toks[i + 1][1] === 'c') out += 'a';   // insert a short 'a' between two consonants (kl -> kal)
     });
     return out;
 }
@@ -945,9 +945,9 @@ function stopVoice() { if(recog && listening) { try { recog.stop(); } catch (e) 
 
 function toggleVoice() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if(!SR) { showCustomAlert('Is browser mein voice input nahi chalta. Google Chrome (Android ya computer) use karein.'); return; }
+    if(!SR) { showCustomAlert('Voice input is not supported in this browser. Please use Google Chrome (Android or desktop).'); return; }
     if(listening) { stopVoice(); return; }
-    if(!window.isSecureContext) { showCustomAlert('Voice ke liye page https:// ya localhost par khula hona chahiye.'); return; }
+    if(!window.isSecureContext) { showCustomAlert('The page must be opened over https:// or localhost for voice input.'); return; }
 
     recog = new SR();
     recog.lang = $('voiceLang').value;
@@ -959,10 +959,10 @@ function toggleVoice() {
 
     recog.onstart = () => {
         listening = true;
-        $('micBtn').innerText = '⏹ Rokein';
+        $('micBtn').innerText = '⏹ Stop';
         $('micBtn').classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
         $('micBtn').classList.add('bg-rose-600', 'hover:bg-rose-700', 'mic-live');
-        $('micStatus').innerText = '🔴 Sun raha hoon... bolein, phir ⏹ Rokein dabayein.';
+        $('micStatus').innerText = '🔴 Listening... speak, then tap ⏹ Stop.';
     };
     recog.onresult = e => {
         let text = '';
@@ -972,15 +972,15 @@ function toggleVoice() {
         ta.value = (voiceBase ? voiceBase + ' ' : '') + shown;
     };
     recog.onerror = e => {
-        let msg = { 'not-allowed': 'Microphone ki ijazat nahi mili. Browser mein mic allow karein.', 'no-speech': 'Awaaz sunai nahi di, dobara koshish karein.', 'network': 'Voice ke liye internet chahiye.', 'audio-capture': 'Microphone nahi mila.' }[e.error] || ('Voice error: ' + e.error);
+        let msg = { 'not-allowed': 'Microphone permission denied. Please allow the mic in your browser.', 'no-speech': 'No speech detected, please try again.', 'network': 'Voice input needs an internet connection.', 'audio-capture': 'No microphone found.' }[e.error] || ('Voice error: ' + e.error);
         $('micStatus').innerText = '⚠️ ' + msg;
     };
     recog.onend = () => {
         listening = false;
-        $('micBtn').innerText = '🎤 Bolein';
+        $('micBtn').innerText = '🎤 Speak';
         $('micBtn').classList.add('bg-indigo-600', 'hover:bg-indigo-700');
         $('micBtn').classList.remove('bg-rose-600', 'hover:bg-rose-700', 'mic-live');
-        if($('micStatus').innerText.startsWith('🔴')) $('micStatus').innerText = '✅ Ho gaya. Text check karein, zaroorat ho to theek kar lein, phir Save call.';
+        if($('micStatus').innerText.startsWith('🔴')) $('micStatus').innerText = '✅ Done. Check the text, edit if needed, then Save call.';
     };
     try { recog.start(); } catch (e) { console.error(e); }
 }
@@ -999,7 +999,7 @@ function saveApiCredentials() {
     if(url && key) {
         localStorage.setItem('supabase_url', url); localStorage.setItem('supabase_key', key);
         closeSettingsModal(); initFollowups();
-    } else showCustomAlert('Sahi URL aur Key likhein.');
+    } else showCustomAlert('Please enter a valid URL and Key.');
 }
 document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closeCallModal(); closeCustomAlert(); } });
 </script>
