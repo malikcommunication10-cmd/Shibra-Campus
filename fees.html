@@ -319,14 +319,14 @@
             "September 2026": 9, "October 2026": 10, "November 2026": 11, "December 2026": 12
         };
 
-        // ================= COLUMN NAMES (spelling yahan se change karein) =================
-        // fees table k columns:
+        // ================= COLUMN NAMES (change spelling here) =================
+        // fees table columns:
         const FEES_ARREARS_COL  = 'arrears2025';
         const FEES_SIBLINGS_COL = 'siblings';
-        // students table ka arrears column (agar naam alag ho to yahan likh dein; pehla jo mil jaye wo use hoga):
+        // students table arrears column (if the name differs, write it here; the first one found is used):
         const STUDENT_ARREARS_COLS  = ['arrears2025'];
         const STUDENT_SIBLINGS_COL  = 'siblings';
-        // Arrears sirf is period k voucher mein lagenge:
+        // Arrears are added only to the voucher of this period:
         const ARREARS_PERIOD = 'January 2026';
         // ===================================================================================
 
@@ -353,6 +353,7 @@
         // Custom Alert & Confirm Helper Functions
         function showCustomAlert(message) {
             document.getElementById('customAlertMessage').innerText = message;
+            document.getElementById('customAlertMessage').style.whiteSpace = 'pre-line';
             document.getElementById('customAlertModal').classList.remove('hidden');
         }
 
@@ -538,12 +539,18 @@
             renderFeesTable(target);
         }
 
-        function toggleSelectAll(masterCheckbox) {
-            let checkboxes = document.querySelectorAll('.row-checkbox');
-            checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+        // A voucher whose payment is recorded in the accounts table cannot be deleted from here
+        function isLockedVoucher(vId) {
+            let acc = accountsDataMap[(vId || '').trim()];
+            return !!(acc && acc.transactions && acc.transactions.length > 0);
         }
 
-        // Arrears row ko usi student (admis_no) ki usi month ki tuition row k bilkul neeche rakhta hai
+        function toggleSelectAll(masterCheckbox) {
+            let checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => { if(!cb.disabled) cb.checked = masterCheckbox.checked; });
+        }
+
+        // Places the arrears row directly below the same student's tuition row of the same month
         function groupArrearsUnderTuition(data) {
             let isArr = r => (r.type || '').trim().toLowerCase() === 'arrears';
             let keyOf = r => `${(r.admis_no || r.student_name || '').trim().toLowerCase()}__${(r.period || '').trim()}`;
@@ -560,7 +567,7 @@
                     placed.add(k);
                 }
             });
-            // jin arrears rows ki tuition row filter mein nahi hai, wo end mein
+            // arrears rows whose tuition row is not in the current filter go at the end
             data.forEach(r => { if(isArr(r) && !placed.has(keyOf(r))) result.push(r); });
             return result;
         }
@@ -601,9 +608,9 @@
                 let isArrearsRow = (row.type || '').trim().toLowerCase() === 'arrears';
                 tr.className = isArrearsRow ? "border-b bg-rose-50/60 hover:bg-rose-50 transition" : "border-b hover:bg-slate-50 transition";
                 tr.innerHTML = `
-                    <td class="p-2.5 text-center"><input type="checkbox" class="row-checkbox" data-voucher="${vId}"></td>
+                    <td class="p-2.5 text-center"><input type="checkbox" class="row-checkbox" data-voucher="${vId}" ${isLockedVoucher(vId) ? 'disabled title="A payment is recorded in Accounts - delete it from Accounts first"' : ''}></td>
                     <td class="p-2.5 font-medium">${isArrearsRow ? '<span class="text-rose-400">↳</span>' : ++srCounter}</td>
-                    <td class="p-2.5 font-mono text-indigo-900">${vId || '-'}</td>
+                    <td class="p-2.5 font-mono text-indigo-900">${vId || '-'}${isLockedVoucher(vId) ? ' <span title="A payment is recorded in Accounts - delete it from Accounts first">🔒</span>' : ''}</td>
                     <td class="p-2.5 font-mono text-slate-700">${row.admis_no || '-'}</td>
                     <td class="p-2.5 font-semibold">
                         <a href="javascript:void(0)" onclick='openStudentLedger(${JSON.stringify(row.student_name)})' class="text-indigo-600 hover:text-indigo-800 underline transition">${row.student_name || '-'}</a>
@@ -700,7 +707,7 @@
                 if(!confirmed) return;
 
                 // Pick first student or loop through students
-                // Yahan hum pehle student ka WhatsApp message open kar rahe hain ya student directory se mobile number match kar sakte hain
+                // Open the WhatsApp message for the first student, matching the mobile number from the students directory
                 let targetStudentName = studentNamesList[0];
                 let info = studentPendingMap[targetStudentName];
                 
@@ -741,7 +748,7 @@
                     let m2 = monthOrder[(b.period || '').trim()] || 99;
                     let a1 = (a.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
                     let a2 = (b.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
-                    return (m1 - m2) || (a2 - a1);   // same month mein arrears pehle deduct
+                    return (m1 - m2) || (a2 - a1);   // arrears are deducted first within the same month
                 });
 
                 let newestVoucherToSave = [...currentFilteredVouchersCache].sort((a, b) => {
@@ -749,7 +756,7 @@
                     let m2 = monthOrder[(b.period || '').trim()] || 0;
                     let a1 = (a.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
                     let a2 = (b.type || '').trim().toLowerCase() === 'arrears' ? 1 : 0;
-                    return (m2 - m1) || (a1 - a2);   // advance arrears row par nahi, tuition voucher par jaye
+                    return (m2 - m1) || (a1 - a2);   // advance goes to the tuition voucher, not the arrears row
                 })[0];
 
                 let accountsPayloads = [];
@@ -856,17 +863,28 @@
                 return;
             }
 
-            showCustomConfirm(`Are you sure you want to delete ${selectedCheckboxes.length} selected voucher(s)?`, async (confirmed) => {
+            let selectedIds = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-voucher')).filter(id => id);
+            let lockedList = [], voucherIds = [];
+            selectedIds.forEach(id => {
+                if(isLockedVoucher(id)) {
+                    let row = allFeesCache.find(r => (r.voucher_id || '').trim() === id) || {};
+                    lockedList.push(`${row.student_name || id} (${row.type || ''} ${row.period || ''}) - PKR ${row.totalPaid || 0} paid`);
+                } else voucherIds.push(id);
+            });
+
+            if(voucherIds.length === 0) {
+                showCustomAlert("These vouchers cannot be deleted because a payment is recorded in Accounts.\n\nPlease delete the payment from the Accounts & Daybook page first, then delete the voucher here.\n\n" + lockedList.slice(0, 8).join("\n") + (lockedList.length > 8 ? `\n...and ${lockedList.length - 8} more` : ''));
+                return;
+            }
+
+            let confirmMsg = `Are you sure you want to delete ${voucherIds.length} selected voucher(s)?`;
+            if(lockedList.length > 0) confirmMsg += `\n\n${lockedList.length} voucher(s) will be skipped because their payment is recorded in Accounts.`;
+
+            showCustomConfirm(confirmMsg, async (confirmed) => {
                 if(!confirmed) return;
 
                 showLoading("Deleting Selected Vouchers Instantly...");
                 let config = getSupabaseConfig();
-                let voucherIds = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-voucher')).filter(id => id);
-
-                if(voucherIds.length === 0) {
-                    hideLoading();
-                    return;
-                }
 
                 try {
                     let idsString = voucherIds.map(id => `"${id}"`).join(',');
@@ -881,7 +899,9 @@
 
                     hideLoading();
                     if(res.ok) {
-                        showCustomAlert("Selected Vouchers Deleted Successfully!");
+                        showCustomAlert(lockedList.length > 0
+                            ? `${voucherIds.length} voucher(s) deleted.\n${lockedList.length} voucher(s) skipped (payment is recorded in Accounts).`
+                            : "Selected Vouchers Deleted Successfully!");
                         initFeePage();
                     } else {
                         let err = await res.text();
@@ -902,7 +922,7 @@
 
             let totalPayable = 0, totalPaid = 0, totalBalance = 0, studentClass = '';
 
-            // Same month mein arrears wala row pehle
+            // Arrears row first within the same month
             studentVouchers.sort((a, b) => {
                 let m1 = monthOrder[(a.period || '').trim()] || 99;
                 let m2 = monthOrder[(b.period || '').trim()] || 99;
@@ -1115,7 +1135,7 @@
                         existingKeys.add(tKey2);
                     }
 
-                    // Previous year arrears: SIRF January mein, alag row (voucher) ki surat mein
+                    // Previous year arrears: January only, as a separate row (voucher)
                     if (period === ARREARS_PERIOD) {
                         let arrNum = parseFloat(getStudentArrears(student)) || 0;
                         let arKey1 = `${adm}_${period}_arrears`;
