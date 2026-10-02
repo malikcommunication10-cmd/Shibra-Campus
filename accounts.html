@@ -37,7 +37,7 @@
             <p id="confirmMessage" class="text-sm font-medium text-slate-700 text-center whitespace-pre-line"></p>
             <div class="flex space-x-2 pt-1">
                 <button id="confirmCancelBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold transition">Cancel</button>
-                <button id="confirmOkBtn" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl text-sm font-semibold transition">Haan, delete</button>
+                <button id="confirmOkBtn" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl text-sm font-semibold transition">Yes, delete</button>
             </div>
         </div>
     </div>
@@ -67,7 +67,7 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Accounts & Daybook</h2>
-                    <p class="text-sm text-slate-500">Receipts, payments, cash / bank balances aur reports — sab ek jagah</p>
+                    <p class="text-sm text-slate-500">Receipts, payments, cash / bank balances and reports — all in one place</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button onclick="openEntry('receipt')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➕ Receipt</button>
@@ -81,15 +81,15 @@
             <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
                 <div class="flex flex-wrap items-end gap-3">
                     <div>
-                        <label class="block text-[11px] font-medium text-slate-500 mb-1">Muddat (Period)</label>
+                        <label class="block text-[11px] font-medium text-slate-500 mb-1">Period</label>
                         <select id="gPeriod" onchange="onPeriodChange()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
-                            <option value="today">Aaj</option>
-                            <option value="yesterday">Kal</option>
-                            <option value="last7">Pichle 7 din</option>
-                            <option value="month" selected>Is mahine</option>
-                            <option value="lastmonth">Pichla mahina</option>
-                            <option value="year">Is saal</option>
-                            <option value="all">Sab (All time)</option>
+                            <option value="today">Today</option>
+                            <option value="yesterday">Yesterday</option>
+                            <option value="last7">Last 7 days</option>
+                            <option value="month" selected>This month</option>
+                            <option value="lastmonth">Last month</option>
+                            <option value="year">This year</option>
+                            <option value="all">All time</option>
                             <option value="custom">Custom...</option>
                         </select>
                     </div>
@@ -98,7 +98,7 @@
                     <div>
                         <label class="block text-[11px] font-medium text-slate-500 mb-1">Account</label>
                         <select id="gWallet" onchange="renderAll()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
-                            <option value="ALL">Sab accounts</option>
+                            <option value="ALL">All accounts</option>
                             <option value="cash">💵 Cash in Hand</option>
                             <option value="bank">🏦 Bank</option>
                             <option value="online">📱 Online / JazzCash</option>
@@ -128,20 +128,20 @@
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 xl:col-span-2 print-card">
                         <div class="flex justify-between items-center mb-2">
-                            <h3 class="text-sm font-bold text-indigo-900">Mahana Income vs Expense</h3>
+                            <h3 class="text-sm font-bold text-indigo-900">Monthly Income vs Expense</h3>
                             <div class="flex gap-3 text-[11px] text-slate-500"><span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500 mr-1"></span>Income</span><span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-rose-500 mr-1"></span>Expense</span></div>
                         </div>
                         <div id="monthChart" class="overflow-x-auto"></div>
                     </div>
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
-                        <h3 class="text-sm font-bold text-indigo-900 mb-3">Sab se zyada kharch (Top heads)</h3>
+                        <h3 class="text-sm font-bold text-indigo-900 mb-3">Top Expense Heads</h3>
                         <div id="topExpenses" class="space-y-3"></div>
                     </div>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
                     <div class="flex justify-between items-center mb-2">
-                        <h3 class="text-sm font-bold text-indigo-900">Haal ki entries</h3>
-                        <button onclick="showTab('daybook')" class="text-xs text-indigo-600 hover:underline no-print">Poora Daybook dekhein</button>
+                        <h3 class="text-sm font-bold text-indigo-900">Recent Entries</h3>
+                        <button onclick="showTab('daybook')" class="text-xs text-indigo-600 hover:underline no-print">View full Daybook</button>
                     </div>
                     <div class="overflow-x-auto"><table class="w-full text-xs text-left"><tbody id="recentBody"></tbody></table></div>
                 </div>
@@ -152,18 +152,18 @@
                 <div id="dbStrip" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
                 <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
                     <div class="flex flex-wrap gap-2 items-center">
-                        <input id="dbSearch" oninput="resetLimitRender()" type="text" placeholder="Voucher no, naam, head, particulars..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[200px]">
+                        <input id="dbSearch" oninput="resetLimitRender()" type="text" placeholder="Voucher no, name, head, particulars..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[200px]">
                         <select id="dbType" onchange="resetLimitRender()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
-                            <option value="ALL">Sab types</option>
+                            <option value="ALL">All types</option>
                             <option value="receipt">Receipts</option>
                             <option value="payment">Payments</option>
                             <option value="transfer">Transfers</option>
-                            <option value="fee">Sirf fee collection</option>
-                            <option value="manual">Sirf manual entries</option>
+                            <option value="fee">Fee collection only</option>
+                            <option value="manual">Manual entries only</option>
                         </select>
                         <select id="dbOrder" onchange="renderDaybook()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
-                            <option value="desc">Nayi pehle</option>
-                            <option value="asc">Purani pehle (ledger)</option>
+                            <option value="desc">Newest first</option>
+                            <option value="asc">Oldest first (ledger)</option>
                         </select>
                         <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
                         <button onclick="exportDaybookCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
@@ -188,7 +188,7 @@
             <section id="tab-fees" class="hidden space-y-4">
                 <div id="feeCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
                 <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print flex flex-wrap gap-2 items-center">
-                    <input id="feSearch" oninput="renderFeeTab()" type="text" placeholder="Student ka naam, admis no, voucher..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[200px]">
+                    <input id="feSearch" oninput="renderFeeTab()" type="text" placeholder="Student name, admission no, voucher..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[200px]">
                     <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
                     <button onclick="exportFeeCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
                 </div>
@@ -222,8 +222,8 @@
             <section id="tab-wallets" class="hidden space-y-4">
                 <div id="walletCards" class="grid grid-cols-1 md:grid-cols-4 gap-3"></div>
                 <div class="flex flex-wrap gap-2 no-print">
-                    <button onclick="openEntry('transfer')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">🔁 Cash se Bank / Bank se Cash transfer</button>
-                    <button onclick="openEntry('opening')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">🏁 Opening balance daalein</button>
+                    <button onclick="openEntry('transfer')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">🔁 Transfer between Cash / Bank / Online</button>
+                    <button onclick="openEntry('opening')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">🏁 Add opening balance</button>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
                     <table class="w-full text-left border-collapse text-xs">
@@ -283,8 +283,8 @@
                     </div>
                 </div>
                 <div id="emTitleWrap">
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Particulars (kis cheez ke liye / kis se / kisko)</label>
-                    <input id="emTitle2" type="text" placeholder="Maslan: Bijli ka bill September" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Particulars (what for / from whom / to whom)</label>
+                    <input id="emTitle2" type="text" placeholder="e.g. Electricity bill for September" class="w-full border rounded-lg p-2.5 text-sm outline-none">
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
@@ -355,7 +355,7 @@ function confirmBox(message, okLabel, onOk) {
     let modal = $('confirmModal'); modal.classList.remove('hidden');
     let ok = $('confirmOkBtn'), cancel = $('confirmCancelBtn');
     let nOk = ok.cloneNode(true), nCancel = cancel.cloneNode(true);
-    nOk.innerText = okLabel || 'Haan';
+    nOk.innerText = okLabel || 'Yes';
     ok.parentNode.replaceChild(nOk, ok); cancel.parentNode.replaceChild(nCancel, cancel);
     nOk.addEventListener('click', () => { modal.classList.add('hidden'); onOk(); });
     nCancel.addEventListener('click', () => modal.classList.add('hidden'));
@@ -414,7 +414,7 @@ function normalize(row, idx) {
     } else if(up.startsWith('RV-')) {
         Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt || outAmt, head: from || 'Other Income', title: desc, manual: true });
     } else if(/^(cash receipt|cash payment|salary payment)$/i.test(from)) {
-        // purani accounts page ki entries (type from_account mein, title to_account mein, mode remarks mein)
+        // entries from the old accounts page (type in from_account, title in to_account, payment mode in remarks)
         let isReceipt = inAmt > 0 && outAmt === 0;
         Object.assign(e, {
             kind: isReceipt ? 'receipt' : 'payment', wallet: normWallet(rem), amount: isReceipt ? inAmt : outAmt,
@@ -424,7 +424,7 @@ function normalize(row, idx) {
     } else if(outAmt > 0 && inAmt === 0) {
         Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt, head: to || desc || 'Misc Expense', title: desc });
     } else {
-        // fee payments (fees.html) aur doosri receipts: from = head, to = wallet
+        // fee payments (fees.html) and other receipts: from = head, to = wallet
         Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt, head: from || 'Receipt', title: desc });
         if(/^V-\d+/i.test(id)) {
             e.isFee = true;
@@ -440,7 +440,7 @@ function normalize(row, idx) {
 }
 
 async function initAccounts() {
-    showLoading('Accounts load ho rahe hain...');
+    showLoading('Loading accounts...');
     let c = getSupabaseConfig();
     try {
         let [aRes, fRes] = await Promise.all([
@@ -450,14 +450,14 @@ async function initAccounts() {
         let acc = await aRes.json(), fees = await fRes.json();
         feesByVoucher = {};
         (Array.isArray(fees) ? fees : []).forEach(f => { feesByVoucher[String(f.voucher_id || '').trim()] = f; });
-        if(!Array.isArray(acc)) throw new Error('accounts load nahi hua');
+        if(!Array.isArray(acc)) throw new Error('accounts failed to load');
         entries = acc.map(normalize);
         entryById = {}; entries.forEach(e => entryById[e.id] = e);
         if(!$('gFrom').value) applyPreset();
         renderAll();
     } catch (e) {
         console.error(e);
-        toast('Data load nahi ho saka. Internet ya API settings check karein.', false);
+        toast('Could not load data. Check your internet connection or API settings.', false);
     }
     hideLoading();
 }
@@ -481,7 +481,7 @@ function onPeriodChange() { applyPreset(); renderAll(); }
 function onCustomDate() { $('gPeriod').value = 'custom'; renderAll(); }
 function getRange() { return { from: $('gFrom').value || '0000-01-01', to: $('gTo').value || '9999-12-31', wallet: $('gWallet').value }; }
 
-// Wallet delta: ye entry is account (wallet) ka balance kitna badlati hai
+// Wallet delta: how much this entry changes the balance of an account (wallet)
 function delta(e, w) {
     if(e.kind === 'receipt' || e.kind === 'opening') return (w === 'ALL' || e.wallet === w) ? e.amount : 0;
     if(e.kind === 'payment') return (w === 'ALL' || e.wallet === w) ? -e.amount : 0;
@@ -505,7 +505,7 @@ function showTab(t) {
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
     const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank' };
     let r = getRange();
-    $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} se ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'Sab accounts' : WALLETS[r.wallet].label})`;
+    $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;
 }
 function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
 
@@ -532,7 +532,7 @@ function renderOverview() {
     let cards = [
         { t: 'Total Income', v: 'PKR ' + fmt(income), c: 'text-emerald-600', s: `Fee: PKR ${fmt(feeIn)}` },
         { t: 'Total Expense', v: 'PKR ' + fmt(expense), c: 'text-rose-600' },
-        { t: net >= 0 ? 'Bachat (Surplus)' : 'Ghaata (Deficit)', v: 'PKR ' + fmt(Math.abs(net)), c: net >= 0 ? 'text-indigo-700' : 'text-rose-600' },
+        { t: net >= 0 ? 'Surplus' : 'Deficit', v: 'PKR ' + fmt(Math.abs(net)), c: net >= 0 ? 'text-indigo-700' : 'text-rose-600' },
         { t: 'Fee Collection', v: 'PKR ' + fmt(feeIn), c: 'text-emerald-700', s: `${list.filter(e => e.isFee).length} receipts` },
         { t: 'Closing balance', v: 'PKR ' + fmt(closing), c: closing >= 0 ? 'text-slate-900' : 'text-rose-600', s: r.wallet === 'ALL' ? 'Cash + Bank + Online' : WALLETS[r.wallet].label }
     ];
@@ -565,14 +565,14 @@ function renderOverview() {
     let heads = {};
     list.filter(e => e.kind === 'payment' && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { heads[e.headLabel] = (heads[e.headLabel] || 0) + e.amount; });
     let arr = Object.entries(heads).sort((a, b) => b[1] - a[1]).slice(0, 6), tot = Object.values(heads).reduce((s, v) => s + v, 0);
-    $('topExpenses').innerHTML = arr.length ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, 'bg-rose-500')).join('') : '<p class="text-xs text-slate-400">Is muddat mein koi kharch nahi.</p>';
+    $('topExpenses').innerHTML = arr.length ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, 'bg-rose-500')).join('') : '<p class="text-xs text-slate-400">No expenses in this period.</p>';
 
     // recent
     let recent = [...list].reverse().slice(0, 8);
     $('recentBody').innerHTML = recent.length ? recent.map(e => {
         let d = delta(e, r.wallet);
         return `<tr class="border-b"><td class="py-2 pr-3 text-slate-500 whitespace-nowrap">${fmtDate(e.date)}</td><td class="py-2 pr-3"><span class="px-2 py-0.5 rounded-md border ${KIND_META[e.kind].cls}">${KIND_META[e.kind].label}</span></td><td class="py-2 pr-3 text-slate-700">${esc(entryLabel(e))}</td><td class="py-2 text-right font-bold ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'} whitespace-nowrap">${e.kind === 'transfer' && r.wallet === 'ALL' ? 'PKR ' + fmt(e.amount) : (d >= 0 ? '+ ' : '- ') + 'PKR ' + fmt(Math.abs(d))}</td></tr>`;
-    }).join('') : '<tr><td class="py-4 text-center text-slate-400">Is muddat mein koi entry nahi.</td></tr>';
+    }).join('') : '<tr><td class="py-4 text-center text-slate-400">No entries in this period.</td></tr>';
 }
 
 function entryLabel(e) {
@@ -631,8 +631,8 @@ function renderDaybook() {
                 ${canEdit ? `<button onclick="editEntry(${esc(JSON.stringify(e.id))})" title="Edit" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>` : ''}
                 <button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>
             </td></tr>`;
-    }).join('') : `<tr><td colspan="9" class="p-8 text-center text-slate-400">Is muddat mein koi entry nahi mili.</td></tr>`;
-    $('dbMore').innerHTML = rows.length > dbLimit ? `<button onclick="dbLimit+=300;renderDaybook()" class="bg-white border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold">Aur dikhayein (${rows.length - dbLimit} baaki)</button>` : '';
+    }).join('') : `<tr><td colspan="9" class="p-8 text-center text-slate-400">No entries found in this period.</td></tr>`;
+    $('dbMore').innerHTML = rows.length > dbLimit ? `<button onclick="dbLimit+=300;renderDaybook()" class="bg-white border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold">Show more (${rows.length - dbLimit} remaining)</button>` : '';
 }
 
 function exportCsv(name, header, rows) {
@@ -645,7 +645,7 @@ function exportCsv(name, header, rows) {
 }
 function exportDaybookCsv() {
     let rows = daybookRows();
-    if(!rows.length) { toast('Export ke liye koi entry nahi.', false); return; }
+    if(!rows.length) { toast('No entries to export.', false); return; }
     exportCsv('daybook', ['Date', 'Voucher', 'Type', 'Account', 'Details', 'Receipt', 'Payment', 'Balance', 'Notes'],
         rows.map(e => [e.date, e.id, KIND_META[e.kind].label, e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label, entryLabel(e), e._d > 0 ? e._d : '', e._d < 0 ? -e._d : '', e._bal, e.notes]));
 }
@@ -662,7 +662,7 @@ function renderFeeTab() {
     let byW = { cash: 0, bank: 0, online: 0 }; list.forEach(e => byW[e.wallet] += e.amount);
     let students = new Set(list.map(e => (e.fee && e.fee.student) || e.id)).size;
     let cards = [
-        { t: 'Kul fee collection', v: 'PKR ' + fmt(total), c: 'text-emerald-600', s: `${list.length} receipts · ${students} students` },
+        { t: 'Total fee collection', v: 'PKR ' + fmt(total), c: 'text-emerald-600', s: `${list.length} receipts · ${students} students` },
         ...Object.keys(WALLETS).map(w => ({ t: WALLETS[w].icon + ' ' + WALLETS[w].label, v: 'PKR ' + fmt(byW[w]), c: 'text-slate-800' }))
     ];
     $('feeCards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`).join('');
@@ -678,12 +678,12 @@ function renderFeeTab() {
         <td class="p-2.5 whitespace-nowrap no-print">
             <button onclick="printVoucher(${esc(JSON.stringify(e.id))})" title="Print receipt" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button>
             <button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete payment" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>
-        </td></tr>`).join('') : `<tr><td colspan="9" class="p-8 text-center text-slate-400">Is muddat mein koi fee collection nahi.</td></tr>`;
+        </td></tr>`).join('') : `<tr><td colspan="9" class="p-8 text-center text-slate-400">No fee collection in this period.</td></tr>`;
     $('feFoot').innerHTML = list.length ? `<tr><td colspan="7" class="p-3 text-right">Total:</td><td class="p-3 text-right text-emerald-700">PKR ${fmt(total)}</td><td class="no-print"></td></tr>` : '';
 }
 function exportFeeCsv() {
     let list = feeList();
-    if(!list.length) { toast('Export ke liye koi record nahi.', false); return; }
+    if(!list.length) { toast('No records to export.', false); return; }
     exportCsv('fee-collection', ['Date', 'Voucher', 'Student', 'Admis No', 'Class', 'Fee type', 'Period', 'Account', 'Amount'],
         list.map(e => [e.date, e.id, (e.fee || {}).student, (e.fee || {}).adm, (e.fee || {}).cls, (e.fee || {}).type, (e.fee || {}).period, WALLETS[e.wallet].label, e.amount]));
 }
@@ -697,7 +697,7 @@ function renderHeads() {
         let arr = Object.entries(map).sort((a, b) => b[1] - a[1]), tot = arr.reduce((s, x) => s + x[1], 0);
         $(el).innerHTML = arr.length
             ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, color)).join('') + `<div class="flex justify-between text-sm font-bold border-t pt-2 mt-2"><span>Total</span><span>PKR ${fmt(tot)}</span></div>`
-            : '<p class="text-xs text-slate-400">Is muddat mein koi entry nahi.</p>';
+            : '<p class="text-xs text-slate-400">No entries in this period.</p>';
     };
     build('receipt', 'bg-emerald-500', 'incomeHeads');
     build('payment', 'bg-rose-500', 'expenseHeads');
@@ -710,9 +710,9 @@ function renderWallets() {
     let cards = Object.keys(WALLETS).map(w => {
         let b = balanceUpTo(end, w); total += b;
         return `<button onclick="$('gWallet').value='${w}';renderAll();showTab('daybook')" class="text-left bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-indigo-300 transition print-card">
-            <div class="text-xs text-slate-500">${WALLETS[w].icon} ${WALLETS[w].label}</div><div class="text-xl font-extrabold ${b >= 0 ? 'text-slate-900' : 'text-rose-600'} mt-1">PKR ${fmt(b)}</div><div class="text-[11px] text-slate-400 mt-0.5">${fmtDate(end)} tak</div></button>`;
+            <div class="text-xs text-slate-500">${WALLETS[w].icon} ${WALLETS[w].label}</div><div class="text-xl font-extrabold ${b >= 0 ? 'text-slate-900' : 'text-rose-600'} mt-1">PKR ${fmt(b)}</div><div class="text-[11px] text-slate-400 mt-0.5">as of ${fmtDate(end)}</div></button>`;
     });
-    cards.push(`<div class="bg-indigo-900 text-white rounded-2xl p-4 shadow-sm"><div class="text-xs text-indigo-200">Kul balance</div><div class="text-xl font-extrabold mt-1">PKR ${fmt(total)}</div><div class="text-[11px] text-indigo-300 mt-0.5">Cash + Bank + Online</div></div>`);
+    cards.push(`<div class="bg-indigo-900 text-white rounded-2xl p-4 shadow-sm"><div class="text-xs text-indigo-200">Total balance</div><div class="text-xl font-extrabold mt-1">PKR ${fmt(total)}</div><div class="text-[11px] text-indigo-300 mt-0.5">Cash + Bank + Online</div></div>`);
     $('walletCards').innerHTML = cards.join('');
 
     let inRange = entries.filter(e => e.date >= r.from && e.date <= r.to);
@@ -745,7 +745,7 @@ function setEntryKind(kind) {
     $('emHeadWrap').classList.toggle('hidden', isT || isO);
     $('emWallet2Wrap').classList.toggle('hidden', !isT);
     $('emTitleWrap').classList.toggle('hidden', isO);
-    $('emWalletLabel').innerText = isT ? 'From account' : (kind === 'payment' ? 'Kis account se diya' : (kind === 'receipt' ? 'Kis account mein aaya' : 'Account'));
+    $('emWalletLabel').innerText = isT ? 'From account' : (kind === 'payment' ? 'Paid from account' : (kind === 'receipt' ? 'Received in account' : 'Account'));
     $('emHeadLabel').innerText = kind === 'payment' ? 'Expense head (category)' : 'Income head (source)';
     $('headList').innerHTML = (kind === 'payment' ? EXPENSE_HEADS : INCOME_HEADS).map(h => `<option value="${esc(h)}">`).join('');
     if(!editingId) $('emVoucherNo').innerText = 'Voucher no: ' + (editingId || 'auto');
@@ -775,14 +775,14 @@ async function saveEntry() {
     let date = $('emDate').value, amount = parseFloat($('emAmount').value) || 0;
     let head = $('emHead').value.trim(), title = $('emTitle2').value.trim(), notes = $('emNotes').value.trim();
     let w = $('emWallet').value, w2 = $('emWallet2').value;
-    if(!date) { toast('Date likhein.', false); return; }
-    if(amount <= 0) { toast('Amount 0 se zyada hona chahiye.', false); return; }
-    if((kind === 'receipt' || kind === 'payment') && !head) { toast('Head (category) likhein ya chunein.', false); return; }
-    if(kind === 'transfer' && w === w2) { toast('From aur To account alag hone chahiye.', false); return; }
+    if(!date) { toast('Please enter a date.', false); return; }
+    if(amount <= 0) { toast('Amount must be greater than 0.', false); return; }
+    if((kind === 'receipt' || kind === 'payment') && !head) { toast('Please enter or select a head (category).', false); return; }
+    if(kind === 'transfer' && w === w2) { toast('From and To accounts must be different.', false); return; }
 
     let id = editingId || genVoucherNo(kind);
     let oldEntry = editingId ? entryById[editingId] : null;
-    if(oldEntry && oldEntry.legacy) id = genVoucherNo(kind);   // purani entry naye format mein convert ho jayegi
+    if(oldEntry && oldEntry.legacy) id = genVoucherNo(kind);   // old-format entry gets converted to the new format
 
     let payload;
     if(kind === 'receipt')       payload = { voucher_id: id, from_account: head, to_account: w, description: title || head, amount_in: amount, amount_out: 0, date, remarks: notes };
@@ -790,7 +790,7 @@ async function saveEntry() {
     else if(kind === 'transfer') payload = { voucher_id: id, from_account: w, to_account: w2, description: title || 'Account transfer', amount_in: amount, amount_out: amount, date, remarks: notes };
     else                         payload = { voucher_id: id, from_account: 'Opening Balance', to_account: w, description: 'Opening Balance', amount_in: amount, amount_out: 0, date, remarks: notes };
 
-    showLoading('Save ho raha hai...');
+    showLoading('Saving...');
     try {
         let c = getSupabaseConfig(), res;
         if(editingId) {
@@ -798,11 +798,11 @@ async function saveEntry() {
         } else {
             res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(payload) });
         }
-        if(!res.ok) { let t = await res.text(); hideLoading(); toast('Save nahi hua: ' + t, false); return; }
+        if(!res.ok) { let t = await res.text(); hideLoading(); toast('Could not save: ' + t, false); return; }
         closeEntry();
-        toast(editingId ? 'Voucher update ho gaya.' : `Voucher ${id} save ho gaya.`);
+        toast(editingId ? 'Voucher updated.' : `Voucher ${id} saved.`);
         await initAccounts();
-    } catch (err) { hideLoading(); console.error(err); toast('Database se connect nahi ho saka.', false); }
+    } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
 }
 
 // ====================================================================================
@@ -811,17 +811,17 @@ async function saveEntry() {
 function deleteEntry(id) {
     let e = entryById[id]; if(!e) return;
     let msg = e.isFee
-        ? `Ye ${e.fee.student || ''} ki fee payment hai (PKR ${fmt(e.amount)}, ${e.fee.period || ''}).\n\nDelete karne par is fee voucher ka baqaya Fee Vouchers page par dobara khul jayega.\n\nDelete karein?`
-        : `${KIND_META[e.kind].label} voucher ${e.id} (PKR ${fmt(e.amount)}) hamesha ke liye delete ho jayega. Delete karein?`;
-    confirmBox(msg, 'Haan, delete', async () => {
-        showLoading('Delete ho raha hai...');
+        ? `This is a fee payment for ${e.fee.student || 'a student'} (PKR ${fmt(e.amount)}, ${e.fee.period || ''}).\n\nDeleting it will reopen the balance on the Fee Vouchers page.\n\nDelete it?`
+        : `${KIND_META[e.kind].label} voucher ${e.id} (PKR ${fmt(e.amount)}) will be permanently deleted. Delete it?`;
+    confirmBox(msg, 'Yes, delete', async () => {
+        showLoading('Deleting...');
         try {
             let c = getSupabaseConfig();
             let res = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=representation" }) });
-            if(!res.ok) { hideLoading(); toast('Delete nahi hua: ' + await res.text(), false); return; }
+            if(!res.ok) { hideLoading(); toast('Could not delete: ' + await res.text(), false); return; }
             let gone = await res.json();
-            if(!Array.isArray(gone) || gone.length === 0) { hideLoading(); toast('Entry delete nahi hui (permission / RLS check karein).', false); return; }
-            toast('Entry delete ho gayi.');
+            if(!Array.isArray(gone) || gone.length === 0) { hideLoading(); toast('Entry was not deleted (check permissions / RLS).', false); return; }
+            toast('Entry deleted.');
             await initAccounts();
         } catch (err) { hideLoading(); toast('Connection error.', false); }
     });
@@ -876,7 +876,7 @@ function closeSettingsModal() { $('settingsModal').classList.add('hidden'); }
 function saveApiCredentials() {
     let url = $('apiUrlInput').value.trim(), key = $('apiKeyInput').value.trim();
     if(url && key) { localStorage.setItem('supabase_url', url); localStorage.setItem('supabase_key', key); closeSettingsModal(); initAccounts(); }
-    else toast('Sahi URL aur Key likhein.', false);
+    else toast('Please enter a valid URL and Key.', false);
 }
 document.addEventListener('keydown', ev => { if(ev.key === 'Escape') { closeSettingsModal(); closeEntry(); } });
 </script>
