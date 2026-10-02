@@ -3,21 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Concept School Shibra Campus - Book Store</title>
+    <title>Concept School Shibra Campus - Book Store & Inventory</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
+        .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
+        .tab-off:hover { background:#f1f5f9; }
+        #printHeader { display:none; }
+        @media print {
+            aside, .no-print, #txModal, #settingsModal, #confirmModal, #toast, #loadingOverlay, #fab, #mobileBar { display:none !important; }
+            #printHeader { display:block !important; margin-bottom:10px; }
+            body { background:#fff !important; }
+            main { padding:0 !important; }
+            .print-card { box-shadow:none !important; border:1px solid #cbd5e1 !important; }
+            .scroll-area { max-height:none !important; overflow:visible !important; }
+            .md-table { display:block !important; } .mobile-cards { display:none !important; }
+            table { font-size:10px !important; }
+        }
+    </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans" onload="initBooksPage()">
+<body class="bg-slate-50 text-slate-800 font-sans" onload="initBooks()">
+
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/40 z-[90] hidden flex flex-col items-center justify-center text-white">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-3"></div>
+        <p id="loadingText" class="text-sm font-semibold">Loading...</p>
+    </div>
+    <div id="toast" class="fixed top-4 right-4 left-4 sm:left-auto z-[100] hidden max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium"></div>
+
+    <!-- CONFIRM -->
+    <div id="confirmModal" class="fixed inset-0 bg-black/60 z-[80] hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
+            <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto text-xl">❓</div>
+            <p id="confirmMessage" class="text-sm font-medium text-slate-700 text-center whitespace-pre-line"></p>
+            <div class="flex space-x-2 pt-1">
+                <button id="confirmCancelBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold transition">Cancel</button>
+                <button id="confirmOkBtn" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl text-sm font-semibold transition">Yes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MOBILE TOP BAR -->
+    <div id="mobileBar" class="md:hidden sticky top-0 z-40 bg-indigo-900 text-white flex items-center justify-between px-4 py-3 shadow">
+        <div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus · Book Store</div></div>
+        <button onclick="toggleNav()" class="text-2xl px-2" aria-label="Menu">☰</button>
+    </div>
+
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
-        <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
-            <div class="p-5 border-b border-indigo-800">
+        <aside id="sideNav" class="max-md:hidden w-full md:w-64 md:sticky md:top-0 md:h-screen md:self-start md:overflow-y-auto bg-indigo-900 text-white flex flex-col shadow-xl">
+            <div class="p-5 border-b border-indigo-800 hidden md:block">
                 <h1 class="font-bold text-base leading-tight">Concept School</h1>
                 <p class="text-xs text-indigo-300">Shibra Campus</p>
             </div>
             <nav class="flex-1 p-4 space-y-2">
                 <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
                 <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
+                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Updation</span></a>
                 <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💸 <span>Fee Vouchers</span></a>
+                <a href="followups.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📞 <span>Follow-up Calls</span></a>
                 <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">📚 <span>Book Store</span></a>
                 <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
                 <a href="staff.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👩‍🏫 <span>Staff & Payroll</span></a>
@@ -26,107 +69,274 @@
         </aside>
 
         <!-- MAIN -->
-        <main class="flex-1 p-6 md:p-10">
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex justify-between items-center">
+        <main class="flex-1 p-4 md:p-8 min-w-0 pb-24 md:pb-8">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Book Store & Inventory</h2>
-                    <p class="text-sm text-slate-500">Manage Purchases, Sales, Returns & Discounts</p>
+                    <p class="text-sm text-slate-500">Sales, purchases, returns, stock and profit — all in one place</p>
                 </div>
-                <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="openTx('sale')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🛒 New Sale</button>
+                    <button onclick="openTx('purchase')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">📥 Purchase</button>
+                    <button onclick="openTx('sale_return')" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">↩️ Return</button>
+                    <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API</button>
+                </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- FORM SECTION -->
-                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
-                    <h3 class="text-base font-semibold mb-4 text-indigo-700 border-b pb-2">New Transaction</h3>
-                    <form id="transactionForm" onsubmit="saveTransaction(event)" class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-700 mb-1">Transaction Type</label>
-                            <select id="txType" class="w-full border rounded-lg p-2.5 text-sm bg-slate-50 outline-none">
-                                <option value="Purchase">Book Purchase (Vendor)</option>
-                                <option value="Sale">Book Sale (Student)</option>
-                                <option value="Purchase Return">Purchase Return</option>
-                                <option value="Sale Return">Sale Return</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-700 mb-1">Party / Student Name</label>
-                            <input type="text" id="partyName" required placeholder="Name" class="w-full border rounded-lg p-2.5 text-sm outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-700 mb-1">Book / Item Title</label>
-                            <input type="text" id="bookTitle" required placeholder="Book title" class="w-full border rounded-lg p-2.5 text-sm outline-none">
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Quantity</label>
-                                <input type="number" id="qty" required min="1" value="1" oninput="calculateTotal()" class="w-full border rounded-lg p-2.5 text-sm outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Unit Price (PKR)</label>
-                                <input type="number" id="unitPrice" required min="0" placeholder="0" oninput="calculateTotal()" class="w-full border rounded-lg p-2.5 text-sm outline-none">
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3 bg-indigo-50/50 p-3 rounded-lg border border-indigo-100">
-                            <div>
-                                <label class="block text-xs font-medium text-indigo-900 mb-1">Discount Type</label>
-                                <select id="discountType" onchange="calculateTotal()" class="w-full border rounded-lg p-2 text-xs bg-white outline-none">
-                                    <option value="percentage">Percentage (%)</option>
-                                    <option value="fixed">Fixed (PKR)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-indigo-900 mb-1">Discount Value</label>
-                                <input type="number" id="discountVal" min="0" value="0" oninput="calculateTotal()" class="w-full border rounded-lg p-2 text-xs bg-white outline-none">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-900 mb-1">Net Total (PKR)</label>
-                            <input type="text" id="netAmount" readonly class="w-full bg-slate-100 font-bold text-indigo-700 border rounded-lg p-2.5 text-sm outline-none" value="0">
-                        </div>
-                        <button type="submit" id="saveBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition text-sm">Save Transaction</button>
-                    </form>
-                </section>
-
-                <!-- TABLE SECTION -->
-                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
-                    <div class="flex justify-between items-center mb-4 border-b pb-2">
-                        <h3 class="text-base font-semibold text-indigo-700">Inventory Records</h3>
-                        <button onclick="fetchTransactions()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition">🔄 Refresh</button>
-                    </div>
-                    <div class="overflow-x-auto max-h-[500px]">
-                        <table class="w-full text-left border-collapse text-sm">
-                            <thead class="sticky top-0 bg-slate-100">
-                                <tr class="text-slate-600 border-b text-xs">
-                                    <th class="p-3">Type</th>
-                                    <th class="p-3">Party/Student</th>
-                                    <th class="p-3">Book Title</th>
-                                    <th class="p-3">Qty</th>
-                                    <th class="p-3">Net Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody id="transactionTableBody">
-                                <tr><td colspan="5" class="p-4 text-center text-slate-400">Loading records...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
+            <!-- UPGRADE BANNER -->
+            <div id="setupBanner" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-5 mb-4 no-print">
+                <h3 class="font-bold text-amber-900 mb-1">Optional upgrade: enable dates, payment account, notes and Accounts sync</h3>
+                <p class="text-sm text-amber-800 mb-3">The page works as it is, but without a date column the period filters and reports are limited. Run this once in Supabase → SQL Editor, then refresh.</p>
+                <pre id="setupSql" class="bg-white border border-amber-200 rounded-xl p-3 text-xs overflow-x-auto whitespace-pre"></pre>
+                <div class="flex gap-2 mt-3">
+                    <button onclick="copySetupSql()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">Copy SQL</button>
+                    <button onclick="dismissBanner()" class="bg-white border border-amber-300 text-amber-800 px-4 py-2 rounded-xl text-sm font-semibold transition">Hide</button>
+                </div>
             </div>
+
+            <!-- GLOBAL FILTER -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-500 mb-1">Period</label>
+                        <select id="gPeriod" onchange="onPeriodChange()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                            <option value="today">Today</option>
+                            <option value="yesterday">Yesterday</option>
+                            <option value="last7">Last 7 days</option>
+                            <option value="month" selected>This month</option>
+                            <option value="lastmonth">Last month</option>
+                            <option value="year">This year</option>
+                            <option value="all">All time</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-[11px] font-medium text-slate-500 mb-1">From</label><input id="gFrom" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
+                    <div><label class="block text-[11px] font-medium text-slate-500 mb-1">To</label><input id="gTo" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
+                    <button onclick="initBooks()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
+                    <p class="text-[11px] text-slate-400 basis-full sm:basis-auto sm:ml-auto">Stock figures are always current; sales, purchases and profit follow the selected period.</p>
+                </div>
+            </div>
+
+            <!-- TABS -->
+            <div class="flex gap-2 mb-4 no-print overflow-x-auto whitespace-nowrap pb-1">
+                <button data-tab="overview" onclick="showTab('overview')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-on">📊 Overview</button>
+                <button data-tab="inventory" onclick="showTab('inventory')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📦 Inventory</button>
+                <button data-tab="transactions" onclick="showTab('transactions')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🧾 Transactions</button>
+                <button data-tab="parties" onclick="showTab('parties')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">👥 Students & Vendors</button>
+            </div>
+
+            <div id="printHeader">
+                <h2 class="text-lg font-bold">Concept School - Shibra Campus</h2>
+                <p id="printTitle" class="text-sm"></p>
+            </div>
+
+            <!-- OVERVIEW -->
+            <section id="tab-overview" class="space-y-4">
+                <div id="kpiCards" class="grid grid-cols-2 lg:grid-cols-6 gap-3"></div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 xl:col-span-2 print-card">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-sm font-bold text-indigo-900">Monthly Sales vs Purchases</h3>
+                            <div class="flex gap-3 text-[11px] text-slate-500"><span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500 mr-1"></span>Sales</span><span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-indigo-500 mr-1"></span>Purchases</span></div>
+                        </div>
+                        <div id="monthChart" class="overflow-x-auto"></div>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
+                        <h3 class="text-sm font-bold text-indigo-900 mb-3">Top Selling Books</h3>
+                        <div id="topSellers" class="space-y-3"></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
+                        <h3 class="text-sm font-bold text-rose-700 mb-3">Stock Alerts</h3>
+                        <div id="stockAlerts" class="space-y-2"></div>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-sm font-bold text-indigo-900">Recent Transactions</h3>
+                            <button onclick="showTab('transactions')" class="text-xs text-indigo-600 hover:underline no-print">View all</button>
+                        </div>
+                        <div id="recentList" class="divide-y"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- INVENTORY -->
+            <section id="tab-inventory" class="hidden space-y-4">
+                <div id="invCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input id="invSearch" oninput="renderInventory()" type="text" placeholder="Search book title..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[180px]">
+                        <select id="invStatus" onchange="renderInventory()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                            <option value="ALL">All stock</option>
+                            <option value="attn">Low + Out of stock</option>
+                            <option value="low">Low stock</option>
+                            <option value="out">Out of stock</option>
+                            <option value="ok">In stock</option>
+                        </select>
+                        <label class="flex items-center gap-2 text-xs text-slate-600">Low stock at ≤ <input id="lowThreshold" type="number" min="0" onchange="onThresholdChange()" class="w-16 border rounded-lg px-2 py-1.5 text-sm bg-slate-50 outline-none"></label>
+                        <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
+                        <button onclick="exportInventoryCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
+                    </div>
+                    <p id="invCount" class="text-xs text-slate-500 mt-2"></p>
+                </div>
+                <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
+                            <tr><th class="p-2.5">Book / Item</th><th class="p-2.5 text-right">Purchased</th><th class="p-2.5 text-right">Sold</th><th class="p-2.5 text-right">Returns (P/S)</th><th class="p-2.5 text-right">In stock</th><th class="p-2.5 text-right">Avg cost</th><th class="p-2.5 text-right">Sale price</th><th class="p-2.5 text-right">Stock value</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
+                        </thead>
+                        <tbody id="invBody"></tbody>
+                        <tfoot id="invFoot" class="sticky bottom-0 bg-slate-100 font-bold"></tfoot>
+                    </table>
+                </div>
+                <div id="invCards2" class="mobile-cards md:hidden space-y-2"></div>
+            </section>
+
+            <!-- TRANSACTIONS -->
+            <section id="tab-transactions" class="hidden space-y-4">
+                <div id="txCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input id="txSearch" oninput="renderTransactions()" type="text" placeholder="Search name, book, voucher..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[180px]">
+                        <select id="txType" onchange="renderTransactions()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                            <option value="ALL">All types</option>
+                            <option value="sale">Sales</option>
+                            <option value="purchase">Purchases</option>
+                            <option value="sale_return">Sale returns</option>
+                            <option value="purchase_return">Purchase returns</option>
+                        </select>
+                        <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
+                        <button onclick="exportTxCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
+                    </div>
+                    <p id="txCount" class="text-xs text-slate-500 mt-2"></p>
+                </div>
+                <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
+                            <tr><th class="p-2.5">Date</th><th class="p-2.5">Voucher</th><th class="p-2.5">Type</th><th class="p-2.5">Student / Vendor</th><th class="p-2.5">Book / Item</th><th class="p-2.5 text-right">Qty</th><th class="p-2.5 text-right">Unit price</th><th class="p-2.5 text-right">Discount</th><th class="p-2.5 text-right">Net amount</th><th class="p-2.5">Account</th><th class="p-2.5 no-print"></th></tr>
+                        </thead>
+                        <tbody id="txBody"></tbody>
+                    </table>
+                </div>
+                <div id="txCards2" class="mobile-cards md:hidden space-y-2"></div>
+                <div id="txMore" class="text-center no-print"></div>
+            </section>
+
+            <!-- PARTIES -->
+            <section id="tab-parties" class="hidden space-y-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print flex flex-wrap gap-2 items-center">
+                    <input id="pSearch" oninput="renderParties()" type="text" placeholder="Search student / vendor..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[180px]">
+                    <select id="pRole" onchange="renderParties()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                        <option value="ALL">Students & Vendors</option>
+                        <option value="customer">Students / Customers</option>
+                        <option value="vendor">Vendors / Suppliers</option>
+                    </select>
+                    <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
+                </div>
+                <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
+                            <tr><th class="p-2.5">Name</th><th class="p-2.5">Role</th><th class="p-2.5 text-right">Transactions</th><th class="p-2.5 text-right">Net qty</th><th class="p-2.5 text-right">Net amount</th><th class="p-2.5">Last activity</th><th class="p-2.5 no-print"></th></tr>
+                        </thead>
+                        <tbody id="pBody"></tbody>
+                    </table>
+                </div>
+                <div id="pCards" class="mobile-cards md:hidden space-y-2"></div>
+            </section>
         </main>
     </div>
 
-    <!-- Settings Modal -->
+    <!-- FLOATING ACTION BUTTON (mobile) -->
+    <button id="fab" onclick="openTx('sale')" class="md:hidden fixed bottom-5 right-5 z-40 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full w-14 h-14 text-2xl shadow-xl no-print" aria-label="New sale">🛒</button>
+
+    <!-- TRANSACTION MODAL -->
+    <div id="txModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-start sticky top-0 bg-white z-10">
+                <div>
+                    <h3 id="mTitle" class="text-lg font-bold text-indigo-950">New transaction</h3>
+                    <p id="mHint" class="text-xs text-slate-400"></p>
+                </div>
+                <button onclick="closeTx()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-3">
+                <div id="mTypeTabs" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-semibold"></div>
+
+                <div id="mDateWrap">
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Date</label>
+                    <input id="mDate" type="date" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                </div>
+                <div>
+                    <label id="mPartyLabel" class="block text-xs font-medium text-slate-700 mb-1">Student / Customer name</label>
+                    <input id="mParty" list="partyList" type="text" placeholder="Name" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    <datalist id="partyList"></datalist>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Book / Item title</label>
+                    <input id="mTitleIn" list="bookList" type="text" oninput="onTitleInput()" placeholder="Book title" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    <datalist id="bookList"></datalist>
+                    <p id="mStock" class="text-xs mt-1 text-slate-500"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Quantity</label>
+                        <input id="mQty" type="number" min="1" value="1" oninput="calcNet()" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Unit price (PKR)</label>
+                        <input id="mPrice" type="number" min="0" placeholder="0" oninput="calcNet()" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
+                    <div>
+                        <label class="block text-xs font-medium text-indigo-900 mb-1">Discount type</label>
+                        <select id="mDiscType" onchange="calcNet()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none">
+                            <option value="percentage">Percentage (%)</option>
+                            <option value="fixed">Fixed (PKR)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-indigo-900 mb-1">Discount value</label>
+                        <input id="mDiscVal" type="number" min="0" value="0" oninput="calcNet()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none">
+                    </div>
+                </div>
+                <div class="flex justify-between items-center bg-slate-50 border rounded-xl px-4 py-3">
+                    <div class="text-xs text-slate-500">Gross <b id="mGross" class="text-slate-700">0</b> · Discount <b id="mDisc" class="text-slate-700">0</b></div>
+                    <div class="text-right"><div class="text-[11px] text-slate-500">Net total</div><div id="mNet" class="text-xl font-extrabold text-indigo-700">PKR 0</div></div>
+                </div>
+
+                <div id="mExtWrap" class="space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Payment account</label>
+                            <select id="mWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none">
+                                <option value="cash">💵 Cash in Hand</option>
+                                <option value="bank">🏦 Bank</option>
+                                <option value="online">📱 Online / JazzCash</option>
+                            </select>
+                        </div>
+                        <label class="flex items-center gap-2 text-sm text-slate-700 sm:mt-6"><input id="mPostAcc" type="checkbox" checked class="w-4 h-4"> Record in Accounts</label>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
+                        <input id="mNotes" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    </div>
+                </div>
+            </div>
+            <div class="p-5 border-t flex flex-wrap justify-end gap-2 sticky bottom-0 bg-white">
+                <button onclick="closeTx()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="saveTx(true)" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-sm">Save & add another</button>
+                <button id="mSaveBtn" onclick="saveTx(false)" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative space-y-3">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl space-y-3">
             <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚙️ Supabase API Settings</h3>
-            <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label>
-                <input type="text" id="apiUrlInput" class="w-full border rounded-lg p-2 text-sm outline-none">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label>
-                <input type="text" id="apiKeyInput" class="w-full border rounded-lg p-2 text-sm outline-none">
-            </div>
+            <div><label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label><input type="text" id="apiUrlInput" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
+            <div><label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label><input type="text" id="apiKeyInput" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
             <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
                 <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
@@ -134,151 +344,565 @@
         </div>
     </div>
 
-    <!-- JavaScript Logic -->
-    <script>
-        function getSupabaseConfig() {
-            let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
-            let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
-            return { url, key };
-        }
+<script>
+// ====================================================================================
+//  CONFIG
+// ====================================================================================
+const WALLETS = {
+    cash:   { label: 'Cash in Hand',      icon: '💵' },
+    bank:   { label: 'Bank',              icon: '🏦' },
+    online: { label: 'Online / JazzCash', icon: '📱' }
+};
+// 'type' column values stay exactly as the old page saved them
+const KINDS = {
+    sale:            { label: 'Sale',            stored: 'Sale',            cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', stock: -1, money: 'in',  head: 'Book Store Sale' },
+    purchase:        { label: 'Purchase',        stored: 'Purchase',        cls: 'bg-indigo-50 text-indigo-700 border-indigo-200',    stock: +1, money: 'out', head: 'Books Purchase' },
+    sale_return:     { label: 'Sale Return',     stored: 'Sale Return',     cls: 'bg-amber-50 text-amber-700 border-amber-200',       stock: +1, money: 'out', head: 'Book Sale Return' },
+    purchase_return: { label: 'Purchase Return', stored: 'Purchase Return', cls: 'bg-rose-50 text-rose-700 border-rose-200',          stock: -1, money: 'in',  head: 'Books Purchase Return' }
+};
+const SETUP_SQL = `alter table public.books
+  add column if not exists date date,
+  add column if not exists voucher_no text,
+  add column if not exists payment_mode text,
+  add column if not exists notes text;`;
 
-        function initBooksPage() {
-            fetchTransactions();
-        }
+// ====================================================================================
+//  STATE + HELPERS
+// ====================================================================================
+let txs = [], txByUid = {}, items = {}, hasExt = false, hasId = true;
+let txLimit = 200, txKind = 'sale', lastSaved = null;
 
-        function calculateTotal() {
-            let qty = parseFloat(document.getElementById('qty').value) || 0;
-            let price = parseFloat(document.getElementById('unitPrice').value) || 0;
-            let gross = qty * price;
-            let discType = document.getElementById('discountType').value;
-            let discVal = parseFloat(document.getElementById('discountVal').value) || 0;
-            let disc = discType === 'percentage' ? (gross * discVal) / 100 : discVal;
-            let net = gross - disc;
-            document.getElementById('netAmount').value = net > 0 ? net.toFixed(2) : 0;
-        }
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-US');
+const ymd = d => d.toLocaleDateString('en-CA');
+const todayStr = () => ymd(new Date());
+const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+function parseYmd(s) { let [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); }
+function fmtDate(s) { return s ? parseYmd(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; }
+function showLoading(t) { $('loadingText').innerText = t || 'Loading...'; $('loadingOverlay').classList.remove('hidden'); }
+function hideLoading() { $('loadingOverlay').classList.add('hidden'); }
+function toast(msg, ok = true) {
+    let t = $('toast'); t.innerText = msg;
+    t.className = 'fixed top-4 right-4 left-4 sm:left-auto z-[100] max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium ' + (ok ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add('hidden'), 3800);
+}
+function confirmBox(message, okLabel, onOk) {
+    $('confirmMessage').innerText = message;
+    let modal = $('confirmModal'); modal.classList.remove('hidden');
+    let ok = $('confirmOkBtn'), cancel = $('confirmCancelBtn');
+    let nOk = ok.cloneNode(true), nCancel = cancel.cloneNode(true);
+    nOk.innerText = okLabel || 'Yes';
+    ok.parentNode.replaceChild(nOk, ok); cancel.parentNode.replaceChild(nCancel, cancel);
+    nOk.addEventListener('click', () => { modal.classList.add('hidden'); onOk(); });
+    nCancel.addEventListener('click', () => modal.classList.add('hidden'));
+}
+function toggleNav() { $('sideNav').classList.toggle('max-md:hidden'); }
+function getSupabaseConfig() {
+    let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
+    let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+    return { url, key };
+}
+function sbHeaders(extra = {}) { let c = getSupabaseConfig(); return { "apikey": c.key, "Authorization": `Bearer ${c.key}`, ...extra }; }
+function numToWords(n) {
+    n = Math.floor(Math.abs(n)); if(n === 0) return 'Zero';
+    const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const two = x => x < 20 ? ones[x] : tens[Math.floor(x / 10)] + (x % 10 ? ' ' + ones[x % 10] : '');
+    const three = x => (x >= 100 ? ones[Math.floor(x / 100)] + ' Hundred' + (x % 100 ? ' ' : '') : '') + (x % 100 ? two(x % 100) : '');
+    let out = [], cr = Math.floor(n / 1e7); n %= 1e7; let lk = Math.floor(n / 1e5); n %= 1e5; let th = Math.floor(n / 1e3); n %= 1e3;
+    if(cr) out.push(three(cr) + ' Crore'); if(lk) out.push(two(lk) + ' Lakh'); if(th) out.push(two(th) + ' Thousand'); if(n) out.push(three(n));
+    return out.join(' ');
+}
+const getLow = () => { let v = parseInt(localStorage.getItem('books_low_stock')); return isNaN(v) ? 5 : v; };
 
-        async function fetchTransactions() {
-            let config = getSupabaseConfig();
-            let tbody = document.getElementById('transactionTableBody');
-            tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
+// ====================================================================================
+//  LOAD + NORMALIZE
+// ====================================================================================
+function normTx(row, idx) {
+    const t = String(row.type || row.tx_type || 'Purchase').trim().toLowerCase();
+    const kind = t.includes('return') ? (t.includes('sale') ? 'sale_return' : 'purchase_return') : (t.includes('sale') ? 'sale' : 'purchase');
+    const qty = parseFloat(row.qty) || 0;
+    const net = parseFloat(row.net_amount ?? row.amount) || 0;
+    let unit = parseFloat(row.unit_price) || 0;
+    if(!unit && qty) unit = net / qty;
+    const title = String(row.book_title || row.title || '').trim().replace(/\s+/g, ' ');
+    const uid = row.id !== undefined && row.id !== null ? 'id' + row.id : 'i' + idx;
+    return {
+        uid, id: row.id, idx, kind, qty, unit, net, gross: qty * unit, discount: Math.max(0, qty * unit - net),
+        title, key: norm(title), party: String(row.party_name || row.party || '').trim(),
+        date: String(row.date || row.created_at || '').slice(0, 10),
+        voucher: String(row.voucher_no || '').trim(), mode: String(row.payment_mode || '').trim(), notes: String(row.notes || '').trim(), raw: row
+    };
+}
 
-            try {
-                let response = await fetch(`${config.url}/rest/v1/books?select=*`, {
-                    headers: {
-                        "apikey": config.key,
-                        "Authorization": `Bearer ${config.key}`
-                    }
-                });
-                let data = await response.json();
+async function initBooks() {
+    showLoading('Loading book store...');
+    let c = getSupabaseConfig();
+    try {
+        let [res, probe] = await Promise.all([
+            fetch(`${c.url}/rest/v1/books?select=*`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() })
+        ]);
+        let rows = await res.json();
+        if(!Array.isArray(rows)) throw new Error('books failed to load');
+        hasExt = probe.ok;
+        hasId = rows.length === 0 || rows.some(r => r.id !== undefined);
+        txs = rows.map(normTx);
+        txs.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (typeof b.id === 'number' && typeof a.id === 'number' ? b.id - a.id : b.idx - a.idx));
+        txByUid = {}; txs.forEach(t => txByUid[t.uid] = t);
+        buildItems();
+        updateBanner();
+        $('lowThreshold').value = getLow();
+        if(!$('gFrom').value) applyPreset();
+        fillDatalists();
+        renderAll();
+    } catch (e) {
+        console.error(e);
+        toast('Could not load data. Check your internet connection or API settings.', false);
+    }
+    hideLoading();
+}
 
-                if(Array.isArray(data) && data.length > 0) {
-                    renderTable(data);
-                } else {
-                    tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">No book inventory records found.</td></tr>`;
-                }
-            } catch (error) {
-                console.error("Error:", error);
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500">Failed to load records.</td></tr>`;
+function updateBanner() {
+    $('setupSql').innerText = SETUP_SQL;
+    $('setupBanner').classList.toggle('hidden', hasExt || localStorage.getItem('books_banner_hidden') === '1');
+}
+function dismissBanner() { localStorage.setItem('books_banner_hidden', '1'); $('setupBanner').classList.add('hidden'); }
+function copySetupSql() { navigator.clipboard.writeText(SETUP_SQL).then(() => toast('SQL copied. Paste it in the Supabase SQL Editor and run it.')); }
+
+// ====================================================================================
+//  INVENTORY MODEL
+// ====================================================================================
+function buildItems() {
+    items = {};
+    let asc = [...txs].sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.idx - b.idx);
+    asc.forEach(t => {
+        if(!t.key) return;
+        let it = items[t.key] || (items[t.key] = { key: t.key, title: t.title, p: 0, pr: 0, s: 0, sr: 0, pAmt: 0, prAmt: 0, lastSale: 0, lastBuy: 0, lastDate: '' });
+        it.title = t.title;
+        if(t.kind === 'purchase') { it.p += t.qty; it.pAmt += t.net; it.lastBuy = t.unit; }
+        else if(t.kind === 'purchase_return') { it.pr += t.qty; it.prAmt += t.net; }
+        else if(t.kind === 'sale') { it.s += t.qty; it.lastSale = t.unit; }
+        else if(t.kind === 'sale_return') { it.sr += t.qty; }
+        if(t.date && t.date > it.lastDate) it.lastDate = t.date;
+    });
+    let low = getLow();
+    Object.values(items).forEach(it => {
+        it.stock = it.p - it.pr - it.s + it.sr;
+        let netQty = it.p - it.pr;
+        it.avgCost = netQty > 0 ? Math.max(0, (it.pAmt - it.prAmt) / netQty) : (it.lastBuy || 0);
+        it.value = Math.max(it.stock, 0) * it.avgCost;
+        it.status = it.stock <= 0 ? 'out' : (it.stock <= low ? 'low' : 'ok');
+    });
+}
+function fillDatalists() {
+    $('bookList').innerHTML = Object.values(items).sort((a, b) => a.title.localeCompare(b.title)).map(i => `<option value="${esc(i.title)}">`).join('');
+    let parties = [...new Set(txs.map(t => t.party).filter(Boolean))].sort();
+    $('partyList').innerHTML = parties.map(p => `<option value="${esc(p)}">`).join('');
+}
+const STATUS = {
+    out: { label: 'Out of stock', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+    low: { label: 'Low stock',    cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    ok:  { label: 'In stock',     cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+};
+function onThresholdChange() { localStorage.setItem('books_low_stock', String(Math.max(0, parseInt($('lowThreshold').value) || 0))); buildItems(); renderAll(); }
+
+// ====================================================================================
+//  PERIOD
+// ====================================================================================
+function applyPreset() {
+    let p = $('gPeriod').value, now = new Date(), from = '', to = '';
+    if(p === 'today') from = to = todayStr();
+    else if(p === 'yesterday') { let d = new Date(); d.setDate(d.getDate() - 1); from = to = ymd(d); }
+    else if(p === 'last7') { let d = new Date(); d.setDate(d.getDate() - 6); from = ymd(d); to = todayStr(); }
+    else if(p === 'month') { from = ymd(new Date(now.getFullYear(), now.getMonth(), 1)); to = ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0)); }
+    else if(p === 'lastmonth') { from = ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)); to = ymd(new Date(now.getFullYear(), now.getMonth(), 0)); }
+    else if(p === 'year') { from = `${now.getFullYear()}-01-01`; to = `${now.getFullYear()}-12-31`; }
+    else if(p === 'all') { from = ''; to = ''; }
+    if(p !== 'custom') { $('gFrom').value = from; $('gTo').value = to; }
+}
+function onPeriodChange() { applyPreset(); renderAll(); }
+function onCustomDate() { $('gPeriod').value = 'custom'; renderAll(); }
+function inRange(t) {
+    let from = $('gFrom').value, to = $('gTo').value;
+    if(!from && !to) return true;
+    if(!t.date) return false;
+    return (!from || t.date >= from) && (!to || t.date <= to);
+}
+const periodTxs = () => txs.filter(inRange);
+
+// ====================================================================================
+//  TABS + RENDER
+// ====================================================================================
+function showTab(t) {
+    ['overview', 'inventory', 'transactions', 'parties'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
+    const names = { overview: 'Overview', inventory: 'Inventory', transactions: 'Transactions', parties: 'Students & Vendors' };
+    let f = $('gFrom').value, to = $('gTo').value;
+    $('printTitle').innerText = `Book Store — ${names[t]}${t === 'inventory' ? ' (current stock)' : ` — ${f || to ? fmtDate(f) + ' to ' + fmtDate(to) : 'All time'}`}`;
+    window.scrollTo({ top: 0 });
+}
+function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
+function renderAll() { renderOverview(); renderInventory(); renderTransactions(); renderParties(); showTab(currentTab()); }
+
+function kindBadge(k) { return `<span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${KINDS[k].cls}">${KINDS[k].label}</span>`; }
+function card(c) { return `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c || 'text-slate-900'} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`; }
+function barRow(label, value, max, suffix, color) {
+    let w = max > 0 ? Math.max(3, Math.round(value / max * 100)) : 0;
+    return `<div><div class="flex justify-between text-xs mb-1"><span class="font-medium text-slate-700 truncate pr-2">${esc(label)}</span><span class="text-slate-600 whitespace-nowrap">${suffix}</span></div><div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-2 rounded-full ${color}" style="width:${w}%"></div></div></div>`;
+}
+
+function periodStats(list) {
+    let st = { sales: 0, salesRet: 0, purch: 0, purchRet: 0, discount: 0, soldQty: 0, cogs: 0 };
+    list.forEach(t => {
+        let it = items[t.key], cost = it ? it.avgCost : 0;
+        if(t.kind === 'sale') { st.sales += t.net; st.discount += t.discount; st.soldQty += t.qty; st.cogs += t.qty * cost; }
+        else if(t.kind === 'sale_return') { st.salesRet += t.net; st.soldQty -= t.qty; st.cogs -= t.qty * cost; }
+        else if(t.kind === 'purchase') st.purch += t.net;
+        else if(t.kind === 'purchase_return') st.purchRet += t.net;
+    });
+    st.netSales = st.sales - st.salesRet; st.netPurch = st.purch - st.purchRet; st.profit = st.netSales - st.cogs;
+    return st;
+}
+
+// ---------------- OVERVIEW ----------------
+function renderOverview() {
+    let list = periodTxs(), st = periodStats(list), all = Object.values(items);
+    let stockValue = all.reduce((s, i) => s + i.value, 0), attn = all.filter(i => i.status !== 'ok').length;
+    $('kpiCards').innerHTML = [
+        { t: 'Net Sales', v: 'PKR ' + fmt(st.netSales), c: 'text-emerald-600', s: `${fmt(st.soldQty)} units sold` },
+        { t: 'Net Purchases', v: 'PKR ' + fmt(st.netPurch), c: 'text-indigo-700' },
+        { t: 'Est. Profit', v: 'PKR ' + fmt(st.profit), c: st.profit >= 0 ? 'text-emerald-700' : 'text-rose-600', s: 'Sales − cost of goods sold' },
+        { t: 'Discounts Given', v: 'PKR ' + fmt(st.discount), c: 'text-amber-600' },
+        { t: 'Stock Value (now)', v: 'PKR ' + fmt(stockValue), c: 'text-slate-900', s: `${all.length} titles` },
+        { t: 'Stock Alerts', v: attn, c: attn ? 'text-rose-600' : 'text-emerald-600', s: 'Low + out of stock' }
+    ].map(card).join('');
+
+    // monthly chart
+    let dated = list.filter(t => t.date);
+    if(!dated.length) {
+        $('monthChart').innerHTML = `<p class="text-xs text-slate-400 py-10 text-center">No dated transactions in this period${hasExt ? '.' : ' — run the optional SQL upgrade to record dates for new transactions.'}</p>`;
+    } else {
+        let minD = dated.reduce((m, t) => t.date < m ? t.date : m, '9999-12-31'), maxD = dated.reduce((m, t) => t.date > m ? t.date : m, '0000-01-01');
+        let from = parseYmd(minD), to = parseYmd(maxD), months = [], cur = new Date(from.getFullYear(), from.getMonth(), 1);
+        while(cur <= to) { months.push({ key: ymd(cur).slice(0, 7), label: cur.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), a: 0, b: 0 }); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1); }
+        if(months.length > 12) months = months.slice(-12);
+        let mm = {}; months.forEach(m => mm[m.key] = m);
+        dated.forEach(t => { let m = mm[t.date.slice(0, 7)]; if(!m) return; if(t.kind === 'sale') m.a += t.net; if(t.kind === 'sale_return') m.a -= t.net; if(t.kind === 'purchase') m.b += t.net; if(t.kind === 'purchase_return') m.b -= t.net; });
+        let max = Math.max(1, ...months.map(m => Math.max(m.a, m.b)));
+        let W = Math.max(480, months.length * 70), H = 230, padL = 8, padB = 28, padT = 20, ch = H - padB - padT, gw = (W - padL) / months.length, bw = Math.min(22, gw / 3);
+        const short = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : (v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + 'k' : String(Math.round(v)));
+        let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:${W}px" role="img" aria-label="Monthly sales and purchases">`;
+        for(let i = 0; i <= 4; i++) { let y = padT + ch - ch * i / 4; svg += `<line x1="${padL}" x2="${W}" y1="${y}" y2="${y}" stroke="#e2e8f0"/>`; }
+        months.forEach((m, i) => {
+            let cx = padL + gw * i + gw / 2, hA = ch * Math.max(m.a, 0) / max, hB = ch * Math.max(m.b, 0) / max;
+            svg += `<rect x="${cx - bw - 1}" y="${padT + ch - hA}" width="${bw}" height="${hA}" rx="3" fill="#10b981"/><rect x="${cx + 1}" y="${padT + ch - hB}" width="${bw}" height="${hB}" rx="3" fill="#6366f1"/>`;
+            if(m.a > 0) svg += `<text x="${cx - bw / 2 - 1}" y="${padT + ch - hA - 4}" font-size="9" fill="#047857" text-anchor="middle">${short(m.a)}</text>`;
+            if(m.b > 0) svg += `<text x="${cx + bw / 2 + 1}" y="${padT + ch - hB - 4}" font-size="9" fill="#4338ca" text-anchor="middle">${short(m.b)}</text>`;
+            svg += `<text x="${cx}" y="${H - 8}" font-size="10" fill="#64748b" text-anchor="middle">${m.label}</text>`;
+        });
+        $('monthChart').innerHTML = svg + '</svg>';
+    }
+
+    // top sellers
+    let sold = {};
+    list.forEach(t => { if(t.kind === 'sale') sold[t.key] = (sold[t.key] || 0) + t.qty; else if(t.kind === 'sale_return') sold[t.key] = (sold[t.key] || 0) - t.qty; });
+    let top = Object.entries(sold).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    $('topSellers').innerHTML = top.length ? top.map(([k, q]) => barRow(items[k] ? items[k].title : k, q, top[0][1], `${fmt(q)} pcs`, 'bg-emerald-500')).join('') : '<p class="text-xs text-slate-400">No sales in this period.</p>';
+
+    // stock alerts
+    let alerts = all.filter(i => i.status !== 'ok').sort((a, b) => a.stock - b.stock).slice(0, 8);
+    $('stockAlerts').innerHTML = alerts.length ? alerts.map(i => `<div class="flex items-center justify-between gap-2 border border-slate-100 rounded-xl px-3 py-2">
+        <div class="min-w-0"><div class="text-sm font-semibold text-slate-800 truncate">${esc(i.title)}</div><div class="text-[11px] text-slate-500">In stock: <b class="${i.stock <= 0 ? 'text-rose-600' : 'text-amber-600'}">${fmt(i.stock)}</b></div></div>
+        <div class="flex items-center gap-2"><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold ${STATUS[i.status].cls}">${STATUS[i.status].label}</span>
+        <button onclick="openTx('purchase', ${esc(JSON.stringify(i.key))})" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1.5 rounded-lg font-semibold no-print">Restock</button></div></div>`).join('')
+        : '<p class="text-xs text-emerald-600">All titles are sufficiently stocked. 👍</p>';
+
+    // recent
+    let recent = list.slice(0, 7);
+    $('recentList').innerHTML = recent.length ? recent.map(t => `<div class="py-2 flex items-center justify-between gap-2"><div class="min-w-0"><div class="text-sm font-semibold text-slate-800 truncate">${esc(t.title || '-')}</div><div class="text-[11px] text-slate-500">${kindBadge(t.kind)} <span class="ml-1">${esc(t.party || '-')} · ${fmtDate(t.date)}</span></div></div><div class="text-sm font-bold text-slate-700 whitespace-nowrap">PKR ${fmt(t.net)}</div></div>`).join('') : '<p class="text-xs text-slate-400 py-3">No transactions in this period.</p>';
+}
+
+// ---------------- INVENTORY ----------------
+function inventoryList() {
+    let q = norm($('invSearch').value), s = $('invStatus').value;
+    return Object.values(items).filter(i => {
+        if(q && !i.key.includes(q)) return false;
+        if(s === 'attn' && i.status === 'ok') return false;
+        if(['low', 'out', 'ok'].includes(s) && i.status !== s) return false;
+        return true;
+    }).sort((a, b) => a.title.localeCompare(b.title));
+}
+function renderInventory() {
+    let list = inventoryList(), all = Object.values(items);
+    $('invCards').innerHTML = [
+        { t: 'Titles', v: all.length },
+        { t: 'Units in stock', v: fmt(all.reduce((s, i) => s + Math.max(i.stock, 0), 0)) },
+        { t: 'Stock value (at cost)', v: 'PKR ' + fmt(all.reduce((s, i) => s + i.value, 0)), c: 'text-indigo-700' },
+        { t: 'Need attention', v: all.filter(i => i.status !== 'ok').length, c: 'text-rose-600', s: `Low at ≤ ${getLow()} units` }
+    ].map(card).join('');
+    $('invCount').innerText = `${list.length} of ${all.length} titles`;
+    const stockCls = i => i.stock <= 0 ? 'text-rose-600' : (i.status === 'low' ? 'text-amber-600' : 'text-slate-900');
+    $('invBody').innerHTML = list.length ? list.map(i => `<tr class="border-b hover:bg-slate-50">
+        <td class="p-2.5 font-semibold text-slate-800">${esc(i.title)}</td>
+        <td class="p-2.5 text-right">${fmt(i.p)}</td><td class="p-2.5 text-right">${fmt(i.s)}</td>
+        <td class="p-2.5 text-right text-slate-500">${fmt(i.pr)} / ${fmt(i.sr)}</td>
+        <td class="p-2.5 text-right font-extrabold ${stockCls(i)}">${fmt(i.stock)}</td>
+        <td class="p-2.5 text-right">${fmt(i.avgCost)}</td><td class="p-2.5 text-right">${i.lastSale ? fmt(i.lastSale) : '-'}</td>
+        <td class="p-2.5 text-right font-semibold">${fmt(i.value)}</td>
+        <td class="p-2.5"><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold ${STATUS[i.status].cls}">${STATUS[i.status].label}</span></td>
+        <td class="p-2.5 whitespace-nowrap no-print"><button onclick="openTx('sale', ${esc(JSON.stringify(i.key))})" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold">Sell</button> <button onclick="openTx('purchase', ${esc(JSON.stringify(i.key))})" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">Buy</button></td></tr>`).join('')
+        : `<tr><td colspan="10" class="p-8 text-center text-slate-400">No books found.</td></tr>`;
+    $('invFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right" colspan="4">Totals:</td><td class="p-3 text-right">${fmt(list.reduce((s, i) => s + Math.max(i.stock, 0), 0))}</td><td colspan="2"></td><td class="p-3 text-right">PKR ${fmt(list.reduce((s, i) => s + i.value, 0))}</td><td colspan="2" class="no-print"></td></tr>` : '';
+    $('invCards2').innerHTML = list.length ? list.map(i => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <div class="flex justify-between items-start gap-2"><div class="font-bold text-slate-800 text-sm">${esc(i.title)}</div><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${STATUS[i.status].cls}">${STATUS[i.status].label}</span></div>
+        <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+            <div><div class="text-[11px] text-slate-400">In stock</div><div class="text-lg font-extrabold ${stockCls(i)}">${fmt(i.stock)}</div></div>
+            <div><div class="text-[11px] text-slate-400">Avg cost</div><div class="text-sm font-semibold">${fmt(i.avgCost)}</div></div>
+            <div><div class="text-[11px] text-slate-400">Sale price</div><div class="text-sm font-semibold">${i.lastSale ? fmt(i.lastSale) : '-'}</div></div>
+        </div>
+        <div class="flex items-center justify-between mt-3"><div class="text-xs text-slate-500">Value: <b>PKR ${fmt(i.value)}</b> · Bought ${fmt(i.p)} · Sold ${fmt(i.s)}</div>
+        <div class="flex gap-2"><button onclick="openTx('sale', ${esc(JSON.stringify(i.key))})" class="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg font-semibold">Sell</button><button onclick="openTx('purchase', ${esc(JSON.stringify(i.key))})" class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg font-semibold">Buy</button></div></div></div>`).join('')
+        : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No books found.</div>';
+}
+
+// ---------------- TRANSACTIONS ----------------
+function txList() {
+    let q = norm($('txSearch').value), type = $('txType').value;
+    return periodTxs().filter(t => (type === 'ALL' || t.kind === type) && (!q || norm(t.title + ' ' + t.party + ' ' + t.voucher).includes(q)));
+}
+function renderTransactions() {
+    let list = txList(), st = periodStats(list);
+    $('txCards').innerHTML = [
+        { t: 'Sales', v: 'PKR ' + fmt(st.sales), c: 'text-emerald-600' },
+        { t: 'Purchases', v: 'PKR ' + fmt(st.purch), c: 'text-indigo-700' },
+        { t: 'Sale returns', v: 'PKR ' + fmt(st.salesRet), c: 'text-amber-600' },
+        { t: 'Purchase returns', v: 'PKR ' + fmt(st.purchRet), c: 'text-rose-600' }
+    ].map(card).join('');
+    $('txCount').innerText = `${list.length} transactions`;
+    let shown = list.slice(0, txLimit);
+    const acts = t => `<button onclick="printSlip(${esc(JSON.stringify(t.uid))})" title="Print slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button><button onclick="deleteTx(${esc(JSON.stringify(t.uid))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`;
+    $('txBody').innerHTML = shown.length ? shown.map(t => `<tr class="border-b hover:bg-slate-50 align-top">
+        <td class="p-2.5 whitespace-nowrap text-slate-600">${fmtDate(t.date)}</td>
+        <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</td>
+        <td class="p-2.5">${kindBadge(t.kind)}</td>
+        <td class="p-2.5">${esc(t.party || '-')}</td>
+        <td class="p-2.5 font-semibold text-slate-800">${esc(t.title || '-')}${t.notes ? `<div class="text-[11px] font-normal text-slate-400">${esc(t.notes)}</div>` : ''}</td>
+        <td class="p-2.5 text-right">${fmt(t.qty)}</td><td class="p-2.5 text-right">${fmt(t.unit)}</td>
+        <td class="p-2.5 text-right text-amber-600">${t.discount ? fmt(t.discount) : '-'}</td>
+        <td class="p-2.5 text-right font-bold text-slate-800 whitespace-nowrap">PKR ${fmt(t.net)}</td>
+        <td class="p-2.5 whitespace-nowrap">${t.mode && WALLETS[t.mode] ? WALLETS[t.mode].icon + ' ' + WALLETS[t.mode].label : '-'}</td>
+        <td class="p-2.5 whitespace-nowrap no-print">${acts(t)}</td></tr>`).join('')
+        : `<tr><td colspan="11" class="p-8 text-center text-slate-400">No transactions found in this period.</td></tr>`;
+    $('txCards2').innerHTML = shown.length ? shown.map(t => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <div class="flex justify-between items-center">${kindBadge(t.kind)}<span class="text-xs text-slate-500">${fmtDate(t.date)}</span></div>
+        <div class="font-bold text-slate-800 text-sm mt-2">${esc(t.title || '-')}</div>
+        <div class="text-xs text-slate-500">${esc(t.party || '-')}${t.voucher ? ' · ' + esc(t.voucher) : ''}</div>
+        <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${fmt(t.qty)} × ${fmt(t.unit)}${t.discount ? ` · disc ${fmt(t.discount)}` : ''}</div><div class="text-lg font-extrabold text-slate-800">PKR ${fmt(t.net)}</div></div>
+        <div class="flex justify-end gap-1 mt-2 border-t pt-2">${acts(t)}</div></div>`).join('')
+        : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No transactions found in this period.</div>';
+    $('txMore').innerHTML = list.length > txLimit ? `<button onclick="txLimit+=200;renderTransactions()" class="bg-white border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold">Show more (${list.length - txLimit} remaining)</button>` : '';
+}
+
+// ---------------- PARTIES ----------------
+function renderParties() {
+    let q = norm($('pSearch').value), role = $('pRole').value, map = {};
+    periodTxs().forEach(t => {
+        if(!t.party) return;
+        let k = norm(t.party), p = map[k] || (map[k] = { name: t.party, customer: false, vendor: false, n: 0, qty: 0, amt: 0, last: '' });
+        p.n++;
+        if(t.kind === 'sale') { p.customer = true; p.qty += t.qty; p.amt += t.net; }
+        else if(t.kind === 'sale_return') { p.customer = true; p.qty -= t.qty; p.amt -= t.net; }
+        else if(t.kind === 'purchase') { p.vendor = true; p.qty += t.qty; p.amt += t.net; }
+        else if(t.kind === 'purchase_return') { p.vendor = true; p.qty -= t.qty; p.amt -= t.net; }
+        if(t.date > p.last) p.last = t.date;
+    });
+    let list = Object.values(map).filter(p => (!q || norm(p.name).includes(q)) && (role === 'ALL' || (role === 'customer' ? p.customer : p.vendor))).sort((a, b) => b.amt - a.amt);
+    const roleTxt = p => p.customer && p.vendor ? 'Student + Vendor' : (p.vendor ? 'Vendor' : 'Student / Customer');
+    $('pBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-semibold text-slate-800">${esc(p.name)}</td><td class="p-2.5 text-slate-600">${roleTxt(p)}</td><td class="p-2.5 text-right">${p.n}</td><td class="p-2.5 text-right">${fmt(p.qty)}</td><td class="p-2.5 text-right font-bold">PKR ${fmt(p.amt)}</td><td class="p-2.5 text-slate-500">${fmtDate(p.last)}</td><td class="p-2.5 no-print"><button onclick="viewParty(${esc(JSON.stringify(p.name))})" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">View</button></td></tr>`).join('')
+        : `<tr><td colspan="7" class="p-8 text-center text-slate-400">No students or vendors found in this period.</td></tr>`;
+    $('pCards').innerHTML = list.length ? list.map(p => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(p.name)}</div><div class="text-xs text-slate-500">${roleTxt(p)} · ${p.n} txns · last ${fmtDate(p.last)}</div></div><div class="text-right"><div class="font-extrabold text-slate-800">PKR ${fmt(p.amt)}</div><button onclick="viewParty(${esc(JSON.stringify(p.name))})" class="text-xs text-indigo-600 font-semibold">View</button></div></div>`).join('')
+        : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No students or vendors found.</div>';
+}
+function viewParty(name) { $('txSearch').value = name; $('txType').value = 'ALL'; renderTransactions(); showTab('transactions'); }
+
+// ---------------- EXPORT ----------------
+function exportCsv(name, header, rows) {
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    let csv = '\uFEFF' + [header, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+    let a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    a.download = `${name}-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+function exportInventoryCsv() {
+    let list = inventoryList(); if(!list.length) { toast('No records to export.', false); return; }
+    exportCsv('inventory', ['Title', 'Purchased', 'Sold', 'Purchase returns', 'Sale returns', 'In stock', 'Avg cost', 'Sale price', 'Stock value', 'Status'],
+        list.map(i => [i.title, i.p, i.s, i.pr, i.sr, i.stock, Math.round(i.avgCost * 100) / 100, i.lastSale, Math.round(i.value), STATUS[i.status].label]));
+}
+function exportTxCsv() {
+    let list = txList(); if(!list.length) { toast('No records to export.', false); return; }
+    exportCsv('book-transactions', ['Date', 'Voucher', 'Type', 'Student / Vendor', 'Book', 'Qty', 'Unit price', 'Discount', 'Net amount', 'Account', 'Notes'],
+        list.map(t => [t.date, t.voucher, KINDS[t.kind].label, t.party, t.title, t.qty, t.unit, t.discount, t.net, t.mode, t.notes]));
+}
+
+// ====================================================================================
+//  TRANSACTION MODAL
+// ====================================================================================
+function setTxKind(kind) {
+    txKind = kind;
+    $('mTypeTabs').innerHTML = Object.keys(KINDS).map(k => `<button type="button" onclick="setTxKind('${k}')" class="py-2 rounded-lg border ${k === kind ? 'tab-on' : 'tab-off'}">${KINDS[k].label}</button>`).join('');
+    let isVendor = kind === 'purchase' || kind === 'purchase_return';
+    $('mTitle').innerText = 'New ' + KINDS[kind].label;
+    $('mPartyLabel').innerText = isVendor ? 'Vendor / Supplier name' : 'Student / Customer name';
+    $('mSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + (kind === 'sale' ? 'bg-emerald-600 hover:bg-emerald-700' : (kind === 'purchase' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-500 hover:bg-amber-600'));
+    $('mHint').innerText = KINDS[kind].money === 'in' ? 'Money comes in → recorded as a Receipt in Accounts' : 'Money goes out → recorded as a Payment in Accounts';
+    onTitleInput(true);
+}
+function openTx(kind, key) {
+    $('mDate').value = todayStr(); $('mParty').value = ''; $('mTitleIn').value = ''; $('mQty').value = 1; $('mPrice').value = '';
+    $('mDiscType').value = 'percentage'; $('mDiscVal').value = 0; $('mNotes').value = ''; $('mWallet').value = 'cash'; $('mPostAcc').checked = true;
+    $('mDateWrap').classList.toggle('hidden', !hasExt);
+    $('mExtWrap').classList.toggle('hidden', !hasExt);
+    if(key && items[key]) $('mTitleIn').value = items[key].title;
+    setTxKind(kind);
+    if(key) onTitleInput();
+    calcNet();
+    $('txModal').classList.remove('hidden');
+    setTimeout(() => (key ? $('mQty') : $('mParty')).focus(), 50);
+}
+function closeTx() { $('txModal').classList.add('hidden'); }
+
+function onTitleInput(skipPrice) {
+    let it = items[norm($('mTitleIn').value)], el = $('mStock'), kind = txKind;
+    if(!it) { el.innerHTML = $('mTitleIn').value.trim() ? '<span class="text-slate-400">New title — it will be added to inventory.</span>' : ''; return; }
+    let low = it.stock <= 0 ? 'text-rose-600' : (it.status === 'low' ? 'text-amber-600' : 'text-emerald-600');
+    el.innerHTML = `In stock: <b class="${low}">${fmt(it.stock)}</b> · Avg cost ${fmt(it.avgCost)}${it.lastSale ? ' · Last sale price ' + fmt(it.lastSale) : ''}`;
+    if(skipPrice !== true && !$('mPrice').value) {
+        let p = (kind === 'sale' || kind === 'sale_return') ? it.lastSale : (it.lastBuy || it.avgCost);
+        if(p) { $('mPrice').value = Math.round(p * 100) / 100; calcNet(); }
+    }
+}
+function calcNet() {
+    let qty = parseFloat($('mQty').value) || 0, price = parseFloat($('mPrice').value) || 0, gross = qty * price;
+    let dv = parseFloat($('mDiscVal').value) || 0, disc = $('mDiscType').value === 'percentage' ? gross * Math.min(dv, 100) / 100 : Math.min(dv, gross);
+    let net = Math.max(0, gross - disc);
+    $('mGross').innerText = fmt(gross); $('mDisc').innerText = fmt(disc); $('mNet').innerText = 'PKR ' + fmt(net);
+    return { qty, price, gross, disc, net };
+}
+function genVoucher(prefix) {
+    let used = new Set(txs.map(t => t.voucher)), id;
+    do { id = prefix + Math.floor(100000 + Math.random() * 900000); } while(used.has(id));
+    return id;
+}
+
+async function saveTx(addAnother) {
+    let kind = txKind, meta = KINDS[kind];
+    let party = $('mParty').value.trim(), title = $('mTitleIn').value.trim(), n = calcNet(), date = $('mDate').value, notes = $('mNotes').value.trim();
+    if(!title) { toast('Please enter the book / item title.', false); return; }
+    if(n.qty <= 0) { toast('Quantity must be at least 1.', false); return; }
+    if(n.price <= 0) { toast('Please enter the unit price.', false); return; }
+    if(hasExt && !date) { toast('Please select a date.', false); return; }
+
+    let it = items[norm(title)];
+    const doSave = async () => {
+        let postAcc = hasExt && $('mPostAcc').checked, wallet = $('mWallet').value;
+        let voucher = hasExt ? genVoucher(postAcc ? (meta.money === 'in' ? 'RV-' : 'PV-') : 'BK-') : '';
+        let payload = { type: meta.stored, party_name: party, book_title: title, qty: n.qty, unit_price: n.price, net_amount: Math.round(n.net * 100) / 100 };
+        if(hasExt) Object.assign(payload, { date, voucher_no: voucher, payment_mode: postAcc ? wallet : null, notes: notes || null });
+
+        showLoading('Saving...');
+        try {
+            let c = getSupabaseConfig();
+            let res = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(payload) });
+            if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
+
+            let accNote = '';
+            if(postAcc) {
+                let desc = `${meta.label}: ${title} x${n.qty}${party ? ' - ' + party : ''}`;
+                let acc = meta.money === 'in'
+                    ? { voucher_id: voucher, from_account: meta.head, to_account: wallet, description: desc, amount_in: payload.net_amount, amount_out: 0, date, remarks: notes }
+                    : { voucher_id: voucher, from_account: wallet, to_account: meta.head, description: desc, amount_in: 0, amount_out: payload.net_amount, date, remarks: notes };
+                let r2 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(acc) });
+                accNote = r2.ok ? ' and recorded in Accounts' : ' — but it could NOT be recorded in Accounts (add it manually)';
+                if(!r2.ok) console.error(await r2.text());
             }
-        }
+            lastSaved = { kind, party, date };
+            toast(`${meta.label} saved${accNote}.`, !accNote.includes('NOT'));
+            await initBooks();
+            if(addAnother) {
+                openTx(kind); $('mParty').value = party; $('mDate').value = date || todayStr(); $('mTitleIn').focus();
+            } else closeTx();
+        } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+    };
 
-        function renderTable(data) {
-            let tbody = document.getElementById('transactionTableBody');
-            tbody.innerHTML = '';
+    if((kind === 'sale' || kind === 'purchase_return') && it && n.qty > it.stock) {
+        confirmBox(`Only ${fmt(it.stock)} unit(s) of "${it.title}" are in stock, but you are entering ${fmt(n.qty)}.\n\nContinue anyway?`, 'Continue', doSave);
+    } else await doSave();
+}
 
-            data.forEach((row) => {
-                let type = row.type || row.tx_type || 'Purchase';
-                let party = row.party_name || row.party || '-';
-                let title = row.book_title || row.title || '-';
-                let qty = row.qty || 1;
-                let netAmt = parseFloat(row.net_amount || row.amount) || 0;
+// ====================================================================================
+//  DELETE + PRINT SLIP
+// ====================================================================================
+function deleteTx(uid) {
+    let t = txByUid[uid]; if(!t) return;
+    if(!hasId || t.id === undefined) { toast('This record has no id column, so it cannot be deleted from here.', false); return; }
+    let linked = /^(RV|PV)-/i.test(t.voucher);
+    confirmBox(`Delete this ${KINDS[t.kind].label.toLowerCase()} (${t.title}, ${fmt(t.qty)} pcs, PKR ${fmt(t.net)})?${linked ? '\n\nThe linked entry in Accounts (' + t.voucher + ') will be deleted too.' : ''}`, 'Yes, delete', async () => {
+        showLoading('Deleting...');
+        try {
+            let c = getSupabaseConfig();
+            let res = await fetch(`${c.url}/rest/v1/books?id=eq.${encodeURIComponent(t.id)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=representation" }) });
+            if(!res.ok) { hideLoading(); toast('Could not delete: ' + await res.text(), false); return; }
+            let gone = await res.json();
+            if(!Array.isArray(gone) || !gone.length) { hideLoading(); toast('Nothing was deleted (check permissions / RLS).', false); return; }
+            if(linked) await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(t.voucher)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
+            toast('Transaction deleted.');
+            await initBooks();
+        } catch (e) { hideLoading(); toast('Connection error.', false); }
+    });
+}
 
-                let tr = document.createElement('tr');
-                tr.className = "border-b hover:bg-slate-50 text-xs";
-                tr.innerHTML = `
-                    <td class="p-3 font-semibold text-indigo-900">${type}</td>
-                    <td class="p-3 text-slate-700">${party}</td>
-                    <td class="p-3 text-slate-600">${title}</td>
-                    <td class="p-3 font-medium">${qty}</td>
-                    <td class="p-3 font-bold text-indigo-600">PKR ${netAmt.toLocaleString()}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
+function printSlip(uid) {
+    let t = txByUid[uid]; if(!t) return;
+    let who = (t.kind === 'purchase' || t.kind === 'purchase_return') ? 'Vendor' : 'Student / Customer';
+    let html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(KINDS[t.kind].label)} slip</title>
+    <style>body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:0;padding:24px}.box{border:2px solid #1e1b4b;border-radius:6px;padding:20px;max-width:560px;margin:0 auto}
+    h1{margin:0;font-size:20px;text-align:center;color:#1e1b4b}.sub{text-align:center;font-size:12px;color:#64748b;margin-bottom:10px}
+    .ttl{text-align:center;font-weight:bold;font-size:14px;border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;padding:6px 0;margin:10px 0 14px;letter-spacing:.5px}
+    table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 4px;vertical-align:top}td.l{width:34%;color:#475569}
+    .amt{font-size:19px;font-weight:bold;border:2px solid #1e1b4b;padding:5px 12px;display:inline-block}
+    .sig{display:flex;justify-content:space-between;margin-top:40px;font-size:12px}.sig div{border-top:1px solid #334155;padding-top:4px;width:40%;text-align:center}</style></head><body><div class="box">
+    <h1>Concept School</h1><div class="sub">Shibra Campus · Book Store</div><div class="ttl">${esc(KINDS[t.kind].label.toUpperCase())} SLIP</div>
+    <table>
+    <tr><td class="l">Slip No</td><td><b>${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</b></td></tr>
+    <tr><td class="l">Date</td><td>${fmtDate(t.date)}</td></tr>
+    <tr><td class="l">${who}</td><td>${esc(t.party || '-')}</td></tr>
+    <tr><td class="l">Item</td><td>${esc(t.title)}</td></tr>
+    <tr><td class="l">Quantity × Price</td><td>${fmt(t.qty)} × PKR ${fmt(t.unit)} = PKR ${fmt(t.gross)}</td></tr>
+    <tr><td class="l">Discount</td><td>PKR ${fmt(t.discount)}</td></tr>
+    <tr><td class="l">Net amount</td><td><span class="amt">PKR ${fmt(t.net)}</span></td></tr>
+    <tr><td class="l">In words</td><td>Rupees ${numToWords(t.net)} Only</td></tr>
+    </table>
+    <div class="sig"><div>Prepared by</div><div>${t.kind === 'sale' ? 'Received by' : 'Signature'}</div></div></div></body></html>`;
+    let f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(f);
+    f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+    setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 1500); }, 300);
+}
 
-        async function saveTransaction(event) {
-            event.preventDefault();
-            let config = getSupabaseConfig();
-
-            let type = document.getElementById('txType').value;
-            let party = document.getElementById('partyName').value.trim();
-            let title = document.getElementById('bookTitle').value.trim();
-            let qty = parseInt(document.getElementById('qty').value) || 1;
-            let unitPrice = parseFloat(document.getElementById('unitPrice').value) || 0;
-            let netAmount = parseFloat(document.getElementById('netAmount').value) || 0;
-
-            let payloadData = {
-                type: type,
-                party_name: party,
-                book_title: title,
-                qty: qty,
-                unit_price: unitPrice,
-                net_amount: netAmount
-            };
-
-            let btn = document.getElementById('saveBtn');
-            btn.innerText = "Saving...";
-            btn.disabled = true;
-
-            try {
-                let res = await fetch(`${config.url}/rest/v1/books`, {
-                    method: 'POST',
-                    headers: {
-                        "apikey": config.key,
-                        "Authorization": `Bearer ${config.key}`,
-                        "Content-Type": "application/json",
-                        "Prefer": "return=minimal"
-                    },
-                    body: JSON.stringify(payloadData)
-                });
-
-                if(res.ok) {
-                    alert("Book Transaction Saved Successfully!");
-                    document.getElementById('transactionForm').reset();
-                    calculateTotal();
-                    fetchTransactions();
-                } else {
-                    let err = await res.text();
-                    alert("Failed to save: " + err);
-                }
-            } catch (error) {
-                console.error("Error:", error);
-                alert("Connection error.");
-            } finally {
-                btn.innerText = "Save Transaction";
-                btn.disabled = false;
-            }
-        }
-
-        function openSettingsModal() { 
-            document.getElementById('settingsModal').classList.remove('hidden'); 
-            let config = getSupabaseConfig();
-            document.getElementById('apiUrlInput').value = config.url;
-            document.getElementById('apiKeyInput').value = config.key;
-        }
-        function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveApiCredentials() {
-            let url = document.getElementById('apiUrlInput').value.trim();
-            let key = document.getElementById('apiKeyInput').value.trim();
-            if(url && key) {
-                localStorage.setItem('supabase_url', url);
-                localStorage.setItem('supabase_key', key);
-                alert("Supabase Credentials Saved!");
-                closeSettingsModal();
-                fetchTransactions();
-            } else { alert("Please enter valid URL and Key."); }
-        }
-        document.addEventListener('keydown', e => { if(e.key === 'Escape') closeSettingsModal(); });
-    </script>
+// ====================================================================================
+//  SETTINGS
+// ====================================================================================
+function openSettingsModal() { $('settingsModal').classList.remove('hidden'); let c = getSupabaseConfig(); $('apiUrlInput').value = c.url; $('apiKeyInput').value = c.key; }
+function closeSettingsModal() { $('settingsModal').classList.add('hidden'); }
+function saveApiCredentials() {
+    let url = $('apiUrlInput').value.trim(), key = $('apiKeyInput').value.trim();
+    if(url && key) { localStorage.setItem('supabase_url', url); localStorage.setItem('supabase_key', key); closeSettingsModal(); initBooks(); }
+    else toast('Please enter a valid URL and Key.', false);
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closeTx(); } });
+</script>
 </body>
 </html>
