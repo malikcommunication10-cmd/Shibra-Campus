@@ -11,7 +11,7 @@
         .tab-off:hover { background:#f1f5f9; }
         #printHeader { display:none; }
         @media print {
-            aside, .no-print, #entryModal, #settingsModal, #confirmModal, #toast, #loadingOverlay { display:none !important; }
+            aside, .no-print, #mobileBar, #fab, #entryModal, #settingsModal, #confirmModal, #toast, #loadingOverlay { display:none !important; }
             #printHeader { display:block !important; margin-bottom:10px; }
             body { background:#fff !important; }
             main { padding:0 !important; }
@@ -42,10 +42,16 @@
         </div>
     </div>
 
+    <!-- MOBILE TOP BAR -->
+    <div id="mobileBar" class="md:hidden sticky top-0 z-40 bg-indigo-900 text-white flex items-center justify-between px-4 py-3 shadow no-print">
+        <div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus · Accounts</div></div>
+        <button onclick="toggleNav()" class="text-2xl px-2" aria-label="Menu">☰</button>
+    </div>
+
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
-        <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
-            <div class="p-5 border-b border-indigo-800">
+        <aside id="sideNav" class="max-md:hidden w-full md:w-64 md:sticky md:top-0 md:h-screen md:self-start md:overflow-y-auto bg-indigo-900 text-white flex flex-col shadow-xl">
+            <div class="p-5 border-b border-indigo-800 hidden md:block">
                 <h1 class="font-bold text-base leading-tight">Concept School</h1>
                 <p class="text-xs text-indigo-300">Shibra Campus</p>
             </div>
@@ -63,7 +69,7 @@
         </aside>
 
         <!-- MAIN -->
-        <main class="flex-1 p-4 md:p-8 min-w-0">
+        <main class="flex-1 p-4 md:p-8 min-w-0 pb-24 md:pb-8">
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Accounts & Daybook</h2>
@@ -237,9 +243,12 @@
         </main>
     </div>
 
+    <!-- FLOATING ACTION BUTTON (mobile) -->
+    <button id="fab" onclick="openEntry('receipt')" class="md:hidden fixed bottom-5 right-5 z-40 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full w-14 h-14 text-2xl shadow-xl no-print" aria-label="New receipt">➕</button>
+
     <!-- ENTRY MODAL -->
-    <div id="entryModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
-        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl max-h-[94vh] overflow-y-auto">
+    <div id="entryModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
             <div class="p-5 border-b flex justify-between items-center">
                 <div>
                     <h3 id="emTitle" class="text-lg font-bold text-indigo-950">New voucher</h3>
@@ -343,6 +352,7 @@ const ymd = d => d.toLocaleDateString('en-CA');
 const todayStr = () => ymd(new Date());
 function parseYmd(s) { let [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); }
 function fmtDate(s) { return s ? parseYmd(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; }
+function toggleNav() { $('sideNav').classList.toggle('max-md:hidden'); }
 function showLoading(t) { $('loadingText').innerText = t || 'Loading...'; $('loadingOverlay').classList.remove('hidden'); }
 function hideLoading() { $('loadingOverlay').classList.add('hidden'); }
 function toast(msg, ok = true) {
