@@ -144,6 +144,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
           <div class="flex gap-2 flex-wrap justify-end">
             <button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
             <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
+            <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
             <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
             <button onclick="initFeePage()" class="btn b-gh">🔄 Refresh</button>
           </div>
@@ -161,7 +162,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
         </div>
         <label class="md:hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" onchange="toggleSelectAll(this)"> Select all</label>
       </div>
-      <div class="overflow-x-auto md:max-h-[70vh]">
+      <div id="voucherView" class="overflow-x-auto md:max-h-[70vh]">
         <table class="rt w-full border-collapse">
           <thead class="bg-slate-50 sticky top-0"><tr>
             <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
@@ -169,6 +170,9 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
             <th>Payable</th><th>Paid</th><th>Balance</th><th>Class</th><th>Status</th><th>Date(s)</th><th>Action</th></tr></thead>
           <tbody id="feesTableBody"><tr><td colspan="15" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
         </table>
+      </div>
+      <div id="summaryView" class="hidden overflow-x-auto md:max-h-[70vh]">
+        <table class="rt w-full border-collapse"><thead id="sumHead" class="bg-slate-50 sticky top-0"></thead><tbody id="sumBody"></tbody></table>
       </div>
       <div id="feesTableFooter" class="no-print border-t bg-slate-50 p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"></div>
     </section>
@@ -221,7 +225,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
 
 <div id="importModal" class="modal no-print"><div class="sheet max-w-4xl space-y-3">
   <h3 class="font-bold text-indigo-800 border-b pb-2">📥 Import paid fees (Excel / CSV)</h3>
-  <p class="text-xs text-slate-500">Columns: voucher_id (Admission No), from_account (name), to_account, amount_in, date, remarks (class). Payments are adjusted FIFO per student, oldest voucher first.</p>
+  <p class="text-xs text-slate-500">Columns: voucher_id (Admission No), from_account (name), to_account, amount_in, date, remarks (class). Each payment goes to the tuition voucher of the month of its received date, and that same date is saved in Accounts.</p>
   <input type="file" id="importFile" accept=".xlsx,.xls,.csv" class="inp">
   <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="importFixYear" checked> Set the year of all dates to 2026</label>
   <button onclick="readImport()" class="btn b-gh w-full">Read file & preview</button>
@@ -373,9 +377,45 @@ function filterVouchers(){
   if(p!=='ALL')t=t.filter(r=>(r.period||'').trim()===p);
   if(s!=='ALL')t=t.filter(r=>r.status===s);
   const mf=+$('fromMonth').value||1,mt=+$('toMonth').value||12;
-  if(!q)t=t.filter(r=>{const m=monthOrder[(r.period||'').trim()];return!m||(m>=mf&&m<=mt)});
+  const inR=r=>{const m=monthOrder[(r.period||'').trim()];return!m||(m>=mf&&m<=mt)};
+  if(!q)t=t.filter(inR);
+  t.forEach(r=>{r._out=!inR(r)});
   if(q)t=t.filter(r=>(r.voucher_id||'').toLowerCase().includes(q)||(r.student_name||'').toLowerCase().includes(q)||(r.admis_no||'').toLowerCase().includes(q));
-  filtered=t;renderFeesTable(t);
+  filtered=t;renderFeesTable(t);renderStudentSummary();
+}
+let viewMode='vouchers';
+function toggleView(){
+  viewMode=viewMode==='vouchers'?'summary':'vouchers';
+  $('voucherView').classList.toggle('hidden',viewMode==='summary');
+  $('summaryView').classList.toggle('hidden',viewMode!=='summary');
+  $('viewBtn').innerText=viewMode==='summary'?'🧾 Voucher list':'👥 Student summary';
+  renderStudentSummary();
+}
+function renderStudentSummary(){
+  const mt=+$('toMonth').value||12,q=$('searchInput').value.trim().toLowerCase();
+  const lbl=($('toMonth').selectedOptions[0]||{}).text||'Month';
+  const by={};
+  allFeesCache.forEach(r=>{
+    const m=monthOrder[(r.period||'').trim()];if(!m||m>mt)return;
+    const k=normAdm(r.admis_no)||String(r.student_name||'').toLowerCase();
+    const o=by[k]??={adm:r.admis_no,name:r.student_name,cls:r.class,prev:0,pay:0,paid:0,bal:0};
+    const net=r.net??(parseFloat(r.payable)||0),paid=parseFloat(r.totalPaid)||0;
+    o.bal+=net-paid;
+    if(m<mt)o.prev+=net-paid;else{o.pay+=net;o.paid+=paid}
+  });
+  let list=Object.values(by).filter(o=>!q||(o.name||'').toLowerCase().includes(q)||String(o.adm||'').toLowerCase().includes(q)).sort((a,b)=>b.bal-a.bal);
+  const T={prev:0,pay:0,paid:0,bal:0};
+  $('sumHead').innerHTML=`<tr><th>Adm No</th><th>Student</th><th>Class</th><th>Previous balance</th><th>${esc(lbl)} payable</th><th>${esc(lbl)} paid</th><th>Total balance</th></tr>`;
+  $('sumBody').innerHTML=list.map(o=>{
+    T.prev+=o.prev;T.pay+=o.pay;T.paid+=o.paid;T.bal+=o.bal;
+    return`<tr><td data-l="Adm No" class="font-mono">${esc(o.adm)||'-'}</td>
+    <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(o.name||'')}'))" class="text-indigo-600 underline">${esc(o.name)||'-'}</a></td>
+    <td data-l="Class">${esc(o.cls)||'-'}</td>
+    <td data-l="Previous balance" class="${o.prev>0?'text-rose-600 font-bold':''}">PKR ${fmt(o.prev)}</td>
+    <td data-l="${esc(lbl)} payable">PKR ${fmt(o.pay)}</td>
+    <td data-l="${esc(lbl)} paid" class="text-emerald-600 font-bold">PKR ${fmt(o.paid)}</td>
+    <td data-l="Total balance" class="font-extrabold ${o.bal>0?'text-rose-600':o.bal<0?'text-indigo-600':'text-slate-500'}">${o.bal<0?'Adv '+fmt(-o.bal):'PKR '+fmt(o.bal)}</td></tr>`}).join('')
+    +(list.length?`<tr class="bg-slate-100 font-bold"><td colspan="3" class="nl text-right">Total (${list.length} students, up to ${esc(lbl)}):</td><td data-l="Previous">PKR ${fmt(T.prev)}</td><td data-l="Payable">PKR ${fmt(T.pay)}</td><td data-l="Paid">PKR ${fmt(T.paid)}</td><td data-l="Balance" class="text-rose-600">PKR ${fmt(T.bal)}</td></tr>`:`<tr><td colspan="7" class="nl p-6 text-center text-slate-400">No students found.</td></tr>`);
 }
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
@@ -399,12 +439,12 @@ function renderFeesTable(data){
     ['stCount','stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');return}
   let sp=0,sd=0,sb=0,sr=0;const rows=groupArrears(data);let html='';
   rows.forEach(r=>{
-    sp+=r.net??(parseFloat(r.payable)||0);sd+=parseFloat(r.totalPaid)||0;sb+=parseFloat(r.balance)||0;
+    if(!r._out){sp+=r.net??(parseFloat(r.payable)||0);sd+=parseFloat(r.totalPaid)||0;sb+=parseFloat(r.balance)||0}
     const a=isArr(r),vId=(r.voucher_id||'').trim(),lock=isLocked(vId);
     const badge=r.status==='Paid'?'bg-emerald-50 text-emerald-700':r.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
     const bc=r.balance<0?'text-indigo-600 font-extrabold':r.balance>0?'text-rose-600 font-bold':'text-slate-500';
     const bt=r.balance<0?`Adv ${fmt(-r.balance)}`:`PKR ${fmt(r.balance)}`;
-    html+=`<tr class="${a?'bg-rose-50/60':'hover:bg-slate-50'}">
+    html+=`<tr class="${a?'bg-rose-50/60':'hover:bg-slate-50'} ${r._out?'opacity-50':''}">
     <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(vId)}" ${lock?'disabled':''}></td>
     <td data-l="Sr">${a?'<span class="text-rose-400">↳</span>':++sr}</td>
     <td data-l="Voucher" class="font-mono text-indigo-900">${esc(vId)||'-'}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</td>
@@ -422,8 +462,8 @@ function renderFeesTable(data){
     <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(vId)}')" class="btn b-ok flex-1" style="padding:.35rem .6rem">💳 Pay</button><button onclick="openDiscount('${esc(vId)}')" class="btn b-gh flex-1" style="padding:.35rem .6rem">% Disc</button></div></td></tr>`;
   });
   tb.innerHTML=html;
-  $('stCount').innerText=rows.length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
-  tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}</div>
+  $('stCount').innerText=rows.filter(r=>!r._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
+  tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}${rows.some(r=>r._out)?' <span class="font-normal text-slate-400">(grey rows are outside the selected months, not counted)</span>':''}</div>
   <div class="flex gap-2"><button onclick="openBulkPayModal()" class="btn b-pri flex-1 md:flex-none">⚡ Bulk pay</button>
   <button onclick="sendWhatsAppReminders()" class="btn b-ok flex-1 md:flex-none">WhatsApp reminders</button></div>`;
 }
@@ -431,7 +471,7 @@ function renderFeesTable(data){
 /* ---------- Bulk pay ---------- */
 function openBulkPayModal(){
   if(!filtered.length){showAlert("No vouchers in the current filter.");return}
-  let t=0;filtered.forEach(r=>{const b=parseFloat(r.balance)||0;if(b>0)t+=b});
+  let t=0;filtered.forEach(r=>{const b=parseFloat(r.balance)||0;if(b>0&&!r._out)t+=b});
   $('bulkTotalDues').value=`PKR ${t}`;$('bulkReceivedAmount').value=t>0?t:'';
   $('bulkPayModal').classList.add('open');
 }
@@ -441,7 +481,7 @@ function sendWhatsAppReminders(){
   if(!filtered.length){showAlert("No students in the current filter.");return}
   const map={};
   filtered.forEach(r=>{const n=(r.student_name||'').trim(),b=parseFloat(r.balance)||0;
-    if(n&&b>0){(map[n]??={admis_no:(r.admis_no||'').trim(),total:0}).total+=b}});
+    if(n&&b>0&&!r._out){(map[n]??={admis_no:(r.admis_no||'').trim(),total:0}).total+=b}});
   const names=Object.keys(map);
   if(!names.length){showAlert("No pending dues in the current filter.");return}
   showConfirm(`Found ${names.length} student(s) with pending dues. Prepare a WhatsApp reminder for the first one?`,()=>{
@@ -642,7 +682,7 @@ async function readImport(){
   if(typeof XLSX==='undefined'){showAlert("Excel reader could not load. Check your internet connection.");return}
   showLoading("Reading file...");
   try{
-    const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
+    const wb=/\.csv$/i.test(f.name)?XLSX.read(await f.text(),{type:'string',raw:true}):XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
     const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
     hideLoading();buildImportPlan(raw);
   }catch(e){hideLoading();console.error(e);showAlert("Could not read this file.")}
@@ -670,14 +710,19 @@ function buildImportPlan(raw){
     if((ex[p.key+'|'+p.date]||0)>=grp[p.key+'|'+p.date]-0.01){row.status='Duplicate (already imported)';return}
     if(p.name&&p.name.toLowerCase()!==(vs[0].student_name||'').trim().toLowerCase())row.flags.push('Name differs: '+(vs[0].student_name||''));
     const push=(v,a)=>{entries.push({voucher_id:`${(v.voucher_id||'').trim()}-imp-${nonce}-${++n}`,from_account:`${v.type||'Tuition Fee'} (${v.period||''}) - ${v.student_name||''}`,to_account:p.to,description:`Imported from Excel (Adm ${p.adm})`,amount_in:a,amount_out:0,date:p.date,remarks:p.cls});row.alloc.push(`${v.period} ${fmt(a)}`)};
-    let left=p.amt;
-    for(const v of vs){if(left<=0)break;const r=rem[v.voucher_id];if(r<=0)continue;const a=Math.min(left,r);rem[v.voucher_id]-=a;left-=a;push(v,a)}
-    if(left>0){const t=[...vs].reverse().find(v=>!isArr(v))||vs[vs.length-1];push(t,left);row.flags.push(`Excess ${fmt(left)} kept as advance on ${t.period}`)}
+    const per=`${MONTHS[+p.date.slice(5,7)-1].split(' ')[0]} ${p.date.slice(0,4)}`;
+    const v=vs.find(x=>(x.period||'').trim()===per&&isTuition(x));
+    if(!v){row.status=`No ${per} tuition voucher`;return}
+    row.per=per;push(v,p.amt);
+    const over=p.amt-(rem[v.voucher_id]||0);rem[v.voucher_id]=Math.max((rem[v.voucher_id]||0)-p.amt,0);
+    if(over>0.01)row.flags.push(`Exceeds ${per} balance by ${fmt(over)} (shown as advance)`);
   });
+  const ms={};rows.forEach(r=>{if(r.status==='OK'&&r.per){const o=ms[r.per]??={n:0,s:0};o.n++;o.s+=r.p.amt}});
+  const monthLine='By month: '+(Object.entries(ms).sort((x,y)=>(monthOrder[x[0]]||99)-(monthOrder[y[0]]||99)).map(([k,o])=>`${k}: ${o.n} payments, PKR ${fmt(o.s)}`).join(' | ')||'-');
   importPlan={entries};
   const cnt={};rows.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
   const bg=st=>st==='OK'?'text-emerald-700':st.startsWith('Dup')?'text-amber-700':'text-rose-600';
-  $('importPreview').innerHTML=`<div class="rounded-lg bg-slate-50 border p-2 mb-2 font-semibold">${rows.length} payments read | ${Object.entries(cnt).map(([k,v])=>`${k}: ${v}`).join(' | ')}${bad?` | ${bad} invalid rows ignored`:''} | ${entries.length} entries will be saved</div>
+  $('importPreview').innerHTML=`<div class="rounded-lg bg-slate-50 border p-2 mb-2 font-semibold">${rows.length} payments read | ${Object.entries(cnt).map(([k,v])=>`${k}: ${v}`).join(' | ')}${bad?` | ${bad} invalid rows ignored`:''} | ${entries.length} entries will be saved<div class="font-normal text-slate-600 mt-1">${monthLine}</div></div>
   <div class="overflow-x-auto max-h-72 border rounded-lg"><table class="w-full text-left"><thead class="bg-slate-100 sticky top-0"><tr><th class="p-1.5">Adm</th><th class="p-1.5">Name</th><th class="p-1.5">Date</th><th class="p-1.5">Amount</th><th class="p-1.5">Result</th><th class="p-1.5">Allocation / notes</th></tr></thead><tbody>${rows.slice(0,400).map(r=>`<tr class="border-t"><td class="p-1.5 font-mono">${esc(r.p.adm)}</td><td class="p-1.5">${esc(r.p.name)}</td><td class="p-1.5 font-mono">${r.p.date}</td><td class="p-1.5 font-bold">${fmt(r.p.amt)}</td><td class="p-1.5 font-semibold ${bg(r.status)}">${r.status}</td><td class="p-1.5">${esc(r.alloc.join(', '))}${r.flags.length?` <span class="text-amber-700">${esc(r.flags.join('; '))}</span>`:''}</td></tr>`).join('')}</tbody></table></div>${rows.length>400?'<p class="mt-1 text-slate-500">Showing the first 400 rows; all will be processed.</p>':''}`;
   $('importConfirm').classList.toggle('hidden',!entries.length);
 }
