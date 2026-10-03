@@ -16,6 +16,11 @@
             .fam-card { break-inside: avoid; box-shadow: none !important; }
             body { background: white !important; }
             main { padding: 0 !important; }
+            /* print only the student ledger when it is open */
+            body.print-ledger * { visibility: hidden !important; }
+            body.print-ledger #ledgerModal, body.print-ledger #ledgerModal * { visibility: visible !important; }
+            body.print-ledger #ledgerModal { position: absolute !important; left: 0; top: 0; width: 100%; background: #fff !important; display: block !important; }
+            body.print-ledger #ledgerBox { max-height: none !important; box-shadow: none !important; }
         }
     </style>
 </head>
@@ -275,6 +280,35 @@
         </div>
     </div>
 
+    <!-- STUDENT LEDGER MODAL -->
+    <div id="ledgerModal" class="fixed inset-0 bg-black/50 z-[60] hidden flex items-center justify-center p-3">
+        <div id="ledgerBox" class="bg-white w-full max-w-4xl rounded-2xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex justify-between items-start border-b pb-3 mb-3 gap-2">
+                <div>
+                    <h3 class="text-lg font-bold text-indigo-950">Concept School - Student Fee Ledger</h3>
+                    <p id="ledgerInfo" class="text-xs text-slate-500 mt-0.5"></p>
+                </div>
+                <div class="flex gap-2 no-print">
+                    <button onclick="printLedger()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">🖨️ Print</button>
+                    <button onclick="closeLedger()" class="bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">✕</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto mb-3">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="bg-slate-100 text-slate-600">
+                        <tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Payable</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr>
+                    </thead>
+                    <tbody id="ledgerBody"></tbody>
+                </table>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border flex flex-wrap justify-between gap-2 text-xs font-semibold">
+                <div>Payable: <span id="ledTP" class="text-indigo-900"></span></div>
+                <div>Paid: <span id="ledTD" class="text-emerald-600"></span></div>
+                <div>Balance: <span id="ledTB" class="text-rose-600"></span></div>
+            </div>
+        </div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl space-y-3">
@@ -343,7 +377,7 @@ const MONTHS = ['january','february','march','april','may','june','july','august
 // ====================================================================================
 //  STATE
 // ====================================================================================
-let allStudents = [], allFees = [], accountsMap = {}, allLogs = [];
+let allStudents = [], allFees = [], accountsMap = {}, txMap = {}, allLogs = [];
 let families = [], familyMap = {};
 let expanded = new Set();
 let currentCallKey = null;
@@ -410,29 +444,41 @@ function waNumber(raw) {
 // ====================================================================================
 //  DATA LOADING
 // ====================================================================================
+// Supabase returns at most 1000 rows per request, so every table is loaded in pages
+async function fetchAllRows(t) {
+    const c = getSupabaseConfig();
+    let rows = [], from = 0, ord = true;
+    const get = () => fetch(`${c.url}/rest/v1/${t}?select=*${ord ? '&order=id.asc' : ''}`, { headers: sbHeaders({ Range: `${from}-${from + 999}`, 'Range-Unit': 'items' }) });
+    for(;;) {
+        let r = await get();
+        if(!r.ok && ord && from === 0) { ord = false; r = await get(); }
+        if(!r.ok) return [];
+        const a = await r.json();
+        if(!Array.isArray(a) || !a.length) break;
+        rows = rows.concat(a); from += a.length;
+    }
+    return rows;
+}
+
 async function initFollowups() {
     showLoading('Loading data...');
-    let c = getSupabaseConfig();
     try {
-        let [sRes, fRes, aRes] = await Promise.all([
-            fetch(`${c.url}/rest/v1/students?select=*`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/fees?select=*`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/accounts?select=*`, { headers: sbHeaders() })
-        ]);
-        let students = await sRes.json(), fees = await fRes.json(), accounts = await aRes.json();
-        allStudents = Array.isArray(students) ? students : [];
+        let [students, fees, accounts] = await Promise.all(['students', 'fees', 'accounts'].map(fetchAllRows));
+        allStudents = students;
 
-        accountsMap = {};
-        (Array.isArray(accounts) ? accounts : []).forEach(row => {
+        accountsMap = {}; txMap = {};
+        accounts.forEach(row => {
             let vId = String(row.voucher_id || '').trim().split('-').slice(0, 2).join('-');
             if(!vId) return;
             accountsMap[vId] = (accountsMap[vId] || 0) + (parseFloat(row.amount_in) || 0);
+            (txMap[vId] = txMap[vId] || []).push(row);
         });
 
-        allFees = (Array.isArray(fees) ? fees : []).map(r => {
+        allFees = fees.map(r => {
             let vId = String(r.voucher_id || '').trim();
-            let payable = parseFloat(r.payable) || 0, paid = accountsMap[vId] || 0;
-            return { ...r, _payable: payable, _paid: paid, _balance: payable - paid };
+            let disc = parseFloat(r.discount) || 0;                       // discount reduces the payable
+            let payable = (parseFloat(r.payable) || 0) - disc, paid = accountsMap[vId] || 0;
+            return { ...r, _discount: disc, _payable: payable, _paid: paid, _balance: payable - paid };
         });
 
         await loadLogs(false);
@@ -465,6 +511,44 @@ async function loadLogs(rerender = true) {
 function copySetupSql() {
     navigator.clipboard.writeText(SETUP_SQL).then(() => showCustomAlert('SQL copied. Paste it in the Supabase SQL Editor and run it.'));
 }
+
+// ====================================================================================
+//  STUDENT LEDGER (opens when a student name is clicked)
+// ====================================================================================
+function openLedger(key) {
+    let vs = allFees.filter(f => childKey(f.admis_no, f.student_name) === key)
+        .sort((a, b) => periodRank(a.period) - periodRank(b.period) || (isArrearsType(b.type) - isArrearsType(a.type)));
+    let st = allStudents.find(s => childKey(s.admis_no, s.student_name) === key) || vs[0] || {};
+    let tp = 0, td = 0, tb = 0, html = '';
+
+    vs.forEach(v => {
+        tp += v._payable; td += v._paid; tb += v._balance;
+        let run = v._payable;
+        let note = (isArrearsType(v.type) ? ' <span class="text-rose-600 font-semibold">(Previous year arrears 2025)</span>' : '')
+            + (v._discount > 0 ? ` <span class="text-indigo-600 font-semibold">(Discount PKR ${fmt(v._discount)})</span>` : '');
+        let txns = [...(txMap[String(v.voucher_id || '').trim().split('-').slice(0, 2).join('-')] || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
+        const row = (d, desc, paid, bal) => `<tr class="border-b">
+            <td class="p-2 font-mono">${esc(d)}</td>
+            <td class="p-2 font-mono text-indigo-900">${esc(v.voucher_id || '-')}</td>
+            <td class="p-2 text-indigo-600">${esc(v.period || '-')}</td>
+            <td class="p-2 text-slate-600">${desc}${note}</td>
+            <td class="p-2 font-bold">PKR ${fmt(v._payable)}</td>
+            <td class="p-2 font-bold text-emerald-600">PKR ${fmt(paid)}</td>
+            <td class="p-2 font-bold">PKR ${fmt(bal)}</td></tr>`;
+        if(txns.length) txns.forEach(t => { let a = parseFloat(t.amount_in) || 0; run -= a; html += row(t.date || '-', esc(t.description || t.remarks || '-'), a, run); });
+        else html += row('-', 'Unpaid voucher', 0, run);
+    });
+
+    $('ledgerBody').innerHTML = html || '<tr><td colspan="7" class="p-4 text-center text-slate-400">No vouchers found for this student.</td></tr>';
+    $('ledgerInfo').innerText = `Student: ${st.student_name || '-'} | Class: ${st.class || '-'} | Admis No: ${st.admis_no || '-'}${st[SIBLINGS_COL] ? ' | Siblings: ' + st[SIBLINGS_COL] : ''}`;
+    $('ledTP').innerText = 'PKR ' + fmt(tp);
+    $('ledTD').innerText = 'PKR ' + fmt(td);
+    $('ledTB').innerText = 'PKR ' + fmt(tb);
+    $('ledgerModal').classList.remove('hidden');
+}
+function closeLedger() { $('ledgerModal').classList.add('hidden'); }
+function printLedger() { document.body.classList.add('print-ledger'); window.print(); }
+window.addEventListener('afterprint', () => document.body.classList.remove('print-ledger'));
 
 // ====================================================================================
 //  BUILD FAMILIES
@@ -621,6 +705,9 @@ function contactsHtml(f, big) {
         </span>`).join(' ');
 }
 
+// clickable student name -> opens the ledger
+const nameLink = k => `<b class="cursor-pointer underline decoration-dotted hover:text-indigo-600" data-k="${esc(k.key)}" onclick="openLedger(this.dataset.k)" title="Open ledger">${esc(k.name)}</b>`;
+
 function famCardHtml(f) {
     let sm = STATUS[f.status];
     let pendingTxt = f.pending > 0 ? `PKR ${fmt(f.pending)}` : (f.pending < 0 ? `Adv ${fmt(Math.abs(f.pending))}` : 'Clear');
@@ -628,7 +715,7 @@ function famCardHtml(f) {
 
     let kidsHtml = f.kids.map(k => {
         let kn = k.net > 0 ? `<span class="text-rose-600 font-semibold">${fmt(k.net)}</span>` : `<span class="text-emerald-600">clear</span>`;
-        return `<span class="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-900 border border-indigo-100 rounded-lg px-2 py-1 text-xs"><b>${esc(k.name)}</b><span class="text-slate-500">${esc(k.cls)}</span>${kn}</span>`;
+        return `<span class="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-900 border border-indigo-100 rounded-lg px-2 py-1 text-xs">${nameLink(k)}<span class="text-slate-500">${esc(k.cls)}</span>${kn}</span>`;
     }).join(' ');
 
     let promiseLine = '';
@@ -683,7 +770,7 @@ function detailsHtml(f) {
         let advTxt = k.net < 0 ? `<span class="text-indigo-600 font-bold">Adv ${fmt(Math.abs(k.net))}</span>` : (k.net > 0 ? `<span class="text-rose-600 font-bold">${fmt(k.net)}</span>` : '<span class="text-emerald-600">0</span>');
         let kc = k.contacts.length ? k.contacts.map(c => `${esc(c.number)}`).join(', ') : '-';
         return `<tr class="border-b border-slate-200 align-top">
-            <td class="p-2"><b>${esc(k.name)}</b><div class="text-[11px] text-slate-500">Adm# ${esc(k.adm || '-')} · ${esc(k.cls || '-')}</div></td>
+            <td class="p-2">${nameLink(k)}<div class="text-[11px] text-slate-500">Adm# ${esc(k.adm || '-')} · ${esc(k.cls || '-')}</div></td>
             <td class="p-2 text-slate-600">${k.monthlyFee ? fmt(k.monthlyFee) : '-'}</td>
             <td class="p-2">${chips}</td>
             <td class="p-2 text-right whitespace-nowrap">${advTxt}</td>
@@ -1067,7 +1154,7 @@ function saveApiCredentials() {
         closeSettingsModal(); initFollowups();
     } else showCustomAlert('Please enter a valid URL and Key.');
 }
-document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closeCallModal(); closeWaModal(); closeCustomAlert(); } });
+document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closeCallModal(); closeWaModal(); closeLedger(); closeCustomAlert(); } });
 </script>
 </body>
 </html>
