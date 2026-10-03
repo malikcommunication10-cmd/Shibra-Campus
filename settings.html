@@ -6,6 +6,7 @@
     <title>Concept School Shibra Campus - System Settings</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="config.js"></script>
+    <script>window.addEventListener("pagehide", () => { try { sessionStorage.removeItem("sb_settings_v1"); } catch (e) {} });</script>
     <script src="nav.js"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }

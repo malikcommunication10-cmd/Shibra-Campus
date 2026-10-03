@@ -415,20 +415,7 @@ function waNumber(raw) {
 //  DATA LOADING
 // ====================================================================================
 // Supabase returns at most 1000 rows per request, so every table is loaded in pages
-async function fetchAllRows(t) {
-    const c = getSupabaseConfig();
-    let rows = [], from = 0, ord = true;
-    const get = () => fetch(`${c.url}/rest/v1/${t}?select=*${ord ? '&order=id.asc' : ''}`, { headers: sbHeaders({ Range: `${from}-${from + 999}`, 'Range-Unit': 'items' }) });
-    for(;;) {
-        let r = await get();
-        if(!r.ok && ord && from === 0) { ord = false; r = await get(); }
-        if(!r.ok) return [];
-        const a = await r.json();
-        if(!Array.isArray(a) || !a.length) break;
-        rows = rows.concat(a); from += a.length;
-    }
-    return rows;
-}
+async function fetchAllRows(t) { const r = await sbFetchAll(t, 'select=*'); const a = r.ok ? await r.json() : []; return Array.isArray(a) ? a : []; }
 
 async function initFollowups() {
     showLoading('Loading data...');

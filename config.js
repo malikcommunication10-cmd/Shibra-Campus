@@ -5,23 +5,34 @@ const SB_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
 const SB_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
 function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 
-// Supabase returns max 1000 rows per request: this loads every page of a table.
-// Returns an object that behaves like a fetch Response ({ok, status, json()}).
+// Supabase returns max 1000 rows per request. The first request also returns the total row count
+// (Content-Range), then ALL remaining pages are fetched in parallel. Behaves like a fetch Response.
 async function sbFetchAll(table, query) {
     query = query || 'select=*';
-    const c = getSupabaseConfig();
-    let useOrder = !/(^|&)order=/.test(query), rows = [], from = 0;
-    const get = (f, ord) => fetch(`${c.url}/rest/v1/${table}?${query}${ord ? '&order=id.asc' : ''}`,
-        { headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, Range: `${f}-${f + 999}`, 'Range-Unit': 'items' } });
-    for (;;) {
-        let r = await get(from, useOrder);
-        if (!r.ok && useOrder && from === 0) { useOrder = false; r = await get(from, false); }
-        if (r.status === 416 && from > 0) break;
-        if (!r.ok) return { ok: false, status: r.status, json: async () => r.json().catch(() => ({})), text: async () => r.text().catch(() => '') };
-        const a = await r.json();
-        if (!Array.isArray(a)) return { ok: false, status: 200, json: async () => a, text: async () => '' };
-        if (!a.length) break;
-        rows = rows.concat(a); from += a.length;
+    const c = getSupabaseConfig(), ordKey = 'sb_ord_' + table;
+    let ord = !/(^|&)order=/.test(query);
+    try { if (sessionStorage.getItem(ordKey) === '0') ord = false; } catch (e) {}
+    const hdr = (f, t, count) => Object.assign({ apikey: c.key, Authorization: `Bearer ${c.key}`, Range: `${f}-${t}`, 'Range-Unit': 'items' }, count ? { Prefer: 'count=exact' } : {});
+    const get = (f, t, o, count) => fetch(`${c.url}/rest/v1/${table}?${query}${o ? '&order=id.asc' : ''}`, { headers: hdr(f, t, count) });
+    const fail = r => ({ ok: false, status: r.status, json: async () => r.json().catch(() => ({})), text: async () => r.text().catch(() => '') });
+    let r = await get(0, 999, ord, true);
+    if (!r.ok && ord) { ord = false; try { sessionStorage.setItem(ordKey, '0'); } catch (e) {} r = await get(0, 999, false, true); }
+    if (!r.ok) return fail(r);
+    let rows = await r.json();
+    if (!Array.isArray(rows)) return { ok: false, status: 200, json: async () => rows, text: async () => '' };
+    const cr = r.headers.get('content-range') || '', total = cr.includes('/') ? parseInt(cr.split('/')[1], 10) : NaN, size = rows.length;
+    if (size && !isNaN(total) && total > size) {
+        const jobs = [];
+        for (let f = size; f < total; f += size) jobs.push(get(f, f + size - 1, ord, false).then(x => x.ok ? x.json() : Promise.reject(x)));
+        try { (await Promise.all(jobs)).forEach(a => { rows = rows.concat(a); }); }
+        catch (x) { return fail(x && x.status ? x : { status: 500, json: async () => ({}), text: async () => '' }); }
+    } else if (size && isNaN(total)) {                       // header not available: fall back to sequential paging
+        for (let f = size; ; f += size) {
+            const x = await get(f, f + size - 1, ord, false);
+            if (!x.ok) break;
+            const a = await x.json(); if (!Array.isArray(a) || !a.length) break;
+            rows = rows.concat(a);
+        }
     }
     return { ok: true, status: 200, json: async () => rows, text: async () => '' };
 }
@@ -39,6 +50,7 @@ const SETTING_DEFAULTS = {
 let _settingLists = null;
 async function loadSettingLists() {
     if (_settingLists) return _settingLists;
+    try { const c = JSON.parse(sessionStorage.getItem('sb_settings_v1') || 'null'); if (c && Date.now() - c.t < 120000) { _settingLists = c.d; return c.d; } } catch (e) {}
     const out = { rules: {} };
     Object.keys(SETTING_DEFAULTS).forEach(k => out[k] = [...SETTING_DEFAULTS[k]]);
     try {
@@ -57,5 +69,6 @@ async function loadSettingLists() {
         if (out.rules['Low Stock Limit'] !== undefined) localStorage.setItem('books_low_stock', out.rules['Low Stock Limit']);
     } catch (e) {}
     _settingLists = out;
+    try { sessionStorage.setItem('sb_settings_v1', JSON.stringify({ t: Date.now(), d: out })); } catch (e) {}
     return out;
 }

@@ -296,20 +296,7 @@ function makeVidGenerator(used){
 }
 
 /* ---------- Load ---------- */
-async function fetchAll(t){
-  const get=(from,ord)=>fetch(`${SUPABASE_URL}/rest/v1/${t}?select=*${ord?'&order=id.asc':''}`,{headers:{...H,Range:`${from}-${from+999}`,'Range-Unit':'items'}});
-  let ord=true,rows=[],from=0;
-  for(;;){
-    let r=await get(from,ord);
-    if(!r.ok&&ord&&from===0){ord=false;r=await get(from,ord)}
-    if(!r.ok)return await r.json().catch(()=>({error:true}));
-    const a=await r.json();
-    if(!Array.isArray(a))return a;
-    if(!a.length)break;
-    rows=rows.concat(a);from+=a.length;
-  }
-  return rows;
-}
+async function fetchAll(t) { const r = await sbFetchAll(t, 'select=*'); return await r.json(); }
 async function initFeePage(){
   $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
   if(!$('voucherPeriod').options.length){
