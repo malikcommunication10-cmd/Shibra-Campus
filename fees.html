@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="tailwind.css">
     <script src="config.js"></script>
     <script src="nav.js"></script>
+    <!-- SHEETJS EXCEL READER CDN ADDED TO FIX IMPORT ERROR -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 .inp{width:100%;border:1px solid #cbd5e1;border-radius:.6rem;padding:.6rem .75rem;font-size:.85rem;background:#fff;outline:none}
@@ -479,7 +481,7 @@ async function postAccounts(payload,okMsg,loadMsg){
 }
 
 function submitBulkFifoPayment(){
-  const recv=parseFloat($('bulkReceivedAmount').value)||0,date=$('bulkPayDate').value;
+  const recv=parseFloat($('bulkReceivedAmount').value)\vert{}\vert{}0,date=$('bulkPayDate').value;
   const remarks=$('bulkPayRemarks').value.trim()||"Bulk payment via FIFO";
   if(recv<=0){showAlert("Please enter a valid amount greater than 0.");return}
   showConfirm(`PKR ${recv} will be distributed via FIFO. Any extra is saved as advance on the latest voucher. Proceed?`,async()=>{
@@ -548,16 +550,14 @@ const closeLedgerModal=()=>$('ledgerModal').classList.remove('open');
 /* ---------- Single payment ---------- */
 function openPayModal(vId){
   const row=allFeesCache.find(r=>(r.voucher_id||'').trim()===vId);if(!row)return;
-  $('payVoucherId').value=row.voucher_id||'';$('payStudentName').value=row.student_name||'';
-  $('payFromAccount').value=`${row.type||'Tuition Fee'} (${row.period||''}) - ${row.student_name||''}`;
+  $('payVoucherId').value=row.voucher_id||'';$('payStudentName').value=row.student_name\vert{}\vert{}'';$('payFromAccount').value=`${row.type||'Tuition Fee'} (${row.period||''}) - ${row.student_name||''}`;
   const pay=row.net??(parseFloat(row.payable)||0),rem=pay-(parseFloat(row.totalPaid)||0);
-  $('payPayable').value=pay;$('payAmountIn').value=rem>0?rem:pay;$('payRemarks').value=row.remarks||'';
-  $('payModal').classList.add('open');
+  $('payPayable').value=pay;$('payAmountIn').value=rem>0?rem:pay;$('payRemarks').value=row.remarks\vert{}\vert{}'';$('payModal').classList.add('open');
 }
 const closePayModal=()=>$('payModal').classList.remove('open');
 async function submitPayment(e){
   e.preventDefault();const rm=$('payRemarks').value.trim();
-  const ok=await postAccounts({voucher_id:$('payVoucherId').value.trim()+'-'+Date.now(),from_account:$('payFromAccount').value,to_account:$('payToAccount').value,description:rm,amount_in:parseFloat($('payAmountIn').value)||0,amount_out:0,date:$('payDate').value,remarks:rm},"Payment receipt saved successfully!","Saving receipt...");
+  const ok=await postAccounts({voucher_id:$('payVoucherId').value.trim()+'-'+Date.now(),from_account:$('payFromAccount').value,to_account:$('payToAccount').value,description:rm,amount_in:parseFloat($('payAmountIn').value)\vert{}\vert{}0,amount_out:0,date:$('payDate').value,remarks:rm},"Payment receipt saved successfully!","Saving receipt...");
   if(ok){closePayModal();initFeePage()}
 }
 
@@ -656,7 +656,7 @@ async function readImport(){
   if(typeof XLSX==='undefined'){showAlert("Excel reader could not load. Check your internet connection.");return}
   showLoading("Reading file...");
   try{
-    await loadXlsx(); const wb=/\.csv$/i.test(f.name)?XLSX.read(await f.text(),{type:'string',raw:true}):XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
+    const wb=/\.csv$/i.test(f.name)?XLSX.read(await f.text(),{type:'string',raw:true}):XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
     const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
     hideLoading();buildImportPlan(raw);
   }catch(e){hideLoading();console.error(e);showAlert("Could not read this file.")}
@@ -696,7 +696,7 @@ function buildImportPlan(raw){
   importPlan={entries};
   const cnt={};rows.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
   const bg=st=>st==='OK'?'text-emerald-700':st.startsWith('Dup')?'text-amber-700':'text-rose-600';
-  $('importPreview').innerHTML=`<div class="rounded-lg bg-slate-50 border p-2 mb-2 font-semibold">${rows.length} payments read | ${Object.entries(cnt).map(([k,v])=>`${k}: ${v}`).join(' | ')}${bad?` | ${bad} invalid rows ignored`:''} | ${entries.length} entries will be saved<div class="font-normal text-slate-600 mt-1">${monthLine}</div></div>
+  $('importPreview').innerHTML=`<div class="rounded-lg bg-slate-50 border p-2 mb-2 font-semibold">${rows.length} payments read | ${Object.entries(cnt).map(([k,v])=>`${k}:${v}`).join(' | ')}${bad?` | ${bad} invalid rows ignored`:''} | ${entries.length} entries will be saved<div class="font-normal text-slate-600 mt-1">${monthLine}</div></div>
   <div class="overflow-x-auto max-h-72 border rounded-lg"><table class="w-full text-left"><thead class="bg-slate-100 sticky top-0"><tr><th class="p-1.5">Adm</th><th class="p-1.5">Name</th><th class="p-1.5">Date</th><th class="p-1.5">Amount</th><th class="p-1.5">Result</th><th class="p-1.5">Allocation / notes</th></tr></thead><tbody>${rows.slice(0,400).map(r=>`<tr class="border-t"><td class="p-1.5 font-mono">${esc(r.p.adm)}</td><td class="p-1.5">${esc(r.p.name)}</td><td class="p-1.5 font-mono">${r.p.date}</td><td class="p-1.5 font-bold">${fmt(r.p.amt)}</td><td class="p-1.5 font-semibold ${bg(r.status)}">${r.status}</td><td class="p-1.5">${esc(r.alloc.join(', '))}${r.flags.length?` <span class="text-amber-700">${esc(r.flags.join('; '))}</span>`:''}</td></tr>`).join('')}</tbody></table></div>${rows.length>400?'<p class="mt-1 text-slate-500">Showing the first 400 rows; all will be processed.</p>':''}`;
   $('importConfirm').classList.toggle('hidden',!entries.length);
 }
@@ -780,8 +780,7 @@ function renderPicker(){
   const box=$('stuPanel'),list=classStudents();
   if(!list.length){box.classList.add('hidden');return}
   box.classList.remove('hidden');
-  const per=$('voucherPeriod').value,q=$('stuSearch').value.trim().toLowerCase();
-  $('stuList').innerHTML=list.filter(s=>!q||(s.student_name||'').toLowerCase().includes(q)||String(s.admis_no||'').toLowerCase().includes(q))
+  const per=$('voucherPeriod').value,q=$('stuSearch').value.trim().toLowerCase();$('stuList').innerHTML=list.filter(s=>!q||(s.student_name||'').toLowerCase().includes(q)||String(s.admis_no||'').toLowerCase().includes(q))
     .map(s=>{const st=stuState(s,per);return`<label class="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"><input type="checkbox" data-k="${esc(skey(s))}" ${selStu.has(skey(s))?'checked':''} onchange="togStu(this)"><span class="font-semibold flex-1">${esc(s.student_name)}</span><span class="font-mono text-slate-400">${esc(s.admis_no)}</span><span class="badge ${st.c}">${st.t}</span></label>`}).join('')||'<div class="p-3 text-xs text-slate-400">No students match.</div>';
   $('stuCount').innerText=`${selStu.size} selected / ${list.length}`;
 }
@@ -794,7 +793,7 @@ function pickStu(mode){
 
 function openDiscount(vId){
   const r=allFeesCache.find(x=>(x.voucher_id||'').trim()===vId);if(!r)return;
-  $('dcVid').value=r.voucher_id;$('dcStudent').value=r.student_name||'';$('dcPayable').value=parseFloat(r.payable)||0;
+  $('dcVid').value=r.voucher_id;$('dcStudent').value=r.student_name\vert{}\vert{}'';$('dcPayable').value=parseFloat(r.payable)||0;
   $('dcAmt').value=r.discount||'';
   const d=(r.remarks||'').split(' | ').find(x=>x.startsWith('Discount '));
   $('dcRemarks').value=d?d.replace(/^Discount [^:]*: /,''):'';
