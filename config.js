@@ -33,7 +33,8 @@ const SETTING_DEFAULTS = {
     'Designation': ['Principal', 'Vice Principal', 'Teacher', 'Coordinator', 'Accountant', 'Clerk', 'Computer Operator', 'Driver', 'Guard', 'Peon', 'Aya / Helper'],
     'Income Head': ['Admission / Registration Fee', 'Annual Fund', 'Book Store Sale', 'Uniform / Stationery Sale', 'Transport Fee', 'Donation', 'Other Income'],
     'Expense Head': ['Salaries', 'Utility Bills', 'Rent', 'Stationery', 'Repair & Maintenance', 'Fuel / Transport', 'Events / Functions', 'Books Purchase', 'Printing', 'Internet / Phone', 'Refreshments', 'Misc Expense'],
-    'Book Vendor': []
+    'Book Vendor': [],
+    'Book Category': ['Books', 'Notebooks', 'Study Planner', 'Lamination Paper']
 };
 let _settingLists = null;
 async function loadSettingLists() {

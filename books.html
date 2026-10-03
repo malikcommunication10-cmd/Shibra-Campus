@@ -6,6 +6,7 @@
     <title>Concept School Shibra Campus - Book Store & Inventory</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="config.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="nav.js"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
@@ -60,6 +61,8 @@
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button onclick="openTx('sale')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🛒 New Sale</button>
+                    <button onclick="openStudentSale()" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🎓 Student Sale</button>
+                    <button onclick="openImport()" class="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">⬆️ Import items</button>
                     <button onclick="openTx('purchase')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">📥 Purchase</button>
                     <button onclick="openTx('sale_return')" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">↩️ Return</button>
                     </div>
@@ -259,6 +262,11 @@
                     <datalist id="bookList"></datalist>
                     <p id="mStock" class="text-xs mt-1 text-slate-500"></p>
                 </div>
+                    <div id="mItemExtra" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div><label class="block text-xs font-medium text-slate-700 mb-1">Class (course)</label><select id="mItemClass" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select></div>
+                        <div><label class="block text-xs font-medium text-slate-700 mb-1">Category</label><select id="mItemCat" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select></div>
+                        <div><label class="block text-xs font-medium text-slate-700 mb-1">Sale price (fixed)</label><input id="mSalePrice" type="number" min="0" placeholder="PKR" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                    </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-medium text-slate-700 mb-1">Quantity</label>
@@ -336,12 +344,15 @@ const SETUP_SQL = `alter table public.books
   add column if not exists date date,
   add column if not exists voucher_no text,
   add column if not exists payment_mode text,
-  add column if not exists notes text;`;
+  add column if not exists notes text,
+ add column if not exists item_class text,
+ add column if not exists category text,
+ add column if not exists sale_price numeric;`;
 
 // ====================================================================================
 //  STATE + HELPERS
 // ====================================================================================
-let txs = [], txByUid = {}, items = {}, hasExt = false, hasId = true;
+let txs = [], txByUid = {}, items = {}, hasExt = false, hasItemCols = false, hasId = true;
 let txLimit = 200, txKind = 'sale', lastSaved = null;
 
 const $ = id => document.getElementById(id);
@@ -399,7 +410,7 @@ function normTx(row, idx) {
         uid, id: row.id, idx, kind, qty, unit, net, gross: qty * unit, discount: Math.max(0, qty * unit - net),
         title, key: norm(title), party: String(row.party_name || row.party || '').trim(),
         date: String(row.date || row.created_at || '').slice(0, 10),
-        voucher: String(row.voucher_no || '').trim(), mode: String(row.payment_mode || '').trim(), notes: String(row.notes || '').trim(), raw: row
+        voucher: String(row.voucher_no || '').trim(), mode: String(row.payment_mode || '').trim(), notes: String(row.notes || '').trim(), itemClass: String(row.item_class || '').trim(), category: String(row.category || '').trim(), salePrice: parseFloat(row.sale_price) || 0, raw: row
     };
 }
 
@@ -408,13 +419,14 @@ async function initBooks() {
     showLoading('Loading book store...');
     let c = getSupabaseConfig();
     try {
-        let [res, probe] = await Promise.all([
+        let [res, probe, probe2] = await Promise.all([
             sbFetchAll('books', 'select=*'),
-            fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() })
+            fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() }),
+ fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() })
         ]);
         let rows = await res.json();
         if(!Array.isArray(rows)) throw new Error('books failed to load');
-        hasExt = probe.ok;
+        hasExt = probe.ok; hasItemCols = probe2.ok;
         hasId = rows.length === 0 || rows.some(r => r.id !== undefined);
         txs = rows.map(normTx);
         txs.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (typeof b.id === 'number' && typeof a.id === 'number' ? b.id - a.id : b.idx - a.idx));
@@ -434,7 +446,7 @@ async function initBooks() {
 
 function updateBanner() {
     $('setupSql').innerText = SETUP_SQL;
-    $('setupBanner').classList.toggle('hidden', hasExt || localStorage.getItem('books_banner_hidden') === '1');
+    $('setupBanner').classList.toggle('hidden', hasExt && hasItemCols);
 }
 function dismissBanner() { localStorage.setItem('books_banner_hidden', '1'); $('setupBanner').classList.add('hidden'); }
 function copySetupSql() { navigator.clipboard.writeText(SETUP_SQL).then(() => toast('SQL copied. Paste it in the Supabase SQL Editor and run it.')); }
@@ -449,6 +461,7 @@ function buildItems() {
         if(!t.key) return;
         let it = items[t.key] || (items[t.key] = { key: t.key, title: t.title, p: 0, pr: 0, s: 0, sr: 0, pAmt: 0, prAmt: 0, lastSale: 0, lastBuy: 0, lastDate: '' });
         it.title = t.title;
+ if(t.kind === 'purchase') { if(t.itemClass) it.cls = t.itemClass; if(t.category) it.cat = t.category; if(t.salePrice) it.sp = t.salePrice; }
         if(t.kind === 'purchase') { it.p += t.qty; it.pAmt += t.net; it.lastBuy = t.unit; }
         else if(t.kind === 'purchase_return') { it.pr += t.qty; it.prAmt += t.net; }
         else if(t.kind === 'sale') { it.s += t.qty; it.lastSale = t.unit; }
@@ -613,7 +626,7 @@ function renderInventory() {
     $('invCount').innerText = `${list.length} of ${all.length} titles`;
     const stockCls = i => i.stock <= 0 ? 'text-rose-600' : (i.status === 'low' ? 'text-amber-600' : 'text-slate-900');
     $('invBody').innerHTML = list.length ? list.map(i => `<tr class="border-b hover:bg-slate-50">
-        <td class="p-2.5 font-semibold text-slate-800">${esc(i.title)}</td>
+        <td class="p-2.5 font-semibold text-slate-800">${esc(i.title)}<div class="text-[11px] font-normal text-slate-500">${[i.cls, i.cat, i.sp ? 'Sale ' + fmt(i.sp) : ''].filter(Boolean).map(esc).join(' · ')}</div></td>
         <td class="p-2.5 text-right">${fmt(i.p)}</td><td class="p-2.5 text-right">${fmt(i.s)}</td>
         <td class="p-2.5 text-right text-slate-500">${fmt(i.pr)} / ${fmt(i.sr)}</td>
         <td class="p-2.5 text-right font-extrabold ${stockCls(i)}">${fmt(i.stock)}</td>
@@ -725,11 +738,12 @@ function setTxKind(kind) {
     $('mPartyLabel').innerText = isVendor ? 'Vendor / Supplier name' : 'Student / Customer name';
     $('mSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + (kind === 'sale' ? 'bg-emerald-600 hover:bg-emerald-700' : (kind === 'purchase' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-500 hover:bg-amber-600'));
     $('mHint').innerText = KINDS[kind].money === 'in' ? 'Money comes in → recorded as a Receipt in Accounts' : 'Money goes out → recorded as a Payment in Accounts';
+    { const show = kind === 'purchase' && hasItemCols; $('mItemExtra').classList.toggle('hidden', !show); if(show) fillItemSelects(); }
     onTitleInput(true);
 }
 function openTx(kind, key) {
     $('mDate').value = todayStr(); $('mParty').value = ''; $('mTitleIn').value = ''; $('mQty').value = 1; $('mPrice').value = '';
-    $('mDiscType').value = 'percentage'; $('mDiscVal').value = 0; $('mNotes').value = ''; $('mWallet').value = 'cash'; $('mPostAcc').checked = true;
+    $('mDiscType').value = 'percentage'; $('mDiscVal').value = 0; $('mNotes').value = ''; $('mSalePrice').value = ''; $('mWallet').value = 'cash'; $('mPostAcc').checked = true;
     $('mDateWrap').classList.toggle('hidden', !hasExt);
     $('mExtWrap').classList.toggle('hidden', !hasExt);
     if(key && items[key]) $('mTitleIn').value = items[key].title;
@@ -744,10 +758,11 @@ function closeTx() { $('txModal').classList.add('hidden'); }
 function onTitleInput(skipPrice) {
     let it = items[norm($('mTitleIn').value)], el = $('mStock'), kind = txKind;
     if(!it) { el.innerHTML = $('mTitleIn').value.trim() ? '<span class="text-slate-400">New title — it will be added to inventory.</span>' : ''; return; }
-    let low = it.stock <= 0 ? 'text-rose-600' : (it.status === 'low' ? 'text-amber-600' : 'text-emerald-600');
+    if(kind === 'purchase' && hasItemCols) { if(it.cls) $('mItemClass').value = it.cls; if(it.cat) $('mItemCat').value = it.cat; if(!$('mSalePrice').value && it.sp) $('mSalePrice').value = it.sp; }
+ let low = it.stock <= 0 ? 'text-rose-600' : (it.status === 'low' ? 'text-amber-600' : 'text-emerald-600');
     el.innerHTML = `In stock: <b class="${low}">${fmt(it.stock)}</b> · Avg cost ${fmt(it.avgCost)}${it.lastSale ? ' · Last sale price ' + fmt(it.lastSale) : ''}`;
     if(skipPrice !== true && !$('mPrice').value) {
-        let p = (kind === 'sale' || kind === 'sale_return') ? it.lastSale : (it.lastBuy || it.avgCost);
+        let p = (kind === 'sale' || kind === 'sale_return') ? (it.sp || it.lastSale) : (it.lastBuy || it.avgCost);
         if(p) { $('mPrice').value = Math.round(p * 100) / 100; calcNet(); }
     }
 }
@@ -772,12 +787,14 @@ async function saveTx(addAnother) {
     if(n.price <= 0) { toast('Please enter the unit price.', false); return; }
     if(hasExt && !date) { toast('Please select a date.', false); return; }
 
+    if(hasItemCols && kind === 'purchase' && !(parseFloat($('mSalePrice').value) > 0)) { toast('Please enter the fixed sale price for this item.', false); return; }
     let it = items[norm(title)];
     const doSave = async () => {
         let postAcc = hasExt && $('mPostAcc').checked, wallet = $('mWallet').value;
         let voucher = hasExt ? genVoucher(postAcc ? (meta.money === 'in' ? 'RV-' : 'PV-') : 'BK-') : '';
         let payload = { type: meta.stored, party_name: party, book_title: title, qty: n.qty, unit_price: n.price, net_amount: Math.round(n.net * 100) / 100 };
         if(hasExt) Object.assign(payload, { date, voucher_no: voucher, payment_mode: postAcc ? wallet : null, notes: notes || null });
+ if(hasItemCols && kind === 'purchase') Object.assign(payload, { item_class: $('mItemClass').value || 'All', category: $('mItemCat').value || null, sale_price: parseFloat($('mSalePrice').value) || null });
 
         showLoading('Saving...');
         try {
@@ -812,6 +829,163 @@ async function saveTx(addAnother) {
 // ====================================================================================
 //  DELETE + PRINT SLIP
 // ====================================================================================
+// ====================================================================================
+// STUDENT SALE (class-wise course) + IMPORT ITEMS
+// ====================================================================================
+let ssStudents = null, ssStudent = null, ssLines = [], impRows = [];
+const ssLabel = s => `${s.student_name} (${s.admis_no}) - ${s.class}`;
+function fillItemSelects() {
+    const L = _settingLists || {};
+    const cls = $('mItemClass');
+    if(cls && !cls.options.length) cls.innerHTML = '<option value="All">All classes</option>' + (L['Class'] || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    const cat = $('mItemCat');
+    if(cat && !cat.options.length) cat.innerHTML = (L['Book Category'] || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+async function openStudentSale() {
+    if(!hasExt || !hasItemCols) { toast('Run the SQL shown in the yellow box first, then refresh.', false); return; }
+    showLoading('Loading students...');
+    if(!ssStudents) { try { const a = await (await sbFetchAll('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; } }
+    hideLoading();
+    ssStudent = null; ssLines = [];
+    $('ssStudent').value = ''; $('ssDate').value = todayStr(); $('ssDiscType').value = 'percentage'; $('ssDiscVal').value = 0; $('ssNotes').value = ''; $('ssWallet').value = 'cash'; $('ssPost').checked = true;
+    $('ssStudentList').innerHTML = ssStudents.filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).map(s => `<option value="${esc(ssLabel(s))}">`).join('');
+    $('ssOtherList').innerHTML = Object.values(items).map(i => `<option value="${esc(i.title)}">`).join('');
+    renderSS(); $('studentSaleModal').classList.remove('hidden');
+}
+function closeSS() { $('studentSaleModal').classList.add('hidden'); }
+function ssPick() {
+    ssStudent = (ssStudents || []).find(s => ssLabel(s) === $('ssStudent').value.trim()) || null;
+    if(!ssStudent) { ssLines = []; renderSS(); return; }
+    const cl = norm(ssStudent.class);
+    ssLines = Object.values(items).filter(i => i.cls && (norm(i.cls) === cl || norm(i.cls) === 'all'))
+        .sort((a, b) => (a.cat || '').localeCompare(b.cat || '') || a.title.localeCompare(b.title))
+        .map(i => ({ key: i.key, title: i.title, cat: i.cat || '', price: i.sp || i.lastSale || 0, qty: 1, on: i.stock > 0, stock: i.stock }));
+    renderSS();
+}
+function ssAddOther() {
+    const it = items[norm($('ssOther').value)];
+    if(!it) { toast('Pick an item from the list.', false); return; }
+    if(ssLines.some(l => l.key === it.key)) { toast('This item is already in the list.', false); return; }
+    ssLines.push({ key: it.key, title: it.title, cat: it.cat || '', price: it.sp || it.lastSale || 0, qty: 1, on: true, stock: it.stock });
+    $('ssOther').value = ''; renderSS();
+}
+function ssQty(i, d) { ssLines[i].qty = Math.max(1, (parseInt(ssLines[i].qty) || 1) + d); renderSS(); }
+function ssField(i, f, v) { if(f === 'on') ssLines[i].on = v; else if(f === 'qty') ssLines[i].qty = Math.max(1, parseInt(v) || 1); else ssLines[i].price = parseFloat(v) || 0; renderSS(); }
+function ssTotals() {
+    const on = ssLines.filter(l => l.on && l.qty > 0 && l.price > 0);
+    const gross = on.reduce((s, l) => s + l.qty * l.price, 0), dv = parseFloat($('ssDiscVal').value) || 0;
+    const disc = $('ssDiscType').value === 'percentage' ? gross * Math.min(dv, 100) / 100 : Math.min(dv, gross);
+    return { on, gross, disc: Math.round(disc * 100) / 100, net: Math.max(0, gross - disc) };
+}
+function renderSS() {
+    $('ssInfo').innerHTML = ssStudent ? `Class: <b>${esc(ssStudent.class)}</b> · ${ssLines.length} course item(s) found` + (ssLines.length ? '' : ' <span class="text-amber-600">No item is linked to this class yet. Add one below or import items.</span>') : '<span class="text-slate-400">Select a student to load the class course.</span>';
+    $('ssRows').innerHTML = ssLines.map((l, i) => `<div class="flex flex-wrap items-center gap-2 border rounded-xl p-2 ${l.on ? 'bg-white' : 'bg-slate-50 opacity-60'}">
+        <input type="checkbox" ${l.on ? 'checked' : ''} onchange="ssField(${i},'on',this.checked)" class="w-4 h-4">
+        <div class="flex-1 min-w-[140px]"><div class="text-sm font-semibold">${esc(l.title)}</div><div class="text-[11px] text-slate-500">${esc(l.cat)} · stock <b class="${l.stock <= 0 ? 'text-rose-600' : ''}">${fmt(l.stock)}</b></div></div>
+        <input type="number" min="0" value="${l.price}" onchange="ssField(${i},'price',this.value)" class="w-20 border rounded-lg p-1.5 text-sm text-right" title="Unit price">
+        <div class="flex items-center"><button type="button" onclick="ssQty(${i},-1)" class="w-7 h-7 rounded-lg bg-slate-100 font-bold">−</button><input type="number" min="1" value="${l.qty}" onchange="ssField(${i},'qty',this.value)" class="w-12 text-center border rounded-lg p-1 mx-1 text-sm"><button type="button" onclick="ssQty(${i},1)" class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 font-bold">+</button></div>
+        <div class="w-20 text-right text-sm font-bold">${fmt(l.qty * l.price)}</div></div>`).join('');
+    const T = ssTotals();
+    $('ssGross').innerText = fmt(T.gross); $('ssDisc').innerText = fmt(T.disc); $('ssNet').innerText = 'PKR ' + fmt(T.net);
+}
+async function saveStudentSale() {
+    const T = ssTotals(), date = $('ssDate').value, notes = $('ssNotes').value.trim(), post = $('ssPost').checked, wallet = $('ssWallet').value;
+    if(!ssStudent) { toast('Please select a student.', false); return; }
+    if(!T.on.length) { toast('Tick at least one item with a price.', false); return; }
+    if(!date) { toast('Please select a date.', false); return; }
+    const short = T.on.filter(l => l.qty > l.stock);
+    const go = async () => {
+        const bill = 'SB' + Math.floor(100000 + Math.random() * 900000), used = new Set(txs.map(t => t.voucher));
+        const newV = () => { let v; do { v = (post ? 'RV-' : 'BK-') + Math.floor(100000 + Math.random() * 900000); } while(used.has(v)); used.add(v); return v; };
+        let left = T.disc; const who = `${ssStudent.student_name} (${ssStudent.admis_no})`, rows = [], acc = [];
+        T.on.forEach((l, k) => {
+            const g = l.qty * l.price, share = k === T.on.length - 1 ? left : Math.round(T.disc * g / T.gross * 100) / 100;
+            left = Math.round((left - share) * 100) / 100;
+            const net = Math.round((g - share) * 100) / 100, v = newV();
+            rows.push({ type: 'Sale', party_name: who, book_title: l.title, qty: l.qty, unit_price: l.price, net_amount: net, date, voucher_no: v, payment_mode: post ? wallet : null, notes: (notes ? notes + ' | ' : '') + 'Bill ' + bill });
+            if(post) acc.push({ voucher_id: v, from_account: 'Book Store Sale', to_account: wallet, description: `Sale: ${l.title} x${l.qty} - ${who}`, amount_in: net, amount_out: 0, date, remarks: notes });
+        });
+        showLoading('Saving sale...');
+        try {
+            const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
+            const r1 = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows) });
+            if(!r1.ok) { hideLoading(); toast('Could not save: ' + await r1.text(), false); return; }
+            let note = '';
+            if(acc.length) { const r2 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify(acc) }); note = r2.ok ? ' and recorded in Accounts' : ' - but it could NOT be recorded in Accounts (add it manually)'; }
+            toast(`Sale saved (${rows.length} items, PKR ${fmt(T.net)})${note}.`, !note.includes('NOT'));
+            closeSS(); await initBooks();
+        } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+    };
+    if(short.length) confirmBox('Not enough stock for: ' + short.map(l => `${l.title} (stock ${fmt(l.stock)}, entering ${l.qty})`).join(', ') + '.\n\nContinue anyway?', 'Continue', go); else go();
+}
+
+// ---- Import items (Excel / CSV): each row becomes a Purchase that creates / tops-up the item ----
+function openImport() {
+    if(!hasExt || !hasItemCols) { toast('Run the SQL shown in the yellow box first, then refresh.', false); return; }
+    impRows = []; $('impFile').value = ''; $('impPreview').innerHTML = ''; $('impGo').classList.add('hidden'); $('impPost').checked = false; $('impWallet').value = 'cash';
+    $('importModal').classList.remove('hidden');
+}
+function downloadTemplate() {
+    const rows = [['title', 'class', 'category', 'qty', 'purchase_price', 'sale_price', 'vendor', 'date', 'discount_percent'],
+        ['Math - Class Five', 'Five', 'Books', 50, 180, 250, 'ABC Traders', todayStr(), 0],
+        ['Notebook 200 pages', 'All', 'Notebooks', 100, 60, 90, 'ABC Traders', todayStr(), 5],
+        ['Study Planner', 'All', 'Study Planner', 40, 120, 200, 'XYZ Stationers', todayStr(), 0],
+        ['Lamination Paper', 'All', 'Lamination Paper', 500, 3, 5, 'XYZ Stationers', todayStr(), 0]];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\uFEFF' + rows.map(r => r.join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8;' }));
+    a.download = 'book_items_template.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+function impDate(v) {
+    if(v instanceof Date && !isNaN(v)) return new Date(v.getTime() + 12 * 36e5).toISOString().slice(0, 10);
+    const t = String(v ?? '').trim(); let m;
+    if(m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    if(m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/)) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    return '';
+}
+async function readImp() {
+    const f = $('impFile').files[0]; if(!f) { toast('Choose a file first.', false); return; }
+    if(typeof XLSX === 'undefined') { toast('Excel reader could not load. Check your internet connection.', false); return; }
+    try {
+        const wb = /\.csv$/i.test(f.name) ? XLSX.read(await f.text(), { type: 'string', raw: true }) : XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+        const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+        const g = (r, k) => { const key = Object.keys(r).find(x => x.trim().toLowerCase() === k); return key ? r[key] : ''; };
+        const L = _settingLists || {}, classes = new Set((L['Class'] || []).map(norm)), cats = new Set((L['Book Category'] || []).map(norm));
+        impRows = raw.map((r, i) => {
+            const o = { n: i + 2, title: String(g(r, 'title')).trim().replace(/\s+/g, ' '), cls: String(g(r, 'class')).trim() || 'All', cat: String(g(r, 'category')).trim(),
+                qty: parseFloat(String(g(r, 'qty')).replace(/,/g, '')) || 0, buy: parseFloat(String(g(r, 'purchase_price')).replace(/,/g, '')) || 0, sale: parseFloat(String(g(r, 'sale_price')).replace(/,/g, '')) || 0,
+                vendor: String(g(r, 'vendor')).trim(), date: impDate(g(r, 'date')) || todayStr(), disc: parseFloat(g(r, 'discount_percent')) || 0, err: [] };
+            if(!o.title) o.err.push('title missing'); if(o.qty <= 0) o.err.push('qty'); if(o.buy <= 0) o.err.push('purchase_price'); if(o.sale <= 0) o.err.push('sale_price');
+            if(o.cls && norm(o.cls) !== 'all' && !classes.has(norm(o.cls))) o.err.push('class not in Settings');
+            o.warn = o.cat && !cats.has(norm(o.cat)) ? 'category not in Settings' : '';
+            o.net = Math.round(o.qty * o.buy * (1 - Math.min(o.disc, 100) / 100) * 100) / 100;
+            return o;
+        }).filter(o => o.title || o.qty || o.buy);
+        const ok = impRows.filter(o => !o.err.length);
+        $('impPreview').innerHTML = `<div class="font-semibold mb-1">${ok.length} valid row(s), ${impRows.length - ok.length} with errors (skipped). Total purchase cost: PKR ${fmt(ok.reduce((s, o) => s + o.net, 0))}</div>
+        <div class="overflow-x-auto max-h-64 border rounded-lg"><table class="w-full text-left"><thead class="bg-slate-100 sticky top-0"><tr><th class="p-1.5">Row</th><th class="p-1.5">Title</th><th class="p-1.5">Class</th><th class="p-1.5">Category</th><th class="p-1.5">Qty</th><th class="p-1.5">Buy</th><th class="p-1.5">Sale</th><th class="p-1.5">Result</th></tr></thead><tbody>${impRows.slice(0, 300).map(o => `<tr class="border-t ${o.err.length ? 'bg-rose-50' : ''}"><td class="p-1.5">${o.n}</td><td class="p-1.5">${esc(o.title)}</td><td class="p-1.5">${esc(o.cls)}</td><td class="p-1.5">${esc(o.cat)}</td><td class="p-1.5">${fmt(o.qty)}</td><td class="p-1.5">${fmt(o.buy)}</td><td class="p-1.5">${fmt(o.sale)}</td><td class="p-1.5 ${o.err.length ? 'text-rose-600 font-semibold' : 'text-emerald-700'}">${o.err.length ? esc(o.err.join(', ')) : 'OK'}${o.warn ? ' <span class="text-amber-600">(' + esc(o.warn) + ')</span>' : ''}</td></tr>`).join('')}</tbody></table></div>`;
+        $('impGo').classList.toggle('hidden', !ok.length);
+    } catch (e) { console.error(e); toast('Could not read this file.', false); }
+}
+function saveImp() {
+    const ok = impRows.filter(o => !o.err.length); if(!ok.length) return;
+    const post = $('impPost').checked, wallet = $('impWallet').value, total = ok.reduce((s, o) => s + o.net, 0);
+    confirmBox(`Import ${ok.length} item purchase(s)? Stock increases accordingly (importing the same file twice doubles the stock).${post ? '\n\nPKR ' + fmt(total) + ' will also be recorded as one payment in Accounts.' : ''}`, 'Import', async () => {
+        const id = 'IMP' + Math.floor(100000 + Math.random() * 900000), accV = 'PV-' + Math.floor(100000 + Math.random() * 900000);
+        const rows = ok.map(o => ({ type: 'Purchase', party_name: o.vendor, book_title: o.title, qty: o.qty, unit_price: o.buy, net_amount: o.net, date: o.date, voucher_no: 'BK-' + id, payment_mode: post ? wallet : null,
+            notes: 'Imported ' + id + (post ? ' | Accounts ' + accV : ''), item_class: o.cls, category: o.cat || null, sale_price: o.sale }));
+        showLoading('Importing items...');
+        try {
+            const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
+            for(let i = 0; i < rows.length; i += 200) {
+                const r = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.slice(i, i + 200)) });
+                if(!r.ok) { hideLoading(); toast('Import stopped: ' + await r.text(), false); return; }
+            }
+            if(post) await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify({ voucher_id: accV, from_account: wallet, to_account: 'Books Purchase', description: `Books purchase import ${id} (${rows.length} items)`, amount_in: 0, amount_out: total, date: todayStr(), remarks: id }) });
+            toast(`${rows.length} item(s) imported.`); $('importModal').classList.add('hidden'); await initBooks();
+        } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+    });
+}
+
 function deleteTx(uid) {
     let t = txByUid[uid]; if(!t) return;
     if(!hasId || t.id === undefined) { toast('This record has no id column, so it cannot be deleted from here.', false); return; }
@@ -868,5 +1042,49 @@ function printSlip(uid) {
 
 document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeTx(); } });
 </script>
+
+<div id="studentSaleModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[94vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center"><h3 class="font-bold text-teal-700">🎓 Student Sale (class-wise course)</h3><button onclick="closeSS()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+  <div class="p-4 space-y-3">
+   <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+    <div class="sm:col-span-2"><label class="block text-xs font-medium text-slate-700 mb-1">Student (type name or admission no)</label><input id="ssStudent" list="ssStudentList" oninput="ssPick()" class="w-full border rounded-lg p-2.5 text-sm outline-none"><datalist id="ssStudentList"></datalist><p id="ssInfo" class="text-xs mt-1"></p></div>
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Date</label><input id="ssDate" type="date" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+   </div>
+   <div id="ssRows" class="space-y-2"></div>
+   <div class="flex gap-2"><input id="ssOther" list="ssOtherList" placeholder="Add another item to this bill..." class="flex-1 border rounded-lg p-2 text-sm outline-none"><datalist id="ssOtherList"></datalist><button type="button" onclick="ssAddOther()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold">+ Add</button></div>
+   <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Discount type</label><select id="ssDiscType" onchange="renderSS()" class="w-full border rounded-lg p-2 text-sm bg-white"><option value="percentage">Percent %</option><option value="amount">Amount</option></select></div>
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Discount</label><input id="ssDiscVal" type="number" min="0" value="0" oninput="renderSS()" class="w-full border rounded-lg p-2 text-sm"></div>
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Deposit to</label><select id="ssWallet" class="w-full border rounded-lg p-2 text-sm bg-white">
+                                <option value="cash">💵 Cash in Hand</option>
+                                <option value="bank">🏦 Bank</option>
+                                <option value="online">📱 Online / JazzCash</option>
+                            </select></div>
+    <label class="flex items-end gap-2 text-xs pb-2"><input id="ssPost" type="checkbox" checked> Record in Accounts</label>
+   </div>
+   <input id="ssNotes" placeholder="Notes (optional)" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+   <div class="bg-slate-50 rounded-xl p-3 text-sm flex flex-wrap justify-between gap-2"><span>Gross: <b id="ssGross">0</b></span><span>Discount: <b id="ssDisc">0</b></span><span>Net: <b id="ssNet" class="text-emerald-700">PKR 0</b></span></div>
+  </div>
+  <div class="p-4 border-t flex justify-end gap-2"><button onclick="closeSS()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="saveStudentSale()" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg text-sm">Save sale</button></div>
+ </div></div>
+
+<div id="importModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[94vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center"><h3 class="font-bold text-slate-800">⬆️ Import items (Excel / CSV)</h3><button onclick="document.getElementById('importModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+  <div class="p-4 space-y-3 text-sm">
+   <p class="text-xs text-slate-500">Each row is saved as a Purchase: it creates the item (class, category, fixed sale price) or adds to its stock. Columns: title, class, category, qty, purchase_price, sale_price, vendor, date, discount_percent. Use class <b>All</b> for items every student buys.</p>
+   <button onclick="downloadTemplate()" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">⬇️ Download template (CSV)</button>
+   <input id="impFile" type="file" accept=".xlsx,.xls,.csv" class="w-full border rounded-lg p-2 text-sm">
+   <button onclick="readImp()" class="w-full px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold">Read file & preview</button>
+   <div id="impPreview" class="text-xs"></div>
+   <div class="grid grid-cols-2 gap-2 items-end"><label class="flex items-center gap-2 text-xs"><input id="impPost" type="checkbox"> Also record the purchase total in Accounts</label><select id="impWallet" class="border rounded-lg p-2 text-sm bg-white">
+                                <option value="cash">💵 Cash in Hand</option>
+                                <option value="bank">🏦 Bank</option>
+                                <option value="online">📱 Online / JazzCash</option>
+                            </select></div>
+  </div>
+  <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('importModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button><button id="impGo" onclick="saveImp()" class="hidden px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Import valid rows</button></div>
+ </div></div>
 </body>
 </html>
