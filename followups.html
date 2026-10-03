@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Follow-up Calls</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <script src="nav.js"></script>
     <style>
         .urdu-box { font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Segoe UI', sans-serif; }
         .mic-live { animation: micPulse 1.1s ease-in-out infinite; }
@@ -55,23 +57,7 @@
 
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
-        <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl no-print">
-            <div class="p-5 border-b border-indigo-800">
-                <h1 class="font-bold text-base leading-tight">Concept School</h1>
-                <p class="text-xs text-indigo-300">Shibra Campus</p>
-            </div>
-            <nav class="flex-1 p-4 space-y-2">
-                <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
-                <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
-                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Updation</span></a>
-                <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💸 <span>Fee Vouchers</span></a>
-                <a href="followups.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">📞 <span>Follow-up Calls</span></a>
-                <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
-                <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
-                <a href="staff.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👩‍🏫 <span>Staff & Payroll</span></a>
-                <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚙️ <span>System Settings</span></a>
-            </nav>
-        </aside>
+        <aside id="appNav"></aside>
 
         <!-- MAIN -->
         <main class="flex-1 p-4 md:p-8 min-w-0">
@@ -83,8 +69,7 @@
                 <div class="flex flex-wrap gap-2">
                     <button onclick="initFollowups()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
                     <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🖨️ Print call sheet</button>
-                    <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
-                </div>
+                    </div>
             </div>
 
             <!-- SETUP BANNER (call_logs table missing) -->
@@ -310,23 +295,7 @@
     </div>
 
     <!-- SETTINGS -->
-    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl space-y-3">
-            <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚙️ Supabase API Settings</h3>
-            <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label>
-                <input type="text" id="apiUrlInput" class="w-full border rounded-lg p-2 text-sm outline-none">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label>
-                <input type="text" id="apiKeyInput" class="w-full border rounded-lg p-2 text-sm outline-none">
-            </div>
-            <div class="flex justify-end space-x-2 pt-2">
-                <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
-            </div>
-        </div>
-    </div>
+    
 
 <script>
 // ====================================================================================
@@ -409,11 +378,7 @@ function showCustomConfirm(message, onConfirm) {
     nCancel.addEventListener('click', () => modal.classList.add('hidden'));
 }
 
-function getSupabaseConfig() {
-    let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
-    let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
-    return { url, key };
-}
+
 function sbHeaders(extra = {}) { let c = getSupabaseConfig(); return { "apikey": c.key, "Authorization": `Bearer ${c.key}`, ...extra }; }
 
 function periodRank(p) {
@@ -1147,20 +1112,10 @@ function toggleVoice() {
 // ====================================================================================
 //  SETTINGS
 // ====================================================================================
-function openSettingsModal() {
-    $('settingsModal').classList.remove('hidden');
-    let c = getSupabaseConfig();
-    $('apiUrlInput').value = c.url; $('apiKeyInput').value = c.key;
-}
-function closeSettingsModal() { $('settingsModal').classList.add('hidden'); }
-function saveApiCredentials() {
-    let url = $('apiUrlInput').value.trim(), key = $('apiKeyInput').value.trim();
-    if(url && key) {
-        localStorage.setItem('supabase_url', url); localStorage.setItem('supabase_key', key);
-        closeSettingsModal(); initFollowups();
-    } else showCustomAlert('Please enter a valid URL and Key.');
-}
-document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closeCallModal(); closeWaModal(); closeLedger(); closeCustomAlert(); } });
+
+
+
+document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeCallModal(); closeWaModal(); closeLedger(); closeCustomAlert(); } });
 </script>
 </body>
 </html>

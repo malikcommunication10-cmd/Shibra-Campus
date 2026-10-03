@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Students Directory</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <script src="nav.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans" onload="initPage()">
     
@@ -15,22 +17,7 @@
 
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
-        <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
-            <div class="p-5 border-b border-indigo-800">
-                <h1 class="font-bold text-base leading-tight">Concept School</h1>
-                <p class="text-xs text-indigo-300">Shibra Campus</p>
-            </div>
-            <nav class="flex-1 p-4 space-y-2">
-                <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
-                <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">👨‍🎓 <span>Students Directory</span></a>
-                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Updation</span></a>
-                <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💸 <span>Fee Vouchers</span></a>
-                <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
-                <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
-                <a href="staff.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👩‍🏫 <span>Staff & Payroll</span></a>
-                <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚙️ <span>System Settings</span></a>
-            </nav>
-        </aside>
+        <aside id="appNav"></aside>
 
         <!-- MAIN -->
         <main class="flex-1 p-6 md:p-10">
@@ -40,8 +27,7 @@
                     <p class="text-sm text-slate-500">Add, Edit & Manage Student Records</p>
                 </div>
                 <div>
-                    <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API Settings</button>
-                </div>
+                    </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -71,7 +57,7 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-slate-700 mb-1">Class</label>
-                                <input type="text" id="class" required placeholder="e.g. Pre-Nursery" class="w-full border rounded-lg p-2 text-sm outline-none">
+                                <input type="text" id="class" list="classList" required placeholder="Select or type class" class="w-full border rounded-lg p-2 text-sm outline-none"><datalist id="classList"></datalist>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
@@ -176,6 +162,11 @@
                                 <input type="text" id="remarks" placeholder="Optional" class="w-full border rounded-lg p-2 text-sm outline-none">
                             </div>
                         </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Family code (siblings)</label><input type="text" id="siblings" placeholder="e.g. 101" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
+                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Arrears 2025 (PKR)</label><input type="number" min="0" id="arrears2025" placeholder="0" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
+                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Left date</label><input type="date" id="left_date" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
+                        </div>
                         <div class="flex gap-2 pt-2">
                             <button type="submit" id="saveBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg transition text-sm">Save Student</button>
                             <button type="button" id="cancelBtn" onclick="resetForm()" class="hidden px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm">Cancel</button>
@@ -222,23 +213,7 @@
     </div>
 
     <!-- Settings Modal -->
-    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative space-y-3">
-            <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚙️ Supabase API Settings</h3>
-            <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label>
-                <input type="text" id="apiUrlInput" placeholder="https://xyz.supabase.co" class="w-full border rounded-lg p-2 text-sm outline-none">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label>
-                <input type="text" id="apiKeyInput" placeholder="sb_publishable_..." class="w-full border rounded-lg p-2 text-sm outline-none">
-            </div>
-            <div class="flex justify-end space-x-2 pt-2">
-                <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
-            </div>
-        </div>
-    </div>
+    
 
     <script>
         let allStudentsCache = [];
@@ -249,15 +224,12 @@
         }
         function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
 
-        function getSupabaseConfig() {
-            let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
-            let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
-            return { url, key };
-        }
+
 
         async function initPage() {
+            loadSettingLists().then(L => { document.getElementById('classList').innerHTML = L['Class'].map(x => `<option value="${esc(x)}">`).join(''); });
             let config = getSupabaseConfig();
-            if(!config.url || !config.key) { openSettingsModal(); } 
+            if(!config.url || !config.key) { } 
             else {
                 showLoading("Loading Students Record...");
                 await fetchStudents();
@@ -289,9 +261,7 @@
             tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
 
             try {
-                let response = await fetch(`${config.url}/rest/v1/students?select=*`, {
-                    headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
-                });
+                let response = await sbFetchAll('students', 'select=*');
                 let data = await response.json();
 
                 if(Array.isArray(data) && data.length > 0) {
@@ -347,20 +317,20 @@
 
                 let statusBadge = st === 'Active' 
                     ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Active</span>` 
-                    : `<span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">${st}</span>`;
+                    : `<span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">${esc(st)}</span>`;
 
                 let tr = document.createElement('tr');
                 tr.className = "border-b hover:bg-slate-50 transition";
                 tr.innerHTML = `
-                    <td class="p-2.5 font-medium">${sequentialSr} / ${adm || '-'}</td>
-                    <td class="p-2.5 font-semibold text-indigo-900">${name}</td>
-                    <td class="p-2.5 text-slate-600">${cls}</td>
-                    <td class="p-2.5 text-slate-600">${fContact}</td>
+                    <td class="p-2.5 font-medium">${sequentialSr} / ${esc(adm) || '-'}</td>
+                    <td class="p-2.5 font-semibold text-indigo-900">${esc(name)}${row.siblings ? `<div class="text-[11px] font-normal text-slate-500">Family: ${esc(row.siblings)}</div>` : ''}</td>
+                    <td class="p-2.5 text-slate-600">${esc(cls)}</td>
+                    <td class="p-2.5 text-slate-600">${esc(fContact)}</td>
                     <td class="p-2.5 font-bold text-indigo-600">PKR ${tFee}</td>
-                    <td class="p-2.5">${statusBadge}</td>
+                    <td class="p-2.5">${statusBadge}${row.left_date ? `<div class="text-[11px] text-slate-500">Left: ${esc(row.left_date)}</div>` : ''}</td>
                     <td class="p-2.5 text-center space-x-1">
-                        <button onclick='editStudent(${JSON.stringify(row)})' class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium transition" title="Edit">✏️</button>
-                        <button onclick="deleteStudent('${adm}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded font-medium transition" title="Delete">🗑️</button>
+                        <button onclick="editStudentByAdm(this.dataset.a)" data-a="${esc(adm)}" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium transition" title="Edit">✏️</button>
+                        <button onclick="deleteStudent(this.dataset.a)" data-a="${esc(adm)}" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded font-medium transition" title="Delete">🗑️</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -384,9 +354,15 @@
                 admission_fee: parseFloat(document.getElementById('admission_fee').value) || 0,
                 annual_fund: parseFloat(document.getElementById('annual_fund').value) || 0,
                 status: document.getElementById('status').value,
+                siblings: document.getElementById('siblings').value.trim() || null,
+                arrears2025: document.getElementById('arrears2025').value.trim() || null,
+                left_date: document.getElementById('left_date').value || null,
                 remarks: document.getElementById('remarks').value.trim()
             };
 
+            if(!payloadData.doj) { alert('DOJ (date of joining) is required: fee vouchers start from the joining month.'); return; }
+            if(payloadData.status !== 'Active' && !payloadData.left_date) { alert('Left date is required when the status is not Active.'); return; }
+            if(payloadData.status === 'Active') payloadData.left_date = null;
             let editOriginalAdm = document.getElementById('editOriginalAdm').value;
             showLoading("Saving Student Record...");
             try {
@@ -416,6 +392,8 @@
             }
         }
 
+function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+        function editStudentByAdm(a) { const r = allStudentsCache.find(x => String(x.admis_no || '') === String(a)); if(r) editStudent(r); }
         function editStudent(row) {
             document.getElementById('editOriginalAdm').value = row.admis_no || '';
             document.getElementById('sr_no').value = row.sr_no || '';
@@ -432,6 +410,9 @@
             calculatePayables();
             document.getElementById('status').value = row.status || 'Active';
             document.getElementById('remarks').value = row.remarks || '';
+            document.getElementById('siblings').value = row.siblings || '';
+            document.getElementById('arrears2025').value = row.arrears2025 || '';
+            document.getElementById('left_date').value = row.left_date || '';
             document.getElementById('formTitle').innerText = "Edit Student Record";
             document.getElementById('saveBtn').innerText = "Update Student";
             document.getElementById('cancelBtn').classList.remove('hidden');
@@ -461,14 +442,9 @@
             document.getElementById('cancelBtn').classList.add('hidden');
         }
 
-        function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); let config = getSupabaseConfig(); document.getElementById('apiUrlInput').value = config.url; document.getElementById('apiKeyInput').value = config.key; }
-        function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-        function saveApiCredentials() {
-            let url = document.getElementById('apiUrlInput').value.trim();
-            let key = document.getElementById('apiKeyInput').value.trim();
-            if(url && key) { localStorage.setItem('supabase_url', url); localStorage.setItem('supabase_key', key); alert("Credentials Saved!"); closeSettingsModal(); initPage(); }
-            else { alert("Please enter valid URL and Key."); }
-        }
+
+
+
     </script>
 </body>
 </html>

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Accounts & Daybook</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <script src="nav.js"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -43,30 +45,11 @@
     </div>
 
     <!-- MOBILE TOP BAR -->
-    <div id="mobileBar" class="md:hidden sticky top-0 z-40 bg-indigo-900 text-white flex items-center justify-between px-4 py-3 shadow no-print">
-        <div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus · Accounts</div></div>
-        <button onclick="toggleNav()" class="text-2xl px-2" aria-label="Menu">☰</button>
-    </div>
+    
 
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
-        <aside id="sideNav" class="max-md:hidden w-full md:w-64 md:sticky md:top-0 md:h-screen md:self-start md:overflow-y-auto bg-indigo-900 text-white flex flex-col shadow-xl">
-            <div class="p-5 border-b border-indigo-800 hidden md:block">
-                <h1 class="font-bold text-base leading-tight">Concept School</h1>
-                <p class="text-xs text-indigo-300">Shibra Campus</p>
-            </div>
-            <nav class="flex-1 p-4 space-y-2">
-                <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
-                <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
-                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Updation</span></a>
-                <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💸 <span>Fee Vouchers</span></a>
-                <a href="followups.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📞 <span>Follow-up Calls</span></a>
-                <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
-                <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">💰 <span>Accounts & Daybook</span></a>
-                <a href="staff.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👩‍🏫 <span>Staff & Payroll</span></a>
-                <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚙️ <span>System Settings</span></a>
-            </nav>
-        </aside>
+        <aside id="appNav"></aside>
 
         <!-- MAIN -->
         <main class="flex-1 p-4 md:p-8 min-w-0 pb-24 md:pb-8">
@@ -79,8 +62,7 @@
                     <button onclick="openEntry('receipt')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➕ Receipt</button>
                     <button onclick="openEntry('payment')" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➖ Payment</button>
                     <button onclick="openEntry('transfer')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🔁 Transfer</button>
-                    <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">⚙️ API</button>
-                </div>
+                    </div>
             </div>
 
             <!-- GLOBAL FILTER -->
@@ -308,17 +290,7 @@
     </div>
 
     <!-- SETTINGS -->
-    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl space-y-3">
-            <h3 class="text-lg font-semibold text-indigo-700 border-b pb-2">⚙️ Supabase API Settings</h3>
-            <div><label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label><input type="text" id="apiUrlInput" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
-            <div><label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label><input type="text" id="apiKeyInput" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
-            <div class="flex justify-end space-x-2 pt-2">
-                <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
-            </div>
-        </div>
-    </div>
+    
 
 <script>
 // ====================================================================================
@@ -329,8 +301,8 @@ const WALLETS = {
     bank:   { label: 'Bank',              icon: '🏦', cls: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
     online: { label: 'Online / JazzCash', icon: '📱', cls: 'text-amber-700 bg-amber-50 border-amber-200' }
 };
-const INCOME_HEADS  = ['Admission / Registration Fee', 'Annual Fund', 'Book Store Sale', 'Uniform / Stationery Sale', 'Transport Fee', 'Donation', 'Other Income'];
-const EXPENSE_HEADS = ['Salaries', 'Utility Bills', 'Rent', 'Stationery', 'Repair & Maintenance', 'Fuel / Transport', 'Events / Functions', 'Books Purchase', 'Printing', 'Internet / Phone', 'Refreshments', 'Misc Expense'];
+let INCOME_HEADS  = ['Admission / Registration Fee', 'Annual Fund', 'Book Store Sale', 'Uniform / Stationery Sale', 'Transport Fee', 'Donation', 'Other Income'];
+let EXPENSE_HEADS = ['Salaries', 'Utility Bills', 'Rent', 'Stationery', 'Repair & Maintenance', 'Fuel / Transport', 'Events / Functions', 'Books Purchase', 'Printing', 'Internet / Phone', 'Refreshments', 'Misc Expense'];
 const KIND_META = {
     receipt:  { label: 'Receipt',  prefix: 'RV-', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', title: 'Receipt Voucher' },
     payment:  { label: 'Payment',  prefix: 'PV-', cls: 'bg-rose-50 text-rose-700 border-rose-200',          title: 'Payment Voucher' },
@@ -352,7 +324,6 @@ const ymd = d => d.toLocaleDateString('en-CA');
 const todayStr = () => ymd(new Date());
 function parseYmd(s) { let [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); }
 function fmtDate(s) { return s ? parseYmd(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; }
-function toggleNav() { $('sideNav').classList.toggle('max-md:hidden'); }
 function showLoading(t) { $('loadingText').innerText = t || 'Loading...'; $('loadingOverlay').classList.remove('hidden'); }
 function hideLoading() { $('loadingOverlay').classList.add('hidden'); }
 function toast(msg, ok = true) {
@@ -370,11 +341,7 @@ function confirmBox(message, okLabel, onOk) {
     nOk.addEventListener('click', () => { modal.classList.add('hidden'); onOk(); });
     nCancel.addEventListener('click', () => modal.classList.add('hidden'));
 }
-function getSupabaseConfig() {
-    let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
-    let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
-    return { url, key };
-}
+
 function sbHeaders(extra = {}) { let c = getSupabaseConfig(); return { "apikey": c.key, "Authorization": `Bearer ${c.key}`, ...extra }; }
 const titleCase = s => String(s || '').replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
 const shortId = id => String(id || '').split('-').slice(0, 2).join('-');
@@ -451,11 +418,12 @@ function normalize(row, idx) {
 
 async function initAccounts() {
     showLoading('Loading accounts...');
+    try { const L = await loadSettingLists(); INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; } catch (e) { console.error(e); }
     let c = getSupabaseConfig();
     try {
         let [aRes, fRes] = await Promise.all([
-            fetch(`${c.url}/rest/v1/accounts?select=*&order=date.asc`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/fees?select=voucher_id,admis_no,student_name,class,period,type`, { headers: sbHeaders() })
+            sbFetchAll('accounts', 'select=*&order=date.asc,voucher_id.asc'),
+            sbFetchAll('fees', 'select=voucher_id,admis_no,student_name,class,period,type')
         ]);
         let acc = await aRes.json(), fees = await fRes.json();
         feesByVoucher = {};
@@ -881,14 +849,10 @@ function printVoucher(id) {
 // ====================================================================================
 //  SETTINGS
 // ====================================================================================
-function openSettingsModal() { $('settingsModal').classList.remove('hidden'); let c = getSupabaseConfig(); $('apiUrlInput').value = c.url; $('apiKeyInput').value = c.key; }
-function closeSettingsModal() { $('settingsModal').classList.add('hidden'); }
-function saveApiCredentials() {
-    let url = $('apiUrlInput').value.trim(), key = $('apiKeyInput').value.trim();
-    if(url && key) { localStorage.setItem('supabase_url', url); localStorage.setItem('supabase_key', key); closeSettingsModal(); initAccounts(); }
-    else toast('Please enter a valid URL and Key.', false);
-}
-document.addEventListener('keydown', ev => { if(ev.key === 'Escape') { closeSettingsModal(); closeEntry(); } });
+
+
+
+document.addEventListener('keydown', ev => { if(ev.key === 'Escape') { closeEntry(); } });
 </script>
 </body>
 </html>

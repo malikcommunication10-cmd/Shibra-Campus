@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - System Settings</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <script src="nav.js"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -32,30 +34,11 @@
     </div>
 
     <!-- MOBILE TOP BAR -->
-    <div id="mobileBar" class="md:hidden sticky top-0 z-40 bg-indigo-900 text-white flex items-center justify-between px-4 py-3 shadow">
-        <div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus · Settings</div></div>
-        <button onclick="toggleNav()" class="text-2xl px-2" aria-label="Menu">☰</button>
-    </div>
+    
 
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
-        <aside id="sideNav" class="max-md:hidden w-full md:w-64 md:sticky md:top-0 md:h-screen md:self-start md:overflow-y-auto bg-indigo-900 text-white flex flex-col shadow-xl">
-            <div class="p-5 border-b border-indigo-800 hidden md:block">
-                <h1 class="font-bold text-base leading-tight">Concept School</h1>
-                <p class="text-xs text-indigo-300">Shibra Campus</p>
-            </div>
-            <nav class="flex-1 p-4 space-y-2">
-                <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">🏠 <span>Home / Dashboard</span></a>
-                <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
-                <a href="increments.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">⚡ <span>Bulk Updation</span></a>
-                <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💸 <span>Fee Vouchers</span></a>
-                <a href="followups.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📞 <span>Follow-up Calls</span></a>
-                <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">📚 <span>Book Store</span></a>
-                <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">💰 <span>Accounts & Daybook</span></a>
-                <a href="staff.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👩‍🏫 <span>Staff & Payroll</span></a>
-                <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">⚙️ <span>System Settings</span></a>
-            </nav>
-        </aside>
+        <aside id="appNav"></aside>
 
         <!-- MAIN -->
         <main class="flex-1 p-4 md:p-8 min-w-0 pb-24 md:pb-8">
@@ -66,15 +49,14 @@
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button onclick="initSettings()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
-                    <button onclick="showTab('connection')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔌 Connection</button>
-                </div>
+                    </div>
             </div>
 
             <!-- TABS -->
             <div class="flex gap-2 mb-4 overflow-x-auto whitespace-nowrap pb-1">
                 <button data-tab="lists" onclick="showTab('lists')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-on">📋 Master Lists</button>
                 <button data-tab="rules" onclick="showTab('rules')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">⚖️ Rules & Defaults</button>
-                <button data-tab="connection" onclick="showTab('connection')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🔌 Connection & Backup</button>
+                <button data-tab="connection" onclick="showTab('connection')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🩺 Health & Backup</button>
             </div>
 
             <!-- MASTER LISTS -->
@@ -124,13 +106,9 @@
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                         <h3 class="text-sm font-bold text-indigo-900">🔌 Supabase connection</h3>
-                        <p class="text-xs text-slate-500 mt-0.5 mb-4">Stored in this browser and shared by all pages.</p>
-                        <div class="space-y-3">
-                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Project URL</label><input id="apiUrlInput" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Publishable key</label><input id="apiKeyInput" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5 mb-4">The connection is set once in config.js and shared by all pages.</p>
+                        
                         <div class="flex flex-wrap gap-2 mt-4">
-                            <button onclick="saveApiCredentials()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">Save & connect</button>
                             <button onclick="runHealthCheck()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">✔ Test connection</button>
                         </div>
                     </div>
@@ -222,12 +200,7 @@ function confirmBox(message, okLabel, onOk) {
     nOk.addEventListener('click', () => { modal.classList.add('hidden'); onOk(); });
     nCancel.addEventListener('click', () => modal.classList.add('hidden'));
 }
-function toggleNav() { $('sideNav').classList.toggle('max-md:hidden'); }
-function getSupabaseConfig() {
-    let url = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
-    let key = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
-    return { url, key };
-}
+
 function sbHeaders(extra = {}) { let c = getSupabaseConfig(); return { "apikey": c.key, "Authorization": `Bearer ${c.key}`, ...extra }; }
 const JSON_H = { "Content-Type": "application/json" };
 const enc = encodeURIComponent;
@@ -252,7 +225,6 @@ async function initSettings() {
     showLoading('Loading settings...');
     try {
         rows = (await fetchAll('settings')).map(r => ({ key: String(r.setting_key || '').trim(), val: String(r.setting_value ?? '').trim() })).filter(r => r.key && r.val !== '');
-        $('apiUrlInput').value = getSupabaseConfig().url; $('apiKeyInput').value = getSupabaseConfig().key;
         renderLists(); renderRules();
         hideLoading();
         loadUsage();                                                 // badges fill in afterwards
@@ -450,12 +422,7 @@ async function saveLowStock() {
 // ====================================================================================
 //  CONNECTION + HEALTH + BACKUP
 // ====================================================================================
-function saveApiCredentials() {
-    let url = $('apiUrlInput').value.trim().replace(/\/+$/, ''), key = $('apiKeyInput').value.trim();
-    if(!url || !key) { toast('Please enter a valid URL and Key.', false); return; }
-    localStorage.setItem('supabase_url', url); localStorage.setItem('supabase_key', key);
-    toast('Connection saved.'); initSettings();
-}
+
 async function runHealthCheck() {
     let box = $('healthList'); box.innerHTML = '<p class="text-xs text-slate-400">Checking...</p>';
     let c = getSupabaseConfig();

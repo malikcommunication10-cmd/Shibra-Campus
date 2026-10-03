@@ -3,126 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Concept School Shibra Campus - ERP Dashboard</title>
-    <!-- Tailwind CSS for Responsive Design -->
+    <title>Concept School Shibra Campus - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <script src="nav.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans">
-
-    <div class="min-h-screen flex flex-col md:flex-row">
-        
-        <!-- SIDEBAR NAVIGATION -->
-        <aside class="w-full md:w-64 bg-indigo-900 text-white flex flex-col shadow-xl">
-            <div class="p-5 border-b border-indigo-850">
-                <h1 class="font-bold text-base leading-tight">Concept School</h1>
-                <p class="text-xs text-indigo-300">Shibra Campus</p>
-            </div>
-            
-            <nav class="flex-1 p-4 space-y-2">
-                <a href="index.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-indigo-800 text-white text-sm font-medium shadow-sm">
-                    🏠 <span>Home / Dashboard</span>
-                </a>
-                <a href="fees.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">
-                    💸 <span>Fee Vouchers</span>
-                </a>
-                <a href="students.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">👨‍🎓 <span>Students Directory</span></a>
-                <a href="books.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">
-                    📚 <span>Book Store</span>
-                </a>
-                <a href="accounts.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">
-                    💰 <span>Accounts & Daybook</span>
-                </a>
-                <a href="staff.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">
-                    👩‍🏫 <span>Staff & Payroll</span>
-                </a>
-                <a href="settings.html" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-indigo-800/60 text-indigo-100 text-sm transition">
-                    ⚙️ <span>System Settings</span>
-                </a>
-            </nav>
-
-            <div class="p-4 border-t border-indigo-800 text-xs text-indigo-300 text-center">
-                Mobile & Desktop Ready
-            </div>
-        </aside>
-
-        <!-- MAIN CONTENT AREA -->
-        <main class="flex-1 p-6 md:p-10">
-            
-            <!-- Header Banner -->
-            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h2 class="text-2xl md:text-3xl font-extrabold text-indigo-950 tracking-tight">Concept School Shibra Campus</h2>
-                    <p class="text-sm text-slate-500 font-medium">Professional Management Information System (ERP)</p>
-                </div>
-                <button onclick="openSettingsModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 p-3 rounded-xl transition shadow-sm flex items-center space-x-2 text-sm font-semibold">
-                    <span>⚙️ Settings / API</span>
-                </button>
-            </div>
-
-            <!-- Main Page Content -->
-            <div class="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center">
-                <h3 class="text-2xl font-bold text-slate-900 mb-3">Welcome to School Management Portal</h3>
-                <p class="text-sm text-slate-600 max-w-xl mx-auto">Aap left sidebar se kisi bhi zaroori module par click kar ke apna kaam asani se perform kar sakte hain. Yeh system mobile aur desktop dono par mukammal taur par responsive hai.</p>
-            </div>
-
-            <footer class="mt-12 text-center text-xs text-slate-400 border-t pt-6">
-                Concept School Shibra Campus &copy; 2026 | Powered by Supabase & Frontend Web Apps
-            </footer>
-        </main>
-    </div>
-
-    <!-- Settings Modal Box -->
-    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative space-y-3">
-            <div class="flex justify-between items-center mb-2 border-b pb-2">
-                <h3 class="text-lg font-semibold text-indigo-700">⚙️ Supabase API Settings</h3>
-                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 font-bold text-lg">&times;</button>
-            </div>
+<body class="bg-slate-100 text-slate-800 font-sans" onload="initDashboard()">
+<div class="min-h-screen flex flex-col md:flex-row">
+    <aside id="appNav"></aside>
+    <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Project URL</label>
-                <input type="text" id="apiUrlInput" placeholder="https://xyz.supabase.co" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                <h2 class="text-xl md:text-3xl font-extrabold text-indigo-950 tracking-tight">Concept School Shibra Campus</h2>
+                <p id="dateLine" class="text-sm text-slate-500 font-medium"></p>
             </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-700 mb-1">Supabase Publishable Key</label>
-                <input type="text" id="apiKeyInput" placeholder="sb_publishable_..." class="w-full border rounded-lg p-2.5 text-sm outline-none">
-            </div>
-            <div class="flex justify-end space-x-2 pt-2">
-                <button onclick="closeSettingsModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveApiCredentials()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save & Connect</button>
-            </div>
+            <button onclick="initDashboard()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">🔄 Refresh</button>
         </div>
-    </div>
 
-    <!-- JavaScript -->
-    <script>
-        function openSettingsModal() {
-            document.getElementById('settingsModal').classList.remove('hidden');
-            document.getElementById('apiUrlInput').value = localStorage.getItem('supabase_url') || "https://tsnfwebctvjnmmweepiu.supabase.co";
-            document.getElementById('apiKeyInput').value = localStorage.getItem('supabase_key') || "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
-        }
+        <div id="cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
 
-        function closeSettingsModal() {
-            document.getElementById('settingsModal').classList.add('hidden');
-        }
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                <h3 class="font-bold text-indigo-900 text-sm mb-3">Pending dues by class (up to this month)</h3>
+                <div id="classRows" class="space-y-2 text-sm"></div>
+            </section>
+            <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                <h3 class="font-bold text-indigo-900 text-sm mb-3">Quick actions</h3>
+                <div class="grid grid-cols-2 gap-2 text-sm font-semibold">
+                    <a href="fees.html" class="border rounded-xl p-3 hover:bg-slate-50">💸 Fee Vouchers</a>
+                    <a href="followups.html" class="border rounded-xl p-3 hover:bg-slate-50">📞 Follow-up Calls</a>
+                    <a href="students.html" class="border rounded-xl p-3 hover:bg-slate-50">👨‍🎓 Students</a>
+                    <a href="accounts.html" class="border rounded-xl p-3 hover:bg-slate-50">💰 Accounts & Daybook</a>
+                    <a href="increments.html" class="border rounded-xl p-3 hover:bg-slate-50">⚡ Bulk Updation</a>
+                    <a href="settings.html" class="border rounded-xl p-3 hover:bg-slate-50">⚙️ System Settings</a>
+                </div>
+                <p id="warnLine" class="text-xs text-amber-700 mt-3"></p>
+            </section>
+        </div>
+        <footer class="text-center text-xs text-slate-400 pt-4">Concept School Shibra Campus &copy; 2026</footer>
+    </main>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (Number(n) || 0).toLocaleString('en-US');
+const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+function rank(p) { const a = String(p || '').trim().toLowerCase().split(/\s+/), m = MONTHS.indexOf(a[0]); return m < 0 ? null : (parseInt(a[1]) || 0) * 12 + m; }
 
-        function saveApiCredentials() {
-            let url = document.getElementById('apiUrlInput').value.trim();
-            let key = document.getElementById('apiKeyInput').value.trim();
-            if(url && key) {
-                localStorage.setItem('supabase_url', url);
-                localStorage.setItem('supabase_key', key);
-                alert("Supabase Credentials Saved Successfully!");
-                closeSettingsModal();
-            } else {
-                alert("Please enter valid URL and Key.");
-            }
-        }
+async function initDashboard() {
+    const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth(), today = now.toLocaleDateString('en-CA'), ym = today.slice(0, 7);
+    $('dateLine').innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 p-6">Loading...</div>';
+    try {
+        const [sR, fR, aR] = await Promise.all([
+            sbFetchAll('students', 'select=admis_no,status,class'),
+            sbFetchAll('fees', 'select=voucher_id,class,period,payable,discount'),
+            sbFetchAll('accounts', 'select=voucher_id,amount_in,date')
+        ]);
+        const students = await sR.json(), fees = await fR.json(), acc = await aR.json();
+        if (![students, fees, acc].every(Array.isArray)) throw new Error('load');
 
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                closeSettingsModal();
-            }
+        const active = students.filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).length;
+        const paidBy = {}, known = new Set(fees.map(f => String(f.voucher_id || '').trim()));
+        let today$ = 0, month$ = 0;
+        acc.forEach(a => {
+            const v = String(a.voucher_id || '').trim().split('-').slice(0, 2).join('-'), amt = parseFloat(a.amount_in) || 0;
+            if (!known.has(v)) return;                      // only fee receipts
+            paidBy[v] = (paidBy[v] || 0) + amt;
+            const d = String(a.date || '').slice(0, 10);
+            if (d === today) today$ += amt;
+            if (d.slice(0, 7) === ym) month$ += amt;
         });
-    </script>
+        let pending = 0, unpaid = 0; const byClass = {};
+        fees.forEach(f => {
+            const r = rank(f.period); if (r !== null && r > cur) return;      // later months are not dues yet
+            const v = String(f.voucher_id || '').trim(), bal = (parseFloat(f.payable) || 0) - (parseFloat(f.discount) || 0) - (paidBy[v] || 0);
+            if (bal > 0) { pending += bal; unpaid++; const c = String(f.class || '-').trim() || '-'; byClass[c] = (byClass[c] || 0) + bal; }
+        });
+        const cards = [
+            ['Active students', fmt(active), 'text-indigo-900', `${students.length - active} left / inactive`],
+            ['Pending dues', 'PKR ' + fmt(pending), 'text-rose-600', `${fmt(unpaid)} unpaid vouchers`],
+            ['Collected today', 'PKR ' + fmt(today$), 'text-emerald-600', 'fee receipts'],
+            ['Collected this month', 'PKR ' + fmt(month$), 'text-emerald-700', 'fee receipts']
+        ];
+        $('cards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"><div class="text-xs text-slate-500 font-semibold">${c[0]}</div><div class="text-lg md:text-2xl font-extrabold ${c[2]} mt-1">${c[1]}</div><div class="text-[11px] text-slate-400 mt-0.5">${c[3]}</div></div>`).join('');
+        const rows = Object.entries(byClass).sort((a, b) => b[1] - a[1]), max = rows.length ? rows[0][1] : 1;
+        $('classRows').innerHTML = rows.length ? rows.map(([c, v]) => `<div><div class="flex justify-between text-xs mb-0.5"><span class="font-semibold">${esc(c)}</span><span class="text-rose-600 font-bold">PKR ${fmt(v)}</span></div><div class="h-2 bg-slate-100 rounded"><div class="h-2 bg-rose-400 rounded" style="width:${Math.max(3, v / max * 100)}%"></div></div></div>`).join('') : '<p class="text-sm text-emerald-600">No pending dues. 🎉</p>';
+    } catch (e) {
+        console.error(e);
+        $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-rose-500 p-6">Could not load dashboard data. Check your internet connection.</div>';
+    }
+}
+</script>
 </body>
 </html>

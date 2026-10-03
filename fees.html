@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fee Vouchers - Concept School Shibra Campus</title>
 <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <script src="nav.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -58,27 +60,8 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
   <div class="flex gap-2"><button id="confirmNo" class="btn b-gh flex-1">Cancel</button><button id="confirmYes" class="btn b-ok flex-1">Proceed</button></div></div></div>
 
 <!-- Mobile top bar -->
-<header class="md:hidden sticky top-0 z-40 bg-indigo-950 text-white flex items-center justify-between px-4 py-3 no-print">
-  <div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus</div></div>
-  <button onclick="toggleMenu()" class="text-2xl px-2" aria-label="Menu">☰</button>
-</header>
-<div id="menuBackdrop" onclick="toggleMenu()" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden"></div>
-
 <div class="md:flex min-h-screen">
-  <aside id="sidebar" class="no-print fixed md:sticky top-0 left-0 h-screen w-64 z-50 bg-indigo-950 text-white flex flex-col -translate-x-full md:translate-x-0 transition-transform">
-    <div class="p-5 border-b border-white/10"><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div>
-    <nav class="nav flex-1 p-3 space-y-1 overflow-y-auto">
-      <a href="index.html">🏠 Home / Dashboard</a>
-      <a href="students.html">👨‍🎓 Students Directory</a>
-      <a href="increments.html">⚡ Bulk Updation</a>
-      <a href="fees.html" class="on">💸 Fee Vouchers</a>
-      <a href="followups.html">📞 Follow-up Calls</a>
-      <a href="books.html">📚 Book Store</a>
-      <a href="accounts.html">💰 Accounts & Daybook</a>
-      <a href="staff.html">👩‍🏫 Staff & Payroll</a>
-      <a href="settings.html">⚙️ System Settings</a>
-    </nav>
-  </aside>
+  <aside id="appNav"></aside>
 
   <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
     <div class="no-print">
@@ -253,8 +236,8 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
 </div></div>
 
 <script>
-const SUPABASE_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
-const SUPABASE_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+const SUPABASE_URL = SB_URL;
+const SUPABASE_KEY = SB_KEY;
 const H = {apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`};
 const HJ = {...H,"Content-Type":"application/json",Prefer:"return=minimal"};
 
