@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Follow-up Calls</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://tsnfwebctvjnmmweepiu.supabase.co" crossorigin>
+    <link rel="stylesheet" href="tailwind.css">
     <script src="config.js"></script>
     <script src="nav.js"></script>
     <style>
@@ -67,7 +68,7 @@
                     <p class="text-sm text-slate-500">Family-wise dues, contact numbers, promise dates and call remarks</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button onclick="initFollowups()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
+                    <button onclick="sbCacheClear();initFollowups()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
                     <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🖨️ Print call sheet</button>
                     </div>
             </div>

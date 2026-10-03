@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fee Vouchers - Concept School Shibra Campus</title>
-<script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://tsnfwebctvjnmmweepiu.supabase.co" crossorigin>
+    <link rel="stylesheet" href="tailwind.css">
     <script src="config.js"></script>
     <script src="nav.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 .inp{width:100%;border:1px solid #cbd5e1;border-radius:.6rem;padding:.6rem .75rem;font-size:.85rem;background:#fff;outline:none}
@@ -129,7 +129,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
             <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
             <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
             <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
-            <button onclick="initFeePage()" class="btn b-gh">🔄 Refresh</button>
+            <button onclick="sbCacheClear();initFeePage()" class="btn b-gh">🔄 Refresh</button>
           </div>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -351,7 +351,7 @@ function filterVouchers(){
   if(!q)t=t.filter(inR);
   t.forEach(r=>{r._out=!inR(r)});
   if(q)t=t.filter(r=>(r.voucher_id||'').toLowerCase().includes(q)||(r.student_name||'').toLowerCase().includes(q)||(r.admis_no||'').toLowerCase().includes(q));
-  filtered=t;renderFeesTable(t);renderStudentSummary();
+  feeRenderLimit=250;filtered=t;renderFeesTable(t);renderStudentSummary();
 }
 let viewMode='vouchers';
 function toggleView(){
@@ -403,13 +403,16 @@ function groupArrears(data){
   return out;
 }
 
+let feeRenderLimit=250;
+function showMoreVouchers(all){feeRenderLimit=all?1e9:feeRenderLimit+250;renderFeesTable(filtered)}
 function renderFeesTable(data){
   const tb=$('feesTableBody'),tf=$('feesTableFooter');$('selectAllCheckbox').checked=false;
   if(!data.length){tb.innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
     ['stCount','stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');return}
-  let sp=0,sd=0,sb=0,sr=0;const rows=groupArrears(data);let html='';
+  let sp=0,sd=0,sb=0,sr=0;const rows=groupArrears(data);let html='',shown=0;
   rows.forEach(r=>{
     if(!r._out){sp+=r.net??(parseFloat(r.payable)||0);sd+=parseFloat(r.totalPaid)||0;sb+=parseFloat(r.balance)||0}
+    if(shown>=feeRenderLimit)return;shown++;
     const a=isArr(r),vId=(r.voucher_id||'').trim(),lock=isLocked(vId);
     const badge=r.status==='Paid'?'bg-emerald-50 text-emerald-700':r.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
     const bc=r.balance<0?'text-indigo-600 font-extrabold':r.balance>0?'text-rose-600 font-bold':'text-slate-500';
@@ -431,6 +434,7 @@ function renderFeesTable(data){
     <td data-l="Date(s)" class="font-mono text-indigo-700">${esc(r.paymentDates)}</td>
     <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(vId)}')" class="btn b-ok flex-1" style="padding:.35rem .6rem">💳 Pay</button><button onclick="openDiscount('${esc(vId)}')" class="btn b-gh flex-1" style="padding:.35rem .6rem">% Disc</button></div></td></tr>`;
   });
+  if(rows.length>shown)html+=`<tr><td colspan="15" class="nl p-4 text-center no-print"><span class="text-xs text-slate-500 mr-3">Showing ${shown} of ${rows.length} vouchers (totals above count all of them)</span><button onclick="showMoreVouchers(false)" class="btn b-gh">Show 250 more</button> <button onclick="showMoreVouchers(true)" class="btn b-gh">Show all</button></td></tr>`;
   tb.innerHTML=html;
   $('stCount').innerText=rows.filter(r=>!r._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
   tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}${rows.some(r=>r._out)?' <span class="font-normal text-slate-400">(grey rows are outside the selected months, not counted)</span>':''}</div>
@@ -652,7 +656,7 @@ async function readImport(){
   if(typeof XLSX==='undefined'){showAlert("Excel reader could not load. Check your internet connection.");return}
   showLoading("Reading file...");
   try{
-    const wb=/\.csv$/i.test(f.name)?XLSX.read(await f.text(),{type:'string',raw:true}):XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
+    await loadXlsx(); const wb=/\.csv$/i.test(f.name)?XLSX.read(await f.text(),{type:'string',raw:true}):XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
     const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
     hideLoading();buildImportPlan(raw);
   }catch(e){hideLoading();console.error(e);showAlert("Could not read this file.")}
