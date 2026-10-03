@@ -161,7 +161,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
         </div>
         <label class="md:hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" onchange="toggleSelectAll(this)"> Select all</label>
       </div>
-      <div class="overflow-x-auto md:max-h-[560px]">
+      <div class="overflow-x-auto md:max-h-[70vh]">
         <table class="rt w-full border-collapse">
           <thead class="bg-slate-50 sticky top-0"><tr>
             <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
@@ -309,6 +309,20 @@ function makeVidGenerator(used){
 }
 
 /* ---------- Load ---------- */
+async function fetchAll(t){
+  const get=(from,ord)=>fetch(`${SUPABASE_URL}/rest/v1/${t}?select=*${ord?'&order=id.asc':''}`,{headers:{...H,Range:`${from}-${from+999}`,'Range-Unit':'items'}});
+  let ord=true,rows=[],from=0;
+  for(;;){
+    let r=await get(from,ord);
+    if(!r.ok&&ord&&from===0){ord=false;r=await get(from,ord)}
+    if(!r.ok)return await r.json().catch(()=>({error:true}));
+    const a=await r.json();
+    if(!Array.isArray(a))return a;
+    if(!a.length)break;
+    rows=rows.concat(a);from+=a.length;
+  }
+  return rows;
+}
 async function initFeePage(){
   $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
   if(!$('voucherPeriod').options.length){
@@ -318,7 +332,7 @@ async function initFeePage(){
   }
   showLoading("Loading data...");
   try{
-    const g=t=>fetch(`${SUPABASE_URL}/rest/v1/${t}?select=*`,{headers:H}).then(r=>r.json());
+    const g=fetchAll;
     const [students,increments,accounts,fees]=await Promise.all(['students','increments','accounts','fees'].map(g));
     if(Array.isArray(students)){allStudentsCache=students;populateClassDropdown(students)}
     incrementsCacheMap={};
@@ -359,7 +373,7 @@ function filterVouchers(){
   if(p!=='ALL')t=t.filter(r=>(r.period||'').trim()===p);
   if(s!=='ALL')t=t.filter(r=>r.status===s);
   const mf=+$('fromMonth').value||1,mt=+$('toMonth').value||12;
-  t=t.filter(r=>{const m=monthOrder[(r.period||'').trim()];return!m||(m>=mf&&m<=mt)});
+  if(!q)t=t.filter(r=>{const m=monthOrder[(r.period||'').trim()];return!m||(m>=mf&&m<=mt)});
   if(q)t=t.filter(r=>(r.voucher_id||'').toLowerCase().includes(q)||(r.student_name||'').toLowerCase().includes(q)||(r.admis_no||'').toLowerCase().includes(q));
   filtered=t;renderFeesTable(t);
 }
