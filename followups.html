@@ -422,6 +422,11 @@ function periodRank(p) {
     let parts = p.split(/\s+/), m = MONTHS.indexOf(parts[0]), y = parseInt(parts[1]) || 0;
     return m < 0 ? 9999999 : y * 12 + m;
 }
+// vouchers of months after the current month are not counted as dues (advance paid on them is kept as credit)
+function isFutureV(f) {
+    let r = periodRank(f.period), d = new Date();
+    return r > 0 && r !== 9999999 && r > d.getFullYear() * 12 + d.getMonth();
+}
 function shortPeriod(p) {
     p = String(p || '').trim();
     if(/arrear/i.test(p)) return 'Arrears';
@@ -516,7 +521,7 @@ function copySetupSql() {
 //  STUDENT LEDGER (opens when a student name is clicked)
 // ====================================================================================
 function openLedger(key) {
-    let vs = allFees.filter(f => childKey(f.admis_no, f.student_name) === key)
+    let vs = allFees.filter(f => childKey(f.admis_no, f.student_name) === key && (!isFutureV(f) || f._paid > 0))
         .sort((a, b) => periodRank(a.period) - periodRank(b.period) || (isArrearsType(b.type) - isArrearsType(a.type)));
     let st = allStudents.find(s => childKey(s.admis_no, s.student_name) === key) || vs[0] || {};
     let tp = 0, td = 0, tb = 0, html = '';
@@ -585,6 +590,7 @@ function buildFamilies() {
         let key = childKey(f.admis_no, f.student_name);
         let ch = addChild(key, { adm: f.admis_no || '', name: f.student_name || '', cls: f.class || '', sibRaw: String(f[SIBLINGS_COL] ?? '').trim() });
         if(!ch.sibRaw && f[SIBLINGS_COL]) ch.sibRaw = String(f[SIBLINGS_COL]).trim();
+        if(isFutureV(f)) { ch.net -= f._paid; return; }
         ch.vouchers.push({ period: f.period, type: f.type, payable: f._payable, paid: f._paid, balance: f._balance, voucher_id: f.voucher_id });
         ch.net += f._balance;
     });
