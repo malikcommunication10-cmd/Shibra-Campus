@@ -241,6 +241,40 @@
         </div>
     </div>
 
+    <!-- WHATSAPP MODAL -->
+    <div id="waModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-start">
+                <div>
+                    <h3 class="text-lg font-bold text-indigo-950">WhatsApp reminder</h3>
+                    <p id="waFamily" class="text-xs text-slate-500 mt-0.5"></p>
+                </div>
+                <button onclick="closeWaModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Message language</label>
+                    <div class="flex gap-2">
+                        <button id="waLangEn" type="button" onclick="setWaLang('en')" class="flex-1 py-2 rounded-lg border text-sm font-semibold transition">English</button>
+                        <button id="waLangUr" type="button" onclick="setWaLang('ur')" class="flex-1 py-2 rounded-lg border text-sm font-semibold transition">Roman Urdu</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Send to</label>
+                    <select id="waNumber" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Message (you can edit it before sending)</label>
+                    <textarea id="waText" rows="9" class="w-full border rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+                </div>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2">
+                <button onclick="closeWaModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="openWhatsApp()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Open WhatsApp</button>
+            </div>
+        </div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl space-y-3">
@@ -707,18 +741,50 @@ function setAllDetails(open) {
 }
 
 // ====================================================================================
-//  WHATSAPP REMINDER (Roman Urdu)
+//  WHATSAPP REMINDER (English / Roman Urdu)
 // ====================================================================================
+let waKey = null, waLang = 'en';
+
+function buildWaMessage(f, lang) {
+    let kids = f.kids.filter(k => k.net > 0).map(k => {
+        let ar = k.vouchers.filter(v => isArrearsType(v.type) && v.balance > 0).reduce((s, v) => s + v.balance, 0);
+        return { name: k.name, cls: k.cls || '-', net: k.net, ar };
+    });
+    if(lang === 'ur') {
+        let lines = kids.map(k => `• ${k.name} (${k.cls}): PKR ${fmt(k.net)}${k.ar > 0 ? ` (is mein pichle saal ka baqaya PKR ${fmt(k.ar)} shamil hai)` : ''}`);
+        return `Assalam-o-Alaikum! Concept School (Shibra Campus) ki taraf se fee reminder.\n\nAap ke bachon ki fee ka baqaya:\n${lines.join('\n')}\n\nTotal baqaya: PKR ${fmt(f.pending)}\n\nMeherbani farma kar jald az jald ada kar dein. Shukriya!`;
+    }
+    let lines = kids.map(k => `• ${k.name} (${k.cls}): PKR ${fmt(k.net)}${k.ar > 0 ? ` (includes last year's arrears of PKR ${fmt(k.ar)})` : ''}`);
+    return `Assalam-o-Alaikum! This is a fee reminder from Concept School (Shibra Campus).\n\nOutstanding fee for your children:\n${lines.join('\n')}\n\nTotal outstanding: PKR ${fmt(f.pending)}\n\nKindly clear the dues at your earliest convenience. Thank you!`;
+}
+
 function sendFamilyWhatsApp(key) {
     let f = familyMap[key]; if(!f) return;
     if(f.pending <= 0) { showCustomAlert('This family has no outstanding dues.'); return; }
-    let lines = f.kids.filter(k => k.net > 0).map(k => {
-        let ar = k.vouchers.filter(v => isArrearsType(v.type) && v.balance > 0).reduce((s, v) => s + v.balance, 0);
-        return `• ${k.name} (${k.cls || '-'}): PKR ${fmt(k.net)}${ar > 0 ? ` (includes last year's arrears of PKR ${fmt(ar)})` : ''}`;
-    });
-    let msg = `Assalam-o-Alaikum! This is a fee reminder from Concept School (Shibra Campus).\n\nOutstanding fee for your children:\n${lines.join('\n')}\n\nTotal outstanding: PKR ${fmt(f.pending)}\n\nKindly clear the dues at your earliest convenience. Thank you!`;
-    let num = f.contacts.length ? waNumber(f.contacts[0].number) : '';
-    window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank');
+    waKey = key;
+    $('waFamily').innerText = f.displayLabel + ' — ' + f.kids.map(k => k.name).join(', ');
+    let sel = $('waNumber');
+    sel.innerHTML = f.contacts.length
+        ? f.contacts.map(c => `<option value="${esc(waNumber(c.number))}">${esc(c.label)}: ${esc(c.number)}</option>`).join('')
+        : '<option value="">No number saved - choose the contact in WhatsApp</option>';
+    setWaLang(localStorage.getItem('wa_lang') === 'ur' ? 'ur' : 'en');
+    $('waModal').classList.remove('hidden');
+}
+function setWaLang(lang) {
+    waLang = lang;
+    localStorage.setItem('wa_lang', lang);
+    const on = 'bg-indigo-600 text-white border-indigo-600', off = 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100';
+    $('waLangEn').className = 'flex-1 py-2 rounded-lg border text-sm font-semibold transition ' + (lang === 'en' ? on : off);
+    $('waLangUr').className = 'flex-1 py-2 rounded-lg border text-sm font-semibold transition ' + (lang === 'ur' ? on : off);
+    let f = familyMap[waKey];
+    if(f) $('waText').value = buildWaMessage(f, lang);
+}
+function closeWaModal() { $('waModal').classList.add('hidden'); waKey = null; }
+function openWhatsApp() {
+    let msg = $('waText').value.trim();
+    if(!msg) { showCustomAlert('The message is empty.'); return; }
+    window.open(`https://wa.me/${$('waNumber').value}?text=${encodeURIComponent(msg)}`, '_blank');
+    closeWaModal();
 }
 
 // ====================================================================================
@@ -1001,7 +1067,7 @@ function saveApiCredentials() {
         closeSettingsModal(); initFollowups();
     } else showCustomAlert('Please enter a valid URL and Key.');
 }
-document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closeCallModal(); closeCustomAlert(); } });
+document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeSettingsModal(); closeCallModal(); closeWaModal(); closeCustomAlert(); } });
 </script>
 </body>
 </html>
