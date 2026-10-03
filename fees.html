@@ -101,9 +101,20 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
       <div id="genBox" class="hidden p-4 border-t space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label class="lbl">Period / month</label>
-            <select id="voucherPeriod" class="inp"></select></div>
+            <select id="voucherPeriod" class="inp" onchange="renderPicker()"></select></div>
           <div><label class="lbl">Class</label>
-            <select id="voucherClassSelect" class="inp"><option value="ALL">All classes</option></select></div>
+            <select id="voucherClassSelect" class="inp" onchange="selStu.clear();renderPicker()"><option value="ALL">All classes</option></select></div>
+        </div>
+        <div id="stuPanel" class="hidden rounded-xl border bg-slate-50 p-3 space-y-2">
+          <div class="flex flex-wrap items-center gap-2"><div class="lbl" style="margin:0">Students (optional: nothing selected = whole class)</div><span id="stuCount" class="badge bg-indigo-50 text-indigo-700"></span></div>
+          <div class="flex flex-wrap gap-2">
+            <input id="stuSearch" oninput="renderPicker()" class="inp flex-1" style="min-width:140px" placeholder="Search student...">
+            <button type="button" class="btn b-gh" onclick="pickStu('all')">All</button>
+            <button type="button" class="btn b-gh" onclick="pickStu('missing')">Missing voucher only</button>
+            <button type="button" class="btn b-gh" onclick="pickStu('none')">Clear</button>
+          </div>
+          <div id="stuList" class="max-h-56 overflow-y-auto bg-white border rounded-lg divide-y"></div>
+          <p class="text-xs text-slate-500">"Create / Update selected": missing vouchers are created, unpaid vouchers are updated to the current increment fee, and paid vouchers are not touched (delete the payment from Accounts first).</p>
         </div>
         <div class="rounded-xl border bg-slate-50 p-3 space-y-3">
           <div class="lbl" style="margin:0">Voucher numbering</div>
@@ -118,7 +129,10 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
           </div>
         </div>
         <div id="warnBox" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 space-y-1"></div>
-        <button onclick="generateVouchers()" class="btn b-pri w-full">Generate vouchers</button>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button onclick="generateVouchers()" class="btn b-pri">Generate vouchers</button>
+          <button onclick="generateVouchers(true)" class="btn b-ok">Create / Update selected</button>
+        </div>
       </div>
     </section>
 
@@ -324,7 +338,7 @@ async function initFeePage(){
           status:(paid>=net&&(net>0||disc>0))?'Paid':(paid>0?'Partial':'Unpaid'),
           paymentDates:acc.dates.size?[...acc.dates].join(', '):'-'};
       });
-      populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();
+      populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
     }else{allFeesCache=[];$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No fee vouchers found.</td></tr>`}
   }catch(e){console.error(e);$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`}
   hideLoading();
@@ -520,11 +534,13 @@ async function submitPayment(e){
 }
 
 /* ---------- Generate ---------- */
-function generateVouchers(){
+function generateVouchers(withUpdate){
   if(!allStudentsCache.length){showAlert("No students found in students directory!");return}
+  if(withUpdate===true&&!selStu.size){showAlert("Select at least one student first (choose a class, then tick students).");return}
   const sel=$('voucherPeriod').value,cls=$('voucherClassSelect').value;
   const periods=sel==='ALL_YEAR'?MONTHS:[sel];
-  const students=cls==='ALL'?allStudentsCache:allStudentsCache.filter(s=>(s.class||'').trim()===cls);
+  let students=cls==='ALL'?allStudentsCache:allStudentsCache.filter(s=>(s.class||'').trim()===cls);
+  if(cls!=='ALL'&&selStu.size)students=students.filter(s=>selStu.has(skey(s)));
   if(!students.length){showAlert("No students found for the selected class!");return}
 
   const used=new Set();allFeesCache.forEach(f=>{const n=vNum(f.voucher_id);if(n)used.add(n)});
@@ -571,15 +587,24 @@ function generateVouchers(){
   });
   showWarn(miss,nolf);
 
-  if(!out.length){showAlert("Vouchers for the selected period and class already exist. No duplicates created.");return}
-  showConfirm(`${out.length} new vouchers will be generated.\nNumbers: ${out[0].voucher_id} to ${out[out.length-1].voucher_id}\nProceed?`,async()=>{
-    showLoading("Generating vouchers...");
+  const upd=[],blocked=[];
+  if(withUpdate===true)periods.forEach(period=>students.forEach(st=>{
+    if(eligibility(st,period)!=='ok')return;
+    const v=stuVouchers(st,period)[0];if(!v)return;
+    const exp=expectedTuition(st,period),old=parseFloat(v.payable)||0;
+    if(!(exp>0)||exp===old)return;
+    if((parseFloat(v.totalPaid)||0)>0)blocked.push(`${st.student_name} (${period}): PKR ${fmt(v.totalPaid)} already paid`);
+    else upd.push({v,old,exp});
+  }));
+  const blockMsg=blocked.length?`\n\nERROR - paid vouchers not updated (delete the payment from Accounts first, then update):\n`+blocked.slice(0,8).join('\n')+(blocked.length>8?`\n...and ${blocked.length-8} more`:''):'';
+  if(!out.length&&!upd.length){showAlert((blocked.length?"Nothing could be updated.":"Nothing to create or update: vouchers already exist and match the current fees.")+blockMsg);return}
+  showConfirm(`${out.length} new voucher(s) will be created`+(withUpdate===true?` and ${upd.length} unpaid voucher(s) updated`:'')+(out.length?`.\nNumbers: ${out[0].voucher_id} to ${out[out.length-1].voucher_id}`:'.')+blockMsg+`\n\nProceed?`,async()=>{
+    showLoading("Saving vouchers...");
     try{
-      const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(out)});
-      hideLoading();
-      if(res.ok){showAlert("Vouchers generated successfully!");toggleGen();initFeePage()}
-      else showAlert("Failed to generate: "+await res.text());
-    }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
+      if(out.length){const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(out)});if(!res.ok){hideLoading();showAlert("Failed to generate: "+await res.text());return}}
+      for(let k=0;k<upd.length;k+=10)await Promise.all(upd.slice(k,k+10).map(it=>fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent((it.v.voucher_id||'').trim())}`,{method:'PATCH',headers:HJ,body:JSON.stringify({payable:it.exp,original_payable:it.v.original_payable??it.old,remarks:`${it.v.remarks?it.v.remarks+' | ':''}Updated: ${it.old} to ${it.exp}`})}).then(r=>{if(!r.ok)throw new Error('update failed')})));
+      hideLoading();selStu.clear();toggleGen();showAlert("Done: "+out.length+" created"+(upd.length?`, ${upd.length} updated`:'')+".");initFeePage();
+    }catch(e){hideLoading();console.error(e);showAlert("Error while saving: "+e.message)}
   });
 }
 
@@ -705,6 +730,33 @@ function applySync(){
       hideLoading();closeModal('syncModal');showAlert("Sync applied successfully!");initFeePage();
     }catch(e){hideLoading();console.error(e);showAlert("Sync failed part-way: "+e.message+". Refresh and run Sync again to see what is left.")}
   });
+}
+
+let selStu=new Set();
+const skey=st=>String(st.admis_no||st.student_name||'');
+const isTuition=v=>(v.type||'').trim().toLowerCase()==='tuition fee';
+function stuVouchers(st,per){const a=normAdm(st.admis_no);return allFeesCache.filter(v=>normAdm(v.admis_no)===a&&isTuition(v)&&(per==='ALL_YEAR'||(v.period||'').trim()===per))}
+function stuState(st,per){
+  const vs=stuVouchers(st,per);
+  if(per==='ALL_YEAR')return{t:`${vs.length}/12`,miss:vs.length<12,c:vs.length<12?'bg-amber-50 text-amber-700':'bg-emerald-50 text-emerald-700'};
+  if(!vs.length)return{t:'No voucher',miss:true,c:'bg-rose-50 text-rose-700'};
+  const v=vs[0];return{t:v.status,miss:false,c:v.status==='Paid'?'bg-emerald-50 text-emerald-700':v.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700'};
+}
+function classStudents(){const cls=$('voucherClassSelect').value;return cls==='ALL'?[]:allStudentsCache.filter(s=>(s.class||'').trim()===cls)}
+function renderPicker(){
+  const box=$('stuPanel'),list=classStudents();
+  if(!list.length){box.classList.add('hidden');return}
+  box.classList.remove('hidden');
+  const per=$('voucherPeriod').value,q=$('stuSearch').value.trim().toLowerCase();
+  $('stuList').innerHTML=list.filter(s=>!q||(s.student_name||'').toLowerCase().includes(q)||String(s.admis_no||'').toLowerCase().includes(q))
+    .map(s=>{const st=stuState(s,per);return`<label class="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"><input type="checkbox" data-k="${esc(skey(s))}" ${selStu.has(skey(s))?'checked':''} onchange="togStu(this)"><span class="font-semibold flex-1">${esc(s.student_name)}</span><span class="font-mono text-slate-400">${esc(s.admis_no)}</span><span class="badge ${st.c}">${st.t}</span></label>`}).join('')||'<div class="p-3 text-xs text-slate-400">No students match.</div>';
+  $('stuCount').innerText=`${selStu.size} selected / ${list.length}`;
+}
+function togStu(cb){cb.checked?selStu.add(cb.dataset.k):selStu.delete(cb.dataset.k);$('stuCount').innerText=`${selStu.size} selected / ${classStudents().length}`}
+function pickStu(mode){
+  const per=$('voucherPeriod').value;selStu.clear();
+  if(mode!=='none')classStudents().forEach(s=>{if(mode==='all'||stuState(s,per).miss)selStu.add(skey(s))});
+  renderPicker();
 }
 
 function openDiscount(vId){
