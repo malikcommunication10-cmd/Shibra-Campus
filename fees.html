@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="tailwind.css">
     <script src="config.js"></script>
     <script src="nav.js"></script>
-    <!-- SHEETJS EXCEL READER CDN ADDED TO FIX IMPORT ERROR -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -131,7 +130,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
             <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
             <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
             <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
-            <button onclick="sbCacheClear();initFeePage()" class="btn b-gh">🔄 Refresh</button>
+            <button onclick="initFeePage()" class="btn b-gh">🔄 Refresh</button>
           </div>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -238,8 +237,8 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
 </div></div>
 
 <script>
-const SUPABASE_URL = SB_URL;
-const SUPABASE_KEY = SB_KEY;
+const SUPABASE_URL = typeof SB_URL !== 'undefined' ? SB_URL : "https://tsnfwebctvjnmmweepiu.supabase.co";
+const SUPABASE_KEY = typeof SB_KEY !== 'undefined' ? SB_KEY : "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
 const H = {apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`};
 const HJ = {...H,"Content-Type":"application/json",Prefer:"return=minimal"};
 
@@ -298,7 +297,14 @@ function makeVidGenerator(used){
 }
 
 /* ---------- Load ---------- */
-async function fetchAll(t) { const r = await sbFetchAll(t, 'select=*'); return await r.json(); }
+async function fetchTable(table) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, { headers: H });
+    if(res.ok) return await res.json();
+  } catch(e) { console.error(`Error loading ${table}:`, e); }
+  return [];
+}
+
 async function initFeePage(){
   $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
   if(!$('voucherPeriod').options.length){
@@ -306,10 +312,15 @@ async function initFeePage(){
     const mo=MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
     $('fromMonth').innerHTML=mo;$('toMonth').innerHTML=mo;resetRange(true);
   }
-  showLoading("Loading data...");
+  showLoading("Loading data safely...");
   try{
-    const g=fetchAll;
-    const [students,increments,accounts,fees]=await Promise.all(['students','increments','accounts','fees'].map(g));
+    const [students,increments,accounts,fees]=await Promise.all([
+      fetchTable('students'),
+      fetchTable('increments'),
+      fetchTable('accounts'),
+      fetchTable('fees')
+    ]);
+
     if(Array.isArray(students)){allStudentsCache=students;populateClassDropdown(students)}
     incrementsCacheMap={};
     if(Array.isArray(increments))increments.forEach(i=>{const a=(i.admis_no||'').trim().toLowerCase();if(a)incrementsCacheMap[a]=i});
@@ -319,6 +330,7 @@ async function initFeePage(){
       const o=accountsDataMap[vId]??={totalPaid:0,dates:new Set(),transactions:[]};
       o.totalPaid+=parseFloat(r.amount_in)||0;if(r.date)o.dates.add(String(r.date).trim());o.transactions.push(r);
     });
+
     if(Array.isArray(fees)){
       allFeesCache=fees.map(row=>{
         const vId=(row.voucher_id||'').trim(),payable=parseFloat(row.payable)||0;
@@ -424,7 +436,7 @@ function renderFeesTable(data){
     <td data-l="Sr">${a?'<span class="text-rose-400">↳</span>':++sr}</td>
     <td data-l="Voucher" class="font-mono text-indigo-900">${esc(vId)||'-'}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</td>
     <td data-l="Admis No" class="font-mono">${esc(r.admis_no)||'-'}</td>
-    <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(r.student_name||'')}'))" class="text-indigo-600 underline">${esc(r.student_name)||'-'}</a></td>
+    <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(r.student_name||'')}'))" class="text-indigo-600 underline">${esc(r.student_name||'-')}</a></td>
     <td data-l="Siblings">${esc(r[FEES_SIBLINGS_COL])||'-'}</td>
     <td data-l="Type" class="${a?'text-rose-700 font-bold':''}">${a?'Arrears 2025':esc(r.type||'Tuition Fee')}</td>
     <td data-l="Period" class="text-indigo-600 font-medium">${esc(r.period)||'-'}</td>
@@ -535,7 +547,7 @@ function openStudentLedger(name){
     const pay=v.net??(parseFloat(v.payable)||0);let run=pay;
     const note=(isArr(v)?' <span class="text-rose-600 font-semibold">(Previous year arrears 2025)</span>':'')+(v.discount>0?` <span class="text-indigo-600 font-semibold">(Discount PKR ${fmt(v.discount)}: ${esc(v.remarks)})</span>`:'');
     const txns=[...(accountsDataMap[(v.voucher_id||'').trim()]?.transactions||[])].sort((a,b)=>new Date(a.date)-new Date(b.date));
-    const cells=(d,desc,paid,bal)=>`<tr class="border-b"><td class="p-2 font-mono">${esc(d)}</td><td class="p-2 font-mono text-indigo-900">${esc(v.voucher_id)||'-'}</td><td class="p-2 text-indigo-600">${esc(v.period)||'-'}</td><td class="p-2 text-slate-600">${desc}${note}</td><td class="p-2 font-bold">PKR ${fmt(pay)}</td><td class="p-2 font-bold text-emerald-600">PKR ${fmt(paid)}</td><td class="p-2 font-bold">PKR ${fmt(bal)}</td></tr>`;
+    const cells=(d,desc,paid,bal)=>`<tr class="border-b"><td class="p-2 font-mono">${esc(d)}</td><td class="p-2 font-mono text-indigo-900">${esc(v.voucher_id||'-')}</td><td class="p-2 text-indigo-600">${esc(v.period||'-')}</td><td class="p-2 text-slate-600">${desc}${note}</td><td class="p-2 font-bold">PKR ${fmt(pay)}</td><td class="p-2 font-bold text-emerald-600">PKR ${fmt(paid)}</td><td class="p-2 font-bold">PKR ${fmt(bal)}</td></tr>`;
     if(txns.length)txns.forEach(t=>{const a=parseFloat(t.amount_in)||0;run-=a;html+=cells(t.date||'-',esc(t.description||t.remarks||'-'),a,run)});
     else html+=cells('-','Unpaid voucher',0,run);
   });
@@ -809,7 +821,7 @@ async function saveDiscount(){
   if(amt>0)parts.push(`Discount ${amt}: ${rs}`);
   showLoading("Saving discount...");
   try{
-    const res=await fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent(vid)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({discount:amt,remarks:parts.join(' | ')})});
+    const res=assertFetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent(vid)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({discount:amt,remarks:parts.join(' | ')})});
     hideLoading();
     if(res.ok){closeDiscount();showAlert("Discount saved.");initFeePage()}
     else showAlert("Failed to save: "+await res.text());
