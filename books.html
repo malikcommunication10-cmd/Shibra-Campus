@@ -399,13 +399,14 @@ const getLow = () => { let v = parseInt(localStorage.getItem('books_low_stock'))
 //  LOAD + NORMALIZE
 // ====================================================================================
 function normTx(row, idx) {
-    if(BC) Object.keys(BC).forEach(k => { if(BC[k] && BC[k] !== k && row[k] === undefined) row[k] = row[BC[k]]; });
+    if(BC) Object.keys(BC).forEach(k => { if(BC[k] && BC[k] !== k && row[BC[k]] != null && row[BC[k]] !== '') row[k] = row[BC[k]]; });
     const t = String(row.type || row.tx_type || 'Purchase').trim().toLowerCase();
     const kind = t.includes('return') ? (t.includes('sale') ? 'sale_return' : 'purchase_return') : (t.includes('sale') ? 'sale' : 'purchase');
     const qty = parseFloat(row.qty) || 0;
     const net = parseFloat(row.net_amount ?? row.amount) || 0;
     let unit = parseFloat(row.unit_price) || 0;
-    if(!unit && qty) unit = net / qty;
+    if(!unit && qty && parseFloat(row.amount) && BC && BC.net_amount !== 'amount') unit = parseFloat(row.amount) / qty;
+ if(!unit && qty) unit = net / qty;
     const title = String(row.book_title || row.title || '').trim().replace(/\s+/g, ' ');
     const uid = row.id !== undefined && row.id !== null ? 'id' + row.id : 'i' + idx;
     return {
@@ -481,12 +482,12 @@ function buildItems() {
 }
 let BC = null, BOOK_ALLCOLS = [];
 async function detectBookCols() {
-    try { const c = JSON.parse(sessionStorage.getItem('books_cols_v3') || 'null'); if(c && c.map && c.map.book_title) { BC = c.map; BOOK_ALLCOLS = c.all || []; return; } } catch (e) {}
+    try { const c = JSON.parse(sessionStorage.getItem('books_cols_v4') || 'null'); if(c && c.map && c.map.book_title) { BC = c.map; BOOK_ALLCOLS = c.all || []; return; } } catch (e) {}
     const cfg = getSupabaseConfig(), H = sbHeaders();
     let cols = [];
     try { const j = await (await fetch(`${cfg.url}/rest/v1/`, { headers: H })).json(); const pr = (j.definitions && j.definitions.books && j.definitions.books.properties) || (j.components && j.components.schemas && j.components.schemas.books && j.components.schemas.books.properties); if(pr) cols = Object.keys(pr); } catch (e) {}
     if(!cols.length) { try { const r = await (await fetch(`${cfg.url}/rest/v1/books?select=*&limit=1`, { headers: H })).json(); if(Array.isArray(r) && r[0]) cols = Object.keys(r[0]); } catch (e) {} }
-    const cand = { type: ['type', 'tx_type', 'transaction_type', 'kind'], party_name: ['party_name', 'party', 'vendor', 'customer', 'student_name'], book_title: ['book_title', 'title', 'item_title', 'item_name', 'book_name', 'book', 'item', 'name', 'product', 'product_name', 'particulars', 'description'], qty: ['qty', 'quantity'], unit_price: ['unit_price', 'price', 'rate'], net_amount: ['net_amount', 'amount', 'total'] };
+    const cand = { type: ['type', 'tx_type', 'transaction_type', 'kind'], party_name: ['party', 'party_name', 'vendor', 'customer', 'student_name'], book_title: ['book', 'book_title', 'title', 'item_title', 'item_name', 'book_name', 'item', 'name', 'product', 'product_name', 'particulars', 'description'], qty: ['qty', 'quantity'], unit_price: ['unit_price', 'price', 'rate'], net_amount: ['net_amount', 'amount', 'total'] };
     const out = {};
     if(cols.length) {
         const low = cols.map(c => c.toLowerCase());
@@ -499,19 +500,26 @@ async function detectBookCols() {
         }));
     }
     BC = out; BOOK_ALLCOLS = cols;
-    if(out.book_title) { try { sessionStorage.setItem('books_cols_v3', JSON.stringify({ map: out, all: cols })); } catch (e) {} }
+    if(out.book_title) { try { sessionStorage.setItem('books_cols_v4', JSON.stringify({ map: out, all: cols })); } catch (e) {} }
 }
 // rename our standard keys to the real column names of the books table
 function mapRow(p) {
     const o = {};
     Object.keys(p).forEach(k => { if(BC && k in BC) { if(BC[k]) o[BC[k]] = p[k]; } else o[k] = p[k]; });
+    if(BC && BC.qty && o[BC.qty] != null) o[BC.qty] = Math.round(parseFloat(o[BC.qty]) || 0);
+    if(BC && !BC.unit_price && p.unit_price !== undefined) {
+        const gross = Math.round((parseFloat(p.qty) || 0) * (parseFloat(p.unit_price) || 0) * 100) / 100, net = parseFloat(p.net_amount) || 0;
+        if(BOOK_ALLCOLS.includes('amount') && BC.net_amount !== 'amount') o.amount = gross;
+        if(BOOK_ALLCOLS.includes('discount_pct')) o.discount_pct = gross > 0 ? Math.round((gross - net) / gross * 10000) / 100 : 0;
+    }
     return o;
 }
 function colsOk() {
-    const TYPES = { book_title: 'text', qty: 'numeric', unit_price: 'numeric', net_amount: 'numeric' };
+    const TYPES = { book_title: 'text', qty: 'integer', net_amount: 'numeric' };
     const missing = BC ? Object.keys(TYPES).filter(k => !BC[k]) : [];
+    if(BC && !BC.unit_price && !BOOK_ALLCOLS.includes('amount')) missing.push('unit_price');
     if(missing.length) {
-        const sql = missing.map(k => `alter table public.books add column if not exists ${k} ${TYPES[k]};`).join(' ');
+        const sql = missing.map(k => `alter table public.books add column if not exists ${k} ${TYPES[k] || 'numeric'};`).join(' ');
         toast('The books table is missing: ' + missing.join(', ') + (BOOK_ALLCOLS.length ? ' (columns found: ' + BOOK_ALLCOLS.join(', ') + ')' : '') + '. Run in the Supabase SQL Editor, then refresh: ' + sql, false);
         return false;
     }
