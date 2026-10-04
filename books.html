@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Book Store & Inventory</title>
-    <link rel="preconnect" href="https://tsnfwebctvjnmmweepiu.supabase.co" crossorigin>
-    <link rel="stylesheet" href="tailwind.css">
+    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
     <script src="config.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="nav.js"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
@@ -97,7 +97,7 @@
                     </div>
                     <div><label class="block text-[11px] font-medium text-slate-500 mb-1">From</label><input id="gFrom" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
                     <div><label class="block text-[11px] font-medium text-slate-500 mb-1">To</label><input id="gTo" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
-                    <button onclick="sbCacheClear();initBooks()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
+                    <button onclick="initBooks()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
                     <p class="text-[11px] text-slate-400 basis-full sm:basis-auto sm:ml-auto">Stock figures are always current; sales, purchases and profit follow the selected period.</p>
                 </div>
             </div>
@@ -946,7 +946,7 @@ async function readImp() {
     const f = $('impFile').files[0]; if(!f) { toast('Choose a file first.', false); return; }
     if(typeof XLSX === 'undefined') { toast('Excel reader could not load. Check your internet connection.', false); return; }
     try {
-        await loadXlsx(); const wb = /\.csv$/i.test(f.name) ? XLSX.read(await f.text(), { type: 'string', raw: true }) : XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+        const wb = /\.csv$/i.test(f.name) ? XLSX.read(await f.text(), { type: 'string', raw: true }) : XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
         const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
         const g = (r, k) => { const key = Object.keys(r).find(x => x.trim().toLowerCase() === k); return key ? r[key] : ''; };
         const L = _settingLists || {}, classes = new Set((L['Class'] || []).map(norm)), cats = new Set((L['Book Category'] || []).map(norm));

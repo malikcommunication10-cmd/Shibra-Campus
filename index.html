@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Dashboard</title>
-    <link rel="preconnect" href="https://tsnfwebctvjnmmweepiu.supabase.co" crossorigin>
-    <link rel="stylesheet" href="tailwind.css">
+    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
 </head>
@@ -18,7 +17,7 @@
                 <h2 class="text-xl md:text-3xl font-extrabold text-indigo-950 tracking-tight">Concept School Shibra Campus</h2>
                 <p id="dateLine" class="text-sm text-slate-500 font-medium"></p>
             </div>
-            <button onclick="sbCacheClear();initDashboard()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">🔄 Refresh</button>
+            <button onclick="initDashboard()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">🔄 Refresh</button>
         </div>
 
         <div id="cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>

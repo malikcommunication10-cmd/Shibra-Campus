@@ -1,3 +1,6 @@
-{ "name": "shibra-campus", "private": true,
-  "scripts": { "build:css": "tailwindcss -i input.css -o tailwind.css --minify" },
-  "devDependencies": { "tailwindcss": "3.4.17" } }
+{
+  "name": "shibra-campus",
+  "private": true,
+  "scripts": { "build:css": "tailwindcss -i input.css -o styles.css --minify" },
+  "devDependencies": { "tailwindcss": "3.4.17" }
+}

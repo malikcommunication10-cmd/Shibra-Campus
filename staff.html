@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Staff & Payroll</title>
-    <link rel="preconnect" href="https://tsnfwebctvjnmmweepiu.supabase.co" crossorigin>
-    <link rel="stylesheet" href="tailwind.css">
+    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
     <style>
@@ -85,7 +84,7 @@
                     <button onclick="shiftMonth(-1)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold" aria-label="Previous month">‹ Prev</button>
                     <button onclick="shiftMonth(1)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold" aria-label="Next month">Next ›</button>
                     <button onclick="setThisMonth()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">This month</button>
-                    <button onclick="sbCacheClear();initStaff()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
+                    <button onclick="initStaff()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
                     <p class="text-[11px] text-slate-400 basis-full sm:basis-auto sm:ml-auto">The month applies to Overview and Payroll. Staff and History have their own filters.</p>
                 </div>
             </div>

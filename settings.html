@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - System Settings</title>
-    <link rel="preconnect" href="https://tsnfwebctvjnmmweepiu.supabase.co" crossorigin>
-    <link rel="stylesheet" href="tailwind.css">
+    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
     <script src="config.js"></script>
     <script>window.addEventListener("pagehide", () => { try { sessionStorage.removeItem("sb_settings_v1"); } catch (e) {} });</script>
     <script src="nav.js"></script>
@@ -50,7 +49,7 @@
                     <p class="text-sm text-slate-500">Dropdown lists, rules and connection — one place that feeds every other page</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button onclick="sbCacheClear();initSettings()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
+                    <button onclick="initSettings()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
                     </div>
             </div>
 
