@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fee Vouchers - Concept School Shibra Campus</title>
+<link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
+    <script src="config.js"></script>
+    <script src="nav.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+.inp{width:100%;border:1px solid #cbd5e1;border-radius:.6rem;padding:.6rem .75rem;font-size:.85rem;background:#fff;outline:none}
+.inp:focus{border-color:#4f46e5;box-shadow:0 0 0 3px #e0e7ff}
+.inp[readonly]{background:#f1f5f9}
+.lbl{display:block;font-size:.72rem;font-weight:600;color:#475569;margin-bottom:.25rem}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;border-radius:.6rem;font-weight:600;font-size:.8rem;padding:.55rem .9rem;transition:.15s;cursor:pointer}
+.b-pri{background:#4338ca;color:#fff}.b-pri:hover{background:#3730a3}
+.b-ok{background:#059669;color:#fff}.b-ok:hover{background:#047857}
+.b-gh{background:#f1f5f9;color:#334155}.b-gh:hover{background:#e2e8f0}
+.b-rd{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}.b-rd:hover{background:#ffe4e6}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:50;display:none;align-items:center;justify-content:center;padding:1rem}
+.modal.open{display:flex}
+.sheet{background:#fff;border-radius:1rem;width:100%;max-height:92vh;overflow-y:auto;padding:1.25rem;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.badge{display:inline-block;padding:.1rem .55rem;border-radius:999px;font-size:.68rem;font-weight:700}
+.nav a{display:flex;gap:.6rem;align-items:center;padding:.6rem .8rem;border-radius:.6rem;color:#c7d2fe;font-size:.85rem}
+.nav a:hover{background:rgba(255,255,255,.08)}.nav a.on{background:#4338ca;color:#fff;font-weight:600}
+table.rt th{padding:.65rem .6rem;font-size:.7rem;font-weight:700;color:#475569;text-align:left;white-space:nowrap}
+table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
+@media(max-width:767px){
+ table.rt thead{display:none}
+ table.rt,table.rt tbody{display:block}
+ table.rt tr{display:block;margin:.6rem;border:1px solid #e2e8f0;border-radius:.8rem;padding:.4rem .7rem;background:#fff}
+ table.rt td{display:flex;justify-content:space-between;gap:1rem;border:0;padding:.3rem 0;text-align:right}
+ table.rt td::before{content:attr(data-l);color:#94a3b8;font-weight:600;text-align:left}
+ table.rt td.nl::before{content:none}
+}
+@media print{
+ body *{visibility:hidden!important}
+ #ledgerModal,#ledgerModal *{visibility:visible!important}
+ #ledgerModal{position:absolute!important;left:0;top:0;width:100%;background:#fff!important;display:block!important;padding:0!important}
+ #ledgerSheet{box-shadow:none!important;max-height:none!important;max-width:100%!important}
+ .no-print{display:none!important}
+}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800" onload="initFeePage()">
+
+<div id="loadingOverlay" class="fixed inset-0 bg-slate-900/50 z-[70] hidden flex-col items-center justify-center text-white">
+  <div class="animate-spin rounded-full h-11 w-11 border-4 border-white border-t-transparent mb-3"></div>
+  <p id="loadingText" class="text-sm font-semibold">Processing...</p>
+</div>
+
+<div id="alertModal" class="modal no-print" style="z-index:80"><div class="sheet max-w-sm text-center space-y-4">
+  <p id="alertMsg" class="text-sm font-medium text-slate-700" style="white-space:pre-line"></p>
+  <button onclick="closeAlert()" class="btn b-pri w-full">OK</button></div></div>
+
+<div id="confirmModal" class="modal no-print" style="z-index:90"><div class="sheet max-w-sm text-center space-y-4">
+  <p id="confirmMsg" class="text-sm font-medium text-slate-700" style="white-space:pre-line"></p>
+  <div class="flex gap-2"><button id="confirmNo" class="btn b-gh flex-1">Cancel</button><button id="confirmYes" class="btn b-ok flex-1">Proceed</button></div></div></div>
+
+<!-- Mobile top bar -->
+<div class="md:flex min-h-screen">
+  <aside id="appNav"></aside>
+
+  <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
+    <div class="no-print">
+      <h2 class="text-xl md:text-2xl font-extrabold text-indigo-950">Fee Vouchers</h2>
+      <p class="text-xs md:text-sm text-slate-500">Generate vouchers linked with increments and record payments</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Vouchers</div><div id="stCount" class="text-lg font-extrabold text-slate-900">0</div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Total payable</div><div id="stPayable" class="text-lg font-extrabold text-slate-900">0</div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Collected</div><div id="stPaid" class="text-lg font-extrabold text-emerald-600">0</div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Pending</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div></div>
+    </div>
+
+    <!-- Generate -->
+    <section class="bg-white rounded-xl border overflow-hidden no-print">
+      <button onclick="toggleGen()" class="w-full px-4 py-3 flex justify-between items-center text-sm font-semibold text-indigo-800 bg-indigo-50/60">
+        <span>⚡ Generate fee vouchers</span><span id="genArrow">▼</span></button>
+      <div id="genBox" class="hidden p-4 border-t space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label class="lbl">Period / month</label>
+            <select id="voucherPeriod" class="inp" onchange="renderPicker()"></select></div>
+          <div><label class="lbl">Class</label>
+            <select id="voucherClassSelect" class="inp" onchange="selStu.clear();renderPicker()"><option value="ALL">All classes</option></select></div>
+        </div>
+        <div id="stuPanel" class="hidden rounded-xl border bg-slate-50 p-3 space-y-2">
+          <div class="flex flex-wrap items-center gap-2"><div class="lbl" style="margin:0">Students (optional: nothing selected = whole class)</div><span id="stuCount" class="badge bg-indigo-50 text-indigo-700"></span></div>
+          <div class="flex flex-wrap gap-2">
+            <input id="stuSearch" oninput="renderPicker()" class="inp flex-1" style="min-width:140px" placeholder="Search student...">
+            <button type="button" class="btn b-gh" onclick="pickStu('all')">All</button>
+            <button type="button" class="btn b-gh" onclick="pickStu('missing')">Missing voucher only</button>
+            <button type="button" class="btn b-gh" onclick="pickStu('none')">Clear</button>
+          </div>
+          <div id="stuList" class="max-h-56 overflow-y-auto bg-white border rounded-lg divide-y"></div>
+          <p class="text-xs text-slate-500">"Create / Update selected": missing vouchers are created, unpaid vouchers are updated to the current increment fee, and paid vouchers are not touched (delete the payment from Accounts first).</p>
+        </div>
+        <div class="rounded-xl border bg-slate-50 p-3 space-y-3">
+          <div class="lbl" style="margin:0">Voucher numbering</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label class="flex items-start gap-2 border rounded-lg p-2.5 bg-white cursor-pointer text-sm"><input type="radio" name="vidMode" value="auto" checked onchange="vidModeChange()" class="mt-1"><span><b>Auto</b><br><span class="text-xs text-slate-500">Random unique numbers</span></span></label>
+            <label class="flex items-start gap-2 border rounded-lg p-2.5 bg-white cursor-pointer text-sm"><input type="radio" name="vidMode" value="manual" onchange="vidModeChange()" class="mt-1"><span><b>Manual start</b><br><span class="text-xs text-slate-500">Sequential from your number</span></span></label>
+          </div>
+          <div id="manualBox" class="hidden">
+            <label class="lbl">Starting number (e.g. V-586545 or 586545)</label>
+            <input id="vidStart" class="inp font-mono" placeholder="V-586545" oninput="updateVidHint()">
+            <p id="vidHint" class="text-xs text-slate-500 mt-1"></p>
+          </div>
+        </div>
+        <div id="warnBox" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 space-y-1"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button onclick="generateVouchers()" class="btn b-pri">Generate vouchers</button>
+          <button onclick="generateVouchers(true)" class="btn b-ok">Create / Update selected</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- List -->
+    <section class="bg-white rounded-xl border overflow-hidden">
+      <div class="p-3 md:p-4 border-b space-y-3 no-print">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="font-bold text-indigo-900 text-sm md:text-base">Generated vouchers</h3>
+          <div class="flex gap-2 flex-wrap justify-end">
+            <button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
+            <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
+            <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
+            <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
+            <button onclick="initFeePage()" class="btn b-gh">🔄 Refresh</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <input id="searchInput" oninput="filterVouchers()" placeholder="Search ID or name..." class="inp col-span-2">
+          <select id="filterPeriod" onchange="filterVouchers()" class="inp"><option value="ALL">All periods</option></select>
+          <select id="filterStatus" onchange="filterVouchers()" class="inp">
+            <option value="ALL">All status</option><option>Unpaid</option><option>Partial</option><option>Paid</option></select>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
+          <div><label class="lbl">From month</label><select id="fromMonth" class="inp" onchange="filterVouchers()"></select></div>
+          <div><label class="lbl">To month</label><select id="toMonth" class="inp" onchange="filterVouchers()"></select></div>
+          <button onclick="resetRange()" class="btn b-gh col-span-2 md:col-span-1">Reset (Jan to current month)</button>
+        </div>
+        <label class="md:hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" onchange="toggleSelectAll(this)"> Select all</label>
+      </div>
+      <div id="voucherView" class="overflow-x-auto md:max-h-[70vh]">
+        <table class="rt w-full border-collapse">
+          <thead class="bg-slate-50 sticky top-0"><tr>
+            <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
+            <th>Sr</th><th>Voucher ID</th><th>Admis No</th><th>Student</th><th>Siblings</th><th>Type</th><th>Period</th>
+            <th>Payable</th><th>Paid</th><th>Balance</th><th>Class</th><th>Status</th><th>Date(s)</th><th>Action</th></tr></thead>
+          <tbody id="feesTableBody"><tr><td colspan="15" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
+        </table>
+      </div>
+      <div id="summaryView" class="hidden overflow-x-auto md:max-h-[70vh]">
+        <table class="rt w-full border-collapse"><thead id="sumHead" class="bg-slate-50 sticky top-0"></thead><tbody id="sumBody"></tbody></table>
+      </div>
+      <div id="feesTableFooter" class="no-print border-t bg-slate-50 p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Ledger -->
+<div id="ledgerModal" class="modal"><div id="ledgerSheet" class="sheet max-w-4xl">
+  <div class="flex justify-between items-start border-b pb-3 mb-3 gap-2">
+    <div><h3 class="font-bold text-indigo-950">Concept School - Student Fee Ledger</h3><p id="ledgerStudentInfo" class="text-xs text-slate-500 mt-0.5"></p></div>
+    <div class="flex gap-2 no-print"><button onclick="window.print()" class="btn b-pri">🖨️ Print</button><button onclick="closeLedgerModal()" class="btn b-gh">✕</button></div>
+  </div>
+  <div class="overflow-x-auto mb-3"><table class="w-full text-xs text-left">
+    <thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Payable</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr></thead>
+    <tbody id="ledgerTableBody"></tbody></table></div>
+  <div class="bg-slate-50 p-3 rounded-xl border flex flex-wrap justify-between gap-2 text-xs font-semibold">
+    <div>Payable: <span id="ledgerTotalPayable" class="text-indigo-900"></span></div>
+    <div>Paid: <span id="ledgerTotalPaid" class="text-emerald-600"></span></div>
+    <div>Balance: <span id="ledgerTotalBalance" class="text-rose-600"></span></div></div>
+</div></div>
+
+<!-- Bulk pay -->
+<div id="bulkPayModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">⚡ Bulk pay (FIFO)</h3>
+  <div><label class="lbl">Total filtered unpaid dues</label><input id="bulkTotalDues" readonly class="inp font-bold text-rose-600"></div>
+  <div><label class="lbl">Received amount</label><input type="number" id="bulkReceivedAmount" class="inp font-bold text-emerald-600"></div>
+  <div><label class="lbl">Payment date</label><input type="date" id="bulkPayDate" class="inp"></div>
+  <div><label class="lbl">Remarks</label><input id="bulkPayRemarks" placeholder="Bulk payment via FIFO" class="inp"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeBulkPayModal()" class="btn b-gh">Cancel</button><button onclick="submitBulkFifoPayment()" class="btn b-ok">Save & distribute</button></div>
+</div></div>
+
+<!-- Pay -->
+<div id="payModal" class="modal no-print"><div class="sheet max-w-lg">
+  <h3 class="font-bold text-indigo-800 mb-3">💳 Fee payment receipt</h3>
+  <form onsubmit="submitPayment(event)" class="space-y-3">
+    <div class="grid grid-cols-2 gap-2">
+      <div><label class="lbl">Voucher ID</label><input id="payVoucherId" readonly class="inp font-mono"></div>
+      <div><label class="lbl">Student</label><input id="payStudentName" readonly class="inp font-semibold"></div></div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div><label class="lbl">From account (fee type)</label><input id="payFromAccount" readonly class="inp"></div>
+      <div><label class="lbl">Deposit to</label><select id="payToAccount" class="inp"><option value="cash">Cash</option><option value="bank">Bank</option></select></div></div>
+    <div class="grid grid-cols-3 gap-2">
+      <div><label class="lbl">Payable</label><input type="number" id="payPayable" readonly class="inp font-bold"></div>
+      <div><label class="lbl">Amount</label><input type="number" id="payAmountIn" required class="inp font-bold text-emerald-600"></div>
+      <div><label class="lbl">Date</label><input type="date" id="payDate" required class="inp"></div></div>
+    <div><label class="lbl">Remarks</label><input id="payRemarks" placeholder="Optional" class="inp"></div>
+    <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closePayModal()" class="btn b-gh">Cancel</button><button type="submit" class="btn b-ok">Save receipt</button></div>
+  </form>
+</div></div>
+
+<div id="importModal" class="modal no-print"><div class="sheet max-w-4xl space-y-3">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">📥 Import paid fees (Excel / CSV)</h3>
+  <p class="text-xs text-slate-500">Columns: voucher_id (Admission No), from_account (name), to_account, amount_in, date, remarks (class). Each payment goes to the tuition voucher of the month of its received date, and that same date is saved in Accounts.</p>
+  <input type="file" id="importFile" accept=".xlsx,.xls,.csv" class="inp">
+  <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="importFixYear" checked> Set the year of all dates to 2026</label>
+  <button onclick="readImport()" class="btn b-gh w-full">Read file & preview</button>
+  <div id="importPreview" class="text-xs"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeModal('importModal')" class="btn b-gh">Close</button><button id="importConfirm" onclick="confirmImport()" class="btn b-ok hidden">Confirm & import</button></div>
+</div></div>
+
+<div id="syncModal" class="modal no-print"><div class="sheet max-w-4xl space-y-3">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">🔁 Sync vouchers with increments, DOJ & left date</h3>
+  <p class="text-xs text-slate-500">Checks the vouchers in the current filter. Updates on unpaid vouchers are ticked by default; paid vouchers and deletions are not, tick them yourself.</p>
+  <div id="syncList" class="text-xs overflow-x-auto"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeModal('syncModal')" class="btn b-gh">Close</button><button onclick="applySync()" class="btn b-pri">Apply selected</button></div>
+</div></div>
+
+<div id="discountModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">% Voucher discount</h3>
+  <div class="grid grid-cols-2 gap-2">
+    <div><label class="lbl">Voucher ID</label><input id="dcVid" readonly class="inp font-mono"></div>
+    <div><label class="lbl">Student</label><input id="dcStudent" readonly class="inp"></div></div>
+  <div class="grid grid-cols-2 gap-2">
+    <div><label class="lbl">Payable</label><input id="dcPayable" readonly class="inp font-bold"></div>
+    <div><label class="lbl">Discount amount (0 = remove)</label><input type="number" id="dcAmt" min="0" class="inp font-bold text-indigo-700"></div></div>
+  <div><label class="lbl">Remarks (required)</label><input id="dcRemarks" placeholder="Reason for relief" class="inp"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Save discount</button></div>
+</div></div>
+
+<script>
+const SUPABASE_URL = SB_URL;
+const SUPABASE_KEY = SB_KEY;
+const H = {apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`};
+const HJ = {...H,"Content-Type":"application/json",Prefer:"return=minimal"};
+
+const FEES_ARREARS_COL='arrears2025', FEES_SIBLINGS_COL='siblings';
+const STUDENT_ARREARS_COLS=['arrears2025'], STUDENT_SIBLINGS_COL='siblings';
+const ARREARS_PERIOD='January 2026';
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"].map(m=>m+" 2026");
+const monthOrder={}; MONTHS.forEach((m,i)=>monthOrder[m]=i+1);
+
+let accountsRaw=[],importPlan=null,syncItems=[],allFeesCache=[], allStudentsCache=[], incrementsCacheMap={}, accountsDataMap={}, filtered=[];
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isArr=r=>(r.type||'').trim().toLowerCase()==='arrears';
+const today=()=>new Date().toISOString().split('T')[0];
+const fmt=n=>Number(n||0).toLocaleString('en-PK');
+const showLoading=t=>{$('loadingText').innerText=t||'Processing...';$('loadingOverlay').classList.remove('hidden');$('loadingOverlay').classList.add('flex')};
+const hideLoading=()=>{$('loadingOverlay').classList.add('hidden');$('loadingOverlay').classList.remove('flex')};
+const showAlert=m=>{$('alertMsg').innerText=m;$('alertModal').classList.add('open')};
+const closeAlert=()=>$('alertModal').classList.remove('open');
+function showConfirm(msg,cb){
+  $('confirmMsg').innerText=msg;$('confirmModal').classList.add('open');
+  for(const id of ['confirmYes','confirmNo']){const o=$(id),n=o.cloneNode(true);o.replaceWith(n);}
+  $('confirmYes').onclick=()=>{$('confirmModal').classList.remove('open');cb(true)};
+  $('confirmNo').onclick=()=>$('confirmModal').classList.remove('open');
+}
+function toggleMenu(){$('sidebar').classList.toggle('-translate-x-full');$('menuBackdrop').classList.toggle('hidden')}
+function toggleGen(){$('genBox').classList.toggle('hidden');$('genArrow').innerText=$('genBox').classList.contains('hidden')?'▼':'▲'}
+
+function getStudentArrears(st){for(const c of STUDENT_ARREARS_COLS){if(st[c]!=null&&String(st[c]).trim()!=='')return String(st[c]).trim()}return null}
+function getStudentSiblings(st){const v=st[STUDENT_SIBLINGS_COL];return(v==null||String(v).trim()==='')?null:String(v).trim()}
+
+/* ---------- Voucher numbering ---------- */
+const vNum=id=>{const m=String(id||'').match(/^V-(\d+)/i);return m?parseInt(m[1],10):null};
+const startVal=st=>{const m=String(st.doj||'').match(/^(\d{4})-(\d{2})/);return m?(+m[1])*12+(+m[2]):null};
+function showWarn(miss,nolf){
+  const mk=(o,t)=>{const k=Object.values(o);return k.length?`<div><b>${t} (${k.length}):</b> ${k.slice(0,15).map(x=>esc(`${x.admis_no||''} ${x.student_name||''} (${x.class||''})`)).join(', ')}${k.length>15?' ...':''}</div>`:''};
+  const b=$('warnBox');
+  b.innerHTML=mk(miss,'DOJ missing, vouchers skipped. Fill it in <a href="students.html" class="underline font-semibold">Students Directory</a>')+mk(nolf,'Status inactive but left_date missing, skipped');
+  b.classList.toggle('hidden',!b.innerHTML);
+}
+function highestVoucherNo(){let mx=0;allFeesCache.forEach(f=>{const n=vNum(f.voucher_id);if(n&&n>mx)mx=n});return mx}
+function vidMode(){return document.querySelector('input[name=vidMode]:checked').value}
+function vidModeChange(){$('manualBox').classList.toggle('hidden',vidMode()!=='manual');updateVidHint()}
+function parseStart(){const d=$('vidStart').value.replace(/\D/g,'');return d?parseInt(d,10):null}
+function updateVidHint(){
+  const mx=highestVoucherNo(), s=parseStart();
+  $('vidHint').innerText=(mx?`Highest existing: V-${mx}. `:'No existing numbered vouchers. ')+(s?`Will start from V-${s} (used numbers are skipped).`:'');
+}
+function makeVidGenerator(used){
+  if(vidMode()==='manual'){
+    let cur=parseStart(); if(!cur) return null;
+    return ()=>{while(used.has(cur))cur++;used.add(cur);return 'V-'+(cur++)};
+  }
+  return ()=>{let n;do{n=Math.floor(100000+Math.random()*900000)}while(used.has(n));used.add(n);return 'V-'+n};
+}
+
+/* ---------- Load ---------- */
+async function fetchAll(t) { const r = await sbFetchAll(t, 'select=*'); return await r.json(); }
+async function initFeePage(){
+  $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
+  if(!$('voucherPeriod').options.length){
+    $('voucherPeriod').innerHTML=MONTHS.map(m=>`<option>${m}</option>`).join('')+`<option value="ALL_YEAR">🚀 Generate all (Jan to Dec 2026)</option>`;
+    const mo=MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+    $('fromMonth').innerHTML=mo;$('toMonth').innerHTML=mo;resetRange(true);
+  }
+  showLoading("Loading data...");
+  try{
+    const g=fetchAll;
+    const [students,increments,accounts,fees]=await Promise.all(['students','increments','accounts','fees'].map(g));
+    if(Array.isArray(students)){allStudentsCache=students;populateClassDropdown(students)}
+    incrementsCacheMap={};
+    if(Array.isArray(increments))increments.forEach(i=>{const a=(i.admis_no||'').trim().toLowerCase();if(a)incrementsCacheMap[a]=i});
+    accountsDataMap={};accountsRaw=Array.isArray(accounts)?accounts:[];
+    if(Array.isArray(accounts))accounts.forEach(r=>{
+      const vId=(r.voucher_id||'').trim().split('-').slice(0,2).join('-');if(!vId)return;
+      const o=accountsDataMap[vId]??={totalPaid:0,dates:new Set(),transactions:[]};
+      o.totalPaid+=parseFloat(r.amount_in)||0;if(r.date)o.dates.add(String(r.date).trim());o.transactions.push(r);
+    });
+    if(Array.isArray(fees)){
+      allFeesCache=fees.map(row=>{
+        const vId=(row.voucher_id||'').trim(),payable=parseFloat(row.payable)||0;
+        const acc=accountsDataMap[vId]||{totalPaid:0,dates:new Set()};
+        const paid=acc.totalPaid,disc=parseFloat(row.discount)||0,net=payable-disc;
+        return{...row,discount:disc,net,totalPaid:paid,balance:net-paid,
+          status:(paid>=net&&(net>0||disc>0))?'Paid':(paid>0?'Partial':'Unpaid'),
+          paymentDates:acc.dates.size?[...acc.dates].join(', '):'-'};
+      });
+      populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
+    }else{allFeesCache=[];$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No fee vouchers found.</td></tr>`}
+  }catch(e){console.error(e);$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`}
+  hideLoading();
+}
+function populateClassDropdown(data){
+  const set=new Set();data.forEach(r=>{if(r.class)set.add(r.class.trim())});
+  $('voucherClassSelect').innerHTML=`<option value="ALL">All classes</option>`+[...set].sort().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+function populatePeriodDropdown(data){
+  const set=new Set();data.forEach(r=>{if(r.period)set.add(r.period.trim())});
+  const cur=$('filterPeriod').value;
+  $('filterPeriod').innerHTML=`<option value="ALL">All periods</option>`+[...set].sort((a,b)=>(monthOrder[a]||99)-(monthOrder[b]||99)).map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  if(set.has(cur))$('filterPeriod').value=cur;
+}
+function filterVouchers(){
+  const p=$('filterPeriod').value,s=$('filterStatus').value,q=$('searchInput').value.trim().toLowerCase();
+  let t=allFeesCache;
+  if(p!=='ALL')t=t.filter(r=>(r.period||'').trim()===p);
+  if(s!=='ALL')t=t.filter(r=>r.status===s);
+  const mf=+$('fromMonth').value||1,mt=+$('toMonth').value||12;
+  const inR=r=>{const m=monthOrder[(r.period||'').trim()];return!m||(m>=mf&&m<=mt)};
+  if(!q)t=t.filter(inR);
+  t.forEach(r=>{r._out=!inR(r)});
+  if(q)t=t.filter(r=>(r.voucher_id||'').toLowerCase().includes(q)||(r.student_name||'').toLowerCase().includes(q)||(r.admis_no||'').toLowerCase().includes(q));
+  filtered=t;renderFeesTable(t);renderStudentSummary();
+}
+let viewMode='vouchers';
+function toggleView(){
+  viewMode=viewMode==='vouchers'?'summary':'vouchers';
+  $('voucherView').classList.toggle('hidden',viewMode==='summary');
+  $('summaryView').classList.toggle('hidden',viewMode!=='summary');
+  $('viewBtn').innerText=viewMode==='summary'?'🧾 Voucher list':'👥 Student summary';
+  renderStudentSummary();
+}
+function renderStudentSummary(){
+  const mt=+$('toMonth').value||12,q=$('searchInput').value.trim().toLowerCase();
+  const lbl=($('toMonth').selectedOptions[0]||{}).text||'Month';
+  const by={};
+  allFeesCache.forEach(r=>{
+    const m=monthOrder[(r.period||'').trim()];if(!m||m>mt)return;
+    const k=normAdm(r.admis_no)||String(r.student_name||'').toLowerCase();
+    const o=by[k]??={adm:r.admis_no,name:r.student_name,cls:r.class,prev:0,pay:0,paid:0,bal:0};
+    const net=r.net??(parseFloat(r.payable)||0),paid=parseFloat(r.totalPaid)||0;
+    o.bal+=net-paid;
+    if(m<mt)o.prev+=net-paid;else{o.pay+=net;o.paid+=paid}
+  });
+  let list=Object.values(by).filter(o=>!q||(o.name||'').toLowerCase().includes(q)||String(o.adm||'').toLowerCase().includes(q)).sort((a,b)=>b.bal-a.bal);
+  const T={prev:0,pay:0,paid:0,bal:0};
+  $('sumHead').innerHTML=`<tr><th>Adm No</th><th>Student</th><th>Class</th><th>Previous balance</th><th>${esc(lbl)} payable</th><th>${esc(lbl)} paid</th><th>Total balance</th></tr>`;
+  $('sumBody').innerHTML=list.map(o=>{
+    T.prev+=o.prev;T.pay+=o.pay;T.paid+=o.paid;T.bal+=o.bal;
+    return`<tr><td data-l="Adm No" class="font-mono">${esc(o.adm)||'-'}</td>
+    <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(o.name||'')}'))" class="text-indigo-600 underline">${esc(o.name)||'-'}</a></td>
+    <td data-l="Class">${esc(o.cls)||'-'}</td>
+    <td data-l="Previous balance" class="${o.prev>0?'text-rose-600 font-bold':''}">PKR ${fmt(o.prev)}</td>
+    <td data-l="${esc(lbl)} payable">PKR ${fmt(o.pay)}</td>
+    <td data-l="${esc(lbl)} paid" class="text-emerald-600 font-bold">PKR ${fmt(o.paid)}</td>
+    <td data-l="Total balance" class="font-extrabold ${o.bal>0?'text-rose-600':o.bal<0?'text-indigo-600':'text-slate-500'}">${o.bal<0?'Adv '+fmt(-o.bal):'PKR '+fmt(o.bal)}</td></tr>`}).join('')
+    +(list.length?`<tr class="bg-slate-100 font-bold"><td colspan="3" class="nl text-right">Total (${list.length} students, up to ${esc(lbl)}):</td><td data-l="Previous">PKR ${fmt(T.prev)}</td><td data-l="Payable">PKR ${fmt(T.pay)}</td><td data-l="Paid">PKR ${fmt(T.paid)}</td><td data-l="Balance" class="text-rose-600">PKR ${fmt(T.bal)}</td></tr>`:`<tr><td colspan="7" class="nl p-6 text-center text-slate-400">No students found.</td></tr>`);
+}
+function resetRange(silent){
+  const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
+  $('fromMonth').value=1;$('toMonth').value=ci;if(!silent)filterVouchers();
+}
+const isLocked=id=>{const a=accountsDataMap[(id||'').trim()];return!!(a&&a.transactions.length)};
+function toggleSelectAll(m){document.querySelectorAll('.row-checkbox').forEach(cb=>{if(!cb.disabled)cb.checked=m.checked})}
+
+function groupArrears(data){
+  const key=r=>`${(r.admis_no||r.student_name||'').trim().toLowerCase()}__${(r.period||'').trim()}`;
+  const am={};data.forEach(r=>{if(isArr(r))(am[key(r)]??=[]).push(r)});
+  const out=[],placed=new Set();
+  data.forEach(r=>{if(isArr(r))return;out.push(r);const k=key(r);if(am[k]&&!placed.has(k)){out.push(...am[k]);placed.add(k)}});
+  data.forEach(r=>{if(isArr(r)&&!placed.has(key(r)))out.push(r)});
+  return out;
+}
+
+function renderFeesTable(data){
+  const tb=$('feesTableBody'),tf=$('feesTableFooter');$('selectAllCheckbox').checked=false;
+  if(!data.length){tb.innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
+    ['stCount','stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');return}
+  let sp=0,sd=0,sb=0,sr=0;const rows=groupArrears(data);let html='';
+  rows.forEach(r=>{
+    if(!r._out){sp+=r.net??(parseFloat(r.payable)||0);sd+=parseFloat(r.totalPaid)||0;sb+=parseFloat(r.balance)||0}
+    const a=isArr(r),vId=(r.voucher_id||'').trim(),lock=isLocked(vId);
+    const badge=r.status==='Paid'?'bg-emerald-50 text-emerald-700':r.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
+    const bc=r.balance<0?'text-indigo-600 font-extrabold':r.balance>0?'text-rose-600 font-bold':'text-slate-500';
+    const bt=r.balance<0?`Adv ${fmt(-r.balance)}`:`PKR ${fmt(r.balance)}`;
+    html+=`<tr class="${a?'bg-rose-50/60':'hover:bg-slate-50'} ${r._out?'opacity-50':''}">
+    <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(vId)}" ${lock?'disabled':''}></td>
+    <td data-l="Sr">${a?'<span class="text-rose-400">↳</span>':++sr}</td>
+    <td data-l="Voucher" class="font-mono text-indigo-900">${esc(vId)||'-'}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</td>
+    <td data-l="Admis No" class="font-mono">${esc(r.admis_no)||'-'}</td>
+    <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(r.student_name||'')}'))" class="text-indigo-600 underline">${esc(r.student_name)||'-'}</a></td>
+    <td data-l="Siblings">${esc(r[FEES_SIBLINGS_COL])||'-'}</td>
+    <td data-l="Type" class="${a?'text-rose-700 font-bold':''}">${a?'Arrears 2025':esc(r.type||'Tuition Fee')}</td>
+    <td data-l="Period" class="text-indigo-600 font-medium">${esc(r.period)||'-'}</td>
+    <td data-l="Payable" class="font-bold">PKR ${fmt(r.payable)}${r.discount>0?`<div class="text-[10px] text-indigo-600 font-semibold" title="${esc(r.remarks)}">Discount -${fmt(r.discount)}</div>`:''}</td>
+    <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(r.totalPaid)}</td>
+    <td data-l="Balance" class="${bc}">${bt}</td>
+    <td data-l="Class">${esc(r.class)||'-'}</td>
+    <td data-l="Status"><span class="badge ${badge}">${r.status}</span></td>
+    <td data-l="Date(s)" class="font-mono text-indigo-700">${esc(r.paymentDates)}</td>
+    <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(vId)}')" class="btn b-ok flex-1" style="padding:.35rem .6rem">💳 Pay</button><button onclick="openDiscount('${esc(vId)}')" class="btn b-gh flex-1" style="padding:.35rem .6rem">% Disc</button></div></td></tr>`;
+  });
+  tb.innerHTML=html;
+  $('stCount').innerText=rows.filter(r=>!r._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
+  tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}${rows.some(r=>r._out)?' <span class="font-normal text-slate-400">(grey rows are outside the selected months, not counted)</span>':''}</div>
+  <div class="flex gap-2"><button onclick="openBulkPayModal()" class="btn b-pri flex-1 md:flex-none">⚡ Bulk pay</button>
+  <button onclick="sendWhatsAppReminders()" class="btn b-ok flex-1 md:flex-none">WhatsApp reminders</button></div>`;
+}
+
+/* ---------- Bulk pay ---------- */
+function openBulkPayModal(){
+  if(!filtered.length){showAlert("No vouchers in the current filter.");return}
+  let t=0;filtered.forEach(r=>{const b=parseFloat(r.balance)||0;if(b>0&&!r._out)t+=b});
+  $('bulkTotalDues').value=`PKR ${t}`;$('bulkReceivedAmount').value=t>0?t:'';
+  $('bulkPayModal').classList.add('open');
+}
+const closeBulkPayModal=()=>$('bulkPayModal').classList.remove('open');
+
+function sendWhatsAppReminders(){
+  if(!filtered.length){showAlert("No students in the current filter.");return}
+  const map={};
+  filtered.forEach(r=>{const n=(r.student_name||'').trim(),b=parseFloat(r.balance)||0;
+    if(n&&b>0&&!r._out){(map[n]??={admis_no:(r.admis_no||'').trim(),total:0}).total+=b}});
+  const names=Object.keys(map);
+  if(!names.length){showAlert("No pending dues in the current filter.");return}
+  showConfirm(`Found ${names.length} student(s) with pending dues. Prepare a WhatsApp reminder for the first one?`,()=>{
+    const n=names[0],info=map[n];
+    const st=allStudentsCache.find(s=>(s.student_name||'').trim().toLowerCase()===n.toLowerCase()||(s.admis_no||'').trim().toLowerCase()===info.admis_no.toLowerCase());
+    const mob=String(st?(st.phone||st.mobile||st.whatsapp||''):'').replace(/\D/g,'');
+    const msg=`Assalam-o-Alaikum! Dear Parent, this is a fee reminder from Concept School (Shibra Campus) for student *${n}*. Your total pending dues amount to *PKR ${info.total}*. Kindly clear the dues at your earliest convenience. Thank you!`;
+    window.open(`https://wa.me/${mob}?text=${encodeURIComponent(msg)}`,'_blank');
+  });
+}
+
+async function postAccounts(payload,okMsg,loadMsg){
+  showLoading(loadMsg);
+  try{
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/accounts`,{method:'POST',headers:HJ,body:JSON.stringify(payload)});
+    hideLoading();
+    if(res.ok){showAlert(okMsg);return true}
+    showAlert("Failed to save: "+await res.text());
+  }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
+  return false;
+}
+
+function submitBulkFifoPayment(){
+  const recv=parseFloat($('bulkReceivedAmount').value)||0,date=$('bulkPayDate').value;
+  const remarks=$('bulkPayRemarks').value.trim()||"Bulk payment via FIFO";
+  if(recv<=0){showAlert("Please enter a valid amount greater than 0.");return}
+  showConfirm(`PKR ${recv} will be distributed via FIFO. Any extra is saved as advance on the latest voucher. Proceed?`,async()=>{
+    closeBulkPayModal();
+    const ord=(a,b,dir)=>{const m1=monthOrder[(a.period||'').trim()]||(dir>0?99:0),m2=monthOrder[(b.period||'').trim()]||(dir>0?99:0);return m1-m2};
+    const sorted=[...filtered].sort((a,b)=>ord(a,b,1)||(isArr(b)-isArr(a)));
+    const newest=[...filtered].sort((a,b)=>ord(b,a,-1)||(isArr(a)-isArr(b)))[0];
+    const label=v=>`${v.type||'Tuition Fee'} (${v.period||''}) - ${v.student_name||''}`;
+    const mk=(v,sfx,amt,rm)=>({voucher_id:`${(v.voucher_id||'').trim()}-${sfx}`,from_account:label(v),to_account:'cash',description:rm,amount_in:amt,amount_out:0,date,remarks:rm});
+    const nonce=Date.now(),pl=[];let rem=recv;
+    for(const v of sorted){
+      if(rem<=0)break;const bal=parseFloat(v.balance)||0;let amt=0;
+      if(bal>0)amt=Math.min(rem,bal);
+      else if(v.voucher_id===newest.voucher_id)amt=rem;
+      if(amt>0){pl.push(mk(v,`${nonce}-${Math.floor(Math.random()*1000)}`,amt,remarks));rem-=amt}
+    }
+    if(rem>0&&newest)pl.push(mk(newest,`${nonce}-adv`,rem,remarks+" (Advance)"));
+    if(!pl.length){showAlert("No valid voucher found to apply payment.");return}
+    if(await postAccounts(pl,"Bulk payments recorded successfully!","Applying payments..."))initFeePage();
+  });
+}
+
+/* ---------- Delete ---------- */
+function deleteSelectedVouchers(){
+  const sel=[...document.querySelectorAll('.row-checkbox:checked')].map(c=>c.dataset.voucher).filter(Boolean);
+  if(!sel.length){showAlert("Please select at least one voucher to delete.");return}
+  const locked=[],ids=[];
+  sel.forEach(id=>{if(isLocked(id)){const r=allFeesCache.find(x=>(x.voucher_id||'').trim()===id)||{};locked.push(`${r.student_name||id} (${r.type||''} ${r.period||''}) - PKR ${r.totalPaid||0} paid`)}else ids.push(id)});
+  if(!ids.length){showAlert("These vouchers have payments recorded in Accounts. Delete the payment from Accounts & Daybook first.\n\n"+locked.slice(0,8).join("\n")+(locked.length>8?`\n...and ${locked.length-8} more`:''));return}
+  let msg=`Delete ${ids.length} selected voucher(s)?`;
+  if(locked.length)msg+=`\n\n${locked.length} voucher(s) will be skipped (payment recorded in Accounts).`;
+  showConfirm(msg,async()=>{
+    showLoading("Deleting vouchers...");
+    try{
+      const res=await fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=in.(${ids.map(i=>`"${i}"`).join(',')})`,{method:'DELETE',headers:{...H,Prefer:"return=minimal"}});
+      hideLoading();
+      if(res.ok){showAlert(locked.length?`${ids.length} deleted. ${locked.length} skipped (payment in Accounts).`:"Selected vouchers deleted successfully!");initFeePage()}
+      else showAlert("Failed to delete: "+await res.text());
+    }catch(e){hideLoading();console.error(e);showAlert("Failed to delete due to a connection error.")}
+  });
+}
+
+/* ---------- Ledger ---------- */
+function openStudentLedger(name){
+  const nm=(name||'').trim().toLowerCase();
+  const list=allFeesCache.filter(r=>(r.student_name||'').trim().toLowerCase()===nm);
+  list.sort((a,b)=>((monthOrder[(a.period||'').trim()]||99)-(monthOrder[(b.period||'').trim()]||99))||(isArr(b)-isArr(a)));
+  let tp=0,td=0,tb=0,cls='',html='';
+  list.forEach(v=>{
+    tp+=v.net??(parseFloat(v.payable)||0);td+=parseFloat(v.totalPaid)||0;tb+=parseFloat(v.balance)||0;if(!cls)cls=v.class||'-';
+    const pay=v.net??(parseFloat(v.payable)||0);let run=pay;
+    const note=(isArr(v)?' <span class="text-rose-600 font-semibold">(Previous year arrears 2025)</span>':'')+(v.discount>0?` <span class="text-indigo-600 font-semibold">(Discount PKR ${fmt(v.discount)}: ${esc(v.remarks)})</span>`:'');
+    const txns=[...(accountsDataMap[(v.voucher_id||'').trim()]?.transactions||[])].sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const cells=(d,desc,paid,bal)=>`<tr class="border-b"><td class="p-2 font-mono">${esc(d)}</td><td class="p-2 font-mono text-indigo-900">${esc(v.voucher_id)||'-'}</td><td class="p-2 text-indigo-600">${esc(v.period)||'-'}</td><td class="p-2 text-slate-600">${desc}${note}</td><td class="p-2 font-bold">PKR ${fmt(pay)}</td><td class="p-2 font-bold text-emerald-600">PKR ${fmt(paid)}</td><td class="p-2 font-bold">PKR ${fmt(bal)}</td></tr>`;
+    if(txns.length)txns.forEach(t=>{const a=parseFloat(t.amount_in)||0;run-=a;html+=cells(t.date||'-',esc(t.description||t.remarks||'-'),a,run)});
+    else html+=cells('-','Unpaid voucher',0,run);
+  });
+  $('ledgerTableBody').innerHTML=html;
+  const ref=list[0]||{};
+  $('ledgerStudentInfo').innerText=`Student: ${name} | Class: ${cls}${ref.admis_no?' | Admis No: '+ref.admis_no:''}${ref[FEES_SIBLINGS_COL]?' | Siblings: '+ref[FEES_SIBLINGS_COL]:''}`;
+  $('ledgerTotalPayable').innerText=`PKR ${fmt(tp)}`;$('ledgerTotalPaid').innerText=`PKR ${fmt(td)}`;$('ledgerTotalBalance').innerText=`PKR ${fmt(tb)}`;
+  $('ledgerModal').classList.add('open');
+}
+const closeLedgerModal=()=>$('ledgerModal').classList.remove('open');
+
+/* ---------- Single payment ---------- */
+function openPayModal(vId){
+  const row=allFeesCache.find(r=>(r.voucher_id||'').trim()===vId);if(!row)return;
+  $('payVoucherId').value=row.voucher_id||'';$('payStudentName').value=row.student_name||'';
+  $('payFromAccount').value=`${row.type||'Tuition Fee'} (${row.period||''}) - ${row.student_name||''}`;
+  const pay=row.net??(parseFloat(row.payable)||0),rem=pay-(parseFloat(row.totalPaid)||0);
+  $('payPayable').value=pay;$('payAmountIn').value=rem>0?rem:pay;$('payRemarks').value=row.remarks||'';
+  $('payModal').classList.add('open');
+}
+const closePayModal=()=>$('payModal').classList.remove('open');
+async function submitPayment(e){
+  e.preventDefault();const rm=$('payRemarks').value.trim();
+  const ok=await postAccounts({voucher_id:$('payVoucherId').value.trim()+'-'+Date.now(),from_account:$('payFromAccount').value,to_account:$('payToAccount').value,description:rm,amount_in:parseFloat($('payAmountIn').value)||0,amount_out:0,date:$('payDate').value,remarks:rm},"Payment receipt saved successfully!","Saving receipt...");
+  if(ok){closePayModal();initFeePage()}
+}
+
+/* ---------- Generate ---------- */
+function generateVouchers(withUpdate){
+  if(!allStudentsCache.length){showAlert("No students found in students directory!");return}
+  if(withUpdate===true&&!selStu.size){showAlert("Select at least one student first (choose a class, then tick students).");return}
+  const sel=$('voucherPeriod').value,cls=$('voucherClassSelect').value;
+  const periods=sel==='ALL_YEAR'?MONTHS:[sel];
+  let students=cls==='ALL'?allStudentsCache:allStudentsCache.filter(s=>(s.class||'').trim()===cls);
+  if(cls!=='ALL'&&selStu.size)students=students.filter(s=>selStu.has(skey(s)));
+  if(!students.length){showAlert("No students found for the selected class!");return}
+
+  const used=new Set();allFeesCache.forEach(f=>{const n=vNum(f.voucher_id);if(n)used.add(n)});
+  if(vidMode()==='manual'&&!parseStart()){showAlert("Please enter a starting voucher number, e.g. V-586545.");return}
+  const nextId=makeVidGenerator(used);
+
+  const keys=new Set();
+  allFeesCache.forEach(f=>{const a=(f.admis_no||'').trim().toLowerCase(),n=(f.student_name||'').trim().toLowerCase(),p=(f.period||'').trim(),t=(f.type||'').trim().toLowerCase();
+    if(a)keys.add(`${a}_${p}_${t}`);if(n)keys.add(`${n}_${p}_${t}`)});
+  const out=[];
+  const add=(st,adm,sn,period,type,payable,remarks,arrVal)=>{
+    const k1=`${adm}_${period}_${type}`,k2=`${sn}_${period}_${type}`;
+    if(keys.has(k1)||keys.has(k2))return;
+    out.push({sr_no:st.sr_no||'',voucher_id:nextId(),admis_no:st.admis_no||'',student_name:st.student_name||'',type,period,payable,class:st.class||'',status:'Unpaid',date:today(),remarks,[FEES_SIBLINGS_COL]:getStudentSiblings(st),[FEES_ARREARS_COL]:arrVal});
+    keys.add(k1);keys.add(k2);
+  };
+
+  const miss={},nolf={};
+  periods.forEach(period=>{
+    const pv=2026*12+(monthOrder[period]||0);
+    students.forEach(st=>{
+      const adm=(st.admis_no||st.sr_no||'').trim().toLowerCase(),sn=(st.student_name||'').trim().toLowerCase();
+      const key=st.admis_no||st.student_name,sv=startVal(st),stt=(st.status||'').trim().toLowerCase();
+      if(sv===null){miss[key]=st;return}
+      let ev=null;
+      if(stt!==''&&stt!=='active'){
+        const lm=String(st.left_date||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if(!lm){nolf[key]=st;return}
+        ev=(+lm[1])*12+(+lm[2])-(+lm[3]>15?0:1);
+      }
+      if(pv<sv||(ev!==null&&pv>ev))return;
+      const inc=incrementsCacheMap[adm],cm=monthOrder[period]||0,em=inc?(monthOrder[(inc.effective_period||'').trim()]||0):0;
+      let tp=parseFloat(st.monthly_tution_fee)||0,rm='';
+      if(inc){
+        if(em>0&&cm>=em){if(parseFloat(inc.new_fee)>0)tp=parseFloat(inc.new_fee)}
+        else tp=parseFloat(inc.old_fee)||parseFloat(st.monthly_tution_fee)||0;
+        if(inc.remarks)rm=inc.remarks;
+      }
+      add(st,adm,sn,period,'tuition fee',tp,rm,null);
+      if(period===ARREARS_PERIOD){const a=parseFloat(getStudentArrears(st))||0;if(a>0)add(st,adm,sn,period,'arrears',a,'Previous year arrears (2025)',String(a))}
+      if(inc&&parseFloat(inc.annual_fund)>0&&(inc.fee_type||'').trim().toLowerCase()==='annual fund'&&em>0&&cm===em)
+        add(st,adm,sn,period,'annual fund',parseFloat(inc.annual_fund),inc.remarks||'',null);
+    });
+  });
+  showWarn(miss,nolf);
+
+  const upd=[],blocked=[];
+  if(withUpdate===true)periods.forEach(period=>students.forEach(st=>{
+    if(eligibility(st,period)!=='ok')return;
+    const v=stuVouchers(st,period)[0];if(!v)return;
+    const exp=expectedTuition(st,period),old=parseFloat(v.payable)||0;
+    if(!(exp>0)||exp===old)return;
+    if((parseFloat(v.totalPaid)||0)>0)blocked.push(`${st.student_name} (${period}): PKR ${fmt(v.totalPaid)} already paid`);
+    else upd.push({v,old,exp});
+  }));
+  const blockMsg=blocked.length?`\n\nERROR - paid vouchers not updated (delete the payment from Accounts first, then update):\n`+blocked.slice(0,8).join('\n')+(blocked.length>8?`\n...and ${blocked.length-8} more`:''):'';
+  if(!out.length&&!upd.length){showAlert((blocked.length?"Nothing could be updated.":"Nothing to create or update: vouchers already exist and match the current fees.")+blockMsg);return}
+  showConfirm(`${out.length} new voucher(s) will be created`+(withUpdate===true?` and ${upd.length} unpaid voucher(s) updated`:'')+(out.length?`.\nNumbers: ${out[0].voucher_id} to ${out[out.length-1].voucher_id}`:'.')+blockMsg+`\n\nProceed?`,async()=>{
+    showLoading("Saving vouchers...");
+    try{
+      if(out.length){const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(out)});if(!res.ok){hideLoading();showAlert("Failed to generate: "+await res.text());return}}
+      for(let k=0;k<upd.length;k+=10)await Promise.all(upd.slice(k,k+10).map(it=>fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent((it.v.voucher_id||'').trim())}`,{method:'PATCH',headers:HJ,body:JSON.stringify({payable:it.exp,original_payable:it.v.original_payable??it.old,remarks:`${it.v.remarks?it.v.remarks+' | ':''}Updated: ${it.old} to ${it.exp}`})}).then(r=>{if(!r.ok)throw new Error('update failed')})));
+      hideLoading();selStu.clear();toggleGen();showAlert("Done: "+out.length+" created"+(upd.length?`, ${upd.length} updated`:'')+".");initFeePage();
+    }catch(e){hideLoading();console.error(e);showAlert("Error while saving: "+e.message)}
+  });
+}
+
+const closeModal=id=>$(id).classList.remove('open');
+const normAdm=s=>String(s??'').trim().toLowerCase().replace(/^0+/,'');
+const feeSort=(x,y)=>((monthOrder[(x.period||'').trim()]||99)-(monthOrder[(y.period||'').trim()]||99))||(isArr(y)-isArr(x));
+
+/* ---------- Excel / CSV import ---------- */
+function openImport(){$('importFile').value='';$('importPreview').innerHTML='';$('importConfirm').classList.add('hidden');importPlan=null;$('importModal').classList.add('open')}
+function toISO(v,fix){
+  let iso=null,m;
+  if(v instanceof Date&&!isNaN(v))iso=new Date(v.getTime()+12*36e5).toISOString().slice(0,10);
+  else if(typeof v==='number'&&v>20000)iso=new Date(Math.round((v-25569)*864e5)+12*36e5).toISOString().slice(0,10);
+  else{const t=String(v??'').trim();
+    if(m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))iso=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    else if(m=t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/))iso=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
+  return iso&&fix?'2026'+iso.slice(4):iso;
+}
+async function readImport(){
+  const f=$('importFile').files[0];if(!f){showAlert("Choose an Excel or CSV file first.");return}
+  if(typeof XLSX==='undefined'){showAlert("Excel reader could not load. Check your internet connection.");return}
+  showLoading("Reading file...");
+  try{
+    const wb=/\.csv$/i.test(f.name)?XLSX.read(await f.text(),{type:'string',raw:true}):XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
+    const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+    hideLoading();buildImportPlan(raw);
+  }catch(e){hideLoading();console.error(e);showAlert("Could not read this file.")}
+}
+function buildImportPlan(raw){
+  const fix=$('importFixYear').checked;
+  const g=(r,k)=>{const key=Object.keys(r).find(x=>x.trim().toLowerCase()===k);return key?r[key]:''};
+  const pays=[];let bad=0;
+  raw.forEach((r,i)=>{
+    const adm=String(g(r,'voucher_id')).trim(),amt=parseFloat(String(g(r,'amount_in')).replace(/,/g,''))||0,date=toISO(g(r,'date'),fix);
+    if(!adm||amt<=0||!date){if(adm||amt)bad++;return}
+    pays.push({adm,key:normAdm(adm),name:String(g(r,'from_account')).trim(),to:String(g(r,'to_account')).trim().toLowerCase()||'cash',amt,date,cls:String(g(r,'remarks')).trim()});
+  });
+  const ex={};
+  accountsRaw.forEach(a=>{const m=(a.description||'').match(/^Imported from Excel \(Adm (.+)\)$/);if(m){const k=normAdm(m[1])+'|'+String(a.date).slice(0,10);ex[k]=(ex[k]||0)+(parseFloat(a.amount_in)||0)}});
+  const grp={};pays.forEach(p=>{const k=p.key+'|'+p.date;grp[k]=(grp[k]||0)+p.amt});
+  const byStu={};allFeesCache.forEach(v=>(byStu[normAdm(v.admis_no)]??=[]).push(v));
+  Object.values(byStu).forEach(a=>a.sort(feeSort));
+  const rem={};allFeesCache.forEach(v=>rem[v.voucher_id]=Math.max(parseFloat(v.balance)||0,0));
+  const rows=[],entries=[],nonce=Date.now();let n=0;
+  pays.sort((a,b)=>a.date.localeCompare(b.date)).forEach(p=>{
+    const row={p,alloc:[],flags:[],status:'OK'};rows.push(row);
+    const vs=byStu[p.key];
+    if(!vs){const st=allStudentsCache.find(x=>normAdm(x.admis_no)===p.key);row.status=st&&!String(st.doj||'').trim()?'DOJ missing':'Not found / no vouchers';return}
+    if((ex[p.key+'|'+p.date]||0)>=grp[p.key+'|'+p.date]-0.01){row.status='Duplicate (already imported)';return}
+    if(p.name&&p.name.toLowerCase()!==(vs[0].student_name||'').trim().toLowerCase())row.flags.push('Name differs: '+(vs[0].student_name||''));
+    const push=(v,a)=>{entries.push({voucher_id:`${(v.voucher_id||'').trim()}-imp-${nonce}-${++n}`,from_account:`${v.type||'Tuition Fee'} (${v.period||''}) - ${v.student_name||''}`,to_account:p.to,description:`Imported from Excel (Adm ${p.adm})`,amount_in:a,amount_out:0,date:p.date,remarks:p.cls});row.alloc.push(`${v.period} ${fmt(a)}`)};
+    const per=`${MONTHS[+p.date.slice(5,7)-1].split(' ')[0]} ${p.date.slice(0,4)}`;
+    const v=vs.find(x=>(x.period||'').trim()===per&&isTuition(x));
+    if(!v){row.status=`No ${per} tuition voucher`;return}
+    row.per=per;push(v,p.amt);
+    const over=p.amt-(rem[v.voucher_id]||0);rem[v.voucher_id]=Math.max((rem[v.voucher_id]||0)-p.amt,0);
+    if(over>0.01)row.flags.push(`Exceeds ${per} balance by ${fmt(over)} (shown as advance)`);
+  });
+  const ms={};rows.forEach(r=>{if(r.status==='OK'&&r.per){const o=ms[r.per]??={n:0,s:0};o.n++;o.s+=r.p.amt}});
+  const monthLine='By month: '+(Object.entries(ms).sort((x,y)=>(monthOrder[x[0]]||99)-(monthOrder[y[0]]||99)).map(([k,o])=>`${k}: ${o.n} payments, PKR ${fmt(o.s)}`).join(' | ')||'-');
+  importPlan={entries};
+  const cnt={};rows.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
+  const bg=st=>st==='OK'?'text-emerald-700':st.startsWith('Dup')?'text-amber-700':'text-rose-600';
+  $('importPreview').innerHTML=`<div class="rounded-lg bg-slate-50 border p-2 mb-2 font-semibold">${rows.length} payments read | ${Object.entries(cnt).map(([k,v])=>`${k}: ${v}`).join(' | ')}${bad?` | ${bad} invalid rows ignored`:''} | ${entries.length} entries will be saved<div class="font-normal text-slate-600 mt-1">${monthLine}</div></div>
+  <div class="overflow-x-auto max-h-72 border rounded-lg"><table class="w-full text-left"><thead class="bg-slate-100 sticky top-0"><tr><th class="p-1.5">Adm</th><th class="p-1.5">Name</th><th class="p-1.5">Date</th><th class="p-1.5">Amount</th><th class="p-1.5">Result</th><th class="p-1.5">Allocation / notes</th></tr></thead><tbody>${rows.slice(0,400).map(r=>`<tr class="border-t"><td class="p-1.5 font-mono">${esc(r.p.adm)}</td><td class="p-1.5">${esc(r.p.name)}</td><td class="p-1.5 font-mono">${r.p.date}</td><td class="p-1.5 font-bold">${fmt(r.p.amt)}</td><td class="p-1.5 font-semibold ${bg(r.status)}">${r.status}</td><td class="p-1.5">${esc(r.alloc.join(', '))}${r.flags.length?` <span class="text-amber-700">${esc(r.flags.join('; '))}</span>`:''}</td></tr>`).join('')}</tbody></table></div>${rows.length>400?'<p class="mt-1 text-slate-500">Showing the first 400 rows; all will be processed.</p>':''}`;
+  $('importConfirm').classList.toggle('hidden',!entries.length);
+}
+function confirmImport(){
+  if(!importPlan||!importPlan.entries.length)return;
+  showConfirm(`Save ${importPlan.entries.length} payment entries to Accounts?`,async()=>{
+    showLoading("Importing payments...");
+    try{
+      for(let i=0;i<importPlan.entries.length;i+=500){
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/accounts`,{method:'POST',headers:HJ,body:JSON.stringify(importPlan.entries.slice(i,i+500))});
+        if(!res.ok){hideLoading();showAlert("Import stopped: "+await res.text()+"\nChunks saved before this error stay saved. Re-upload the file; duplicates are skipped.");return}
+      }
+      hideLoading();closeModal('importModal');showAlert("Paid fees imported successfully!");initFeePage();
+    }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
+  });
+}
+
+/* ---------- Sync ---------- */
+function eligibility(st,period){
+  const sv=startVal(st);if(sv===null)return'nodoj';
+  const pv=2026*12+(monthOrder[period]||0),stt=(st.status||'').trim().toLowerCase();
+  if(pv<sv)return'out';
+  if(stt!==''&&stt!=='active'){
+    const lm=String(st.left_date||'').match(/^(\d{4})-(\d{2})-(\d{2})/);if(!lm)return'nolf';
+    if(pv>(+lm[1])*12+(+lm[2])-(+lm[3]>15?0:1))return'out';
+  }
+  return'ok';
+}
+function expectedTuition(st,period){
+  const inc=incrementsCacheMap[(st.admis_no||'').trim().toLowerCase()],cm=monthOrder[period]||0;
+  let t=parseFloat(st.monthly_tution_fee)||0;
+  if(inc){const em=monthOrder[(inc.effective_period||'').trim()]||0;
+    if(em>0&&cm>=em){if(parseFloat(inc.new_fee)>0)t=parseFloat(inc.new_fee)}else t=parseFloat(inc.old_fee)||t}
+  return t;
+}
+function openSync(){
+  syncItems=[];
+  filtered.forEach(v=>{
+    if(isArr(v))return;
+    const st=allStudentsCache.find(x=>normAdm(x.admis_no)===normAdm(v.admis_no));if(!st)return;
+    const period=(v.period||'').trim(),el=eligibility(st,period),paid=parseFloat(v.totalPaid)||0;
+    if(el==='out')syncItems.push({v,kind:'del',paid});
+    else if(el==='ok'&&(v.type||'').trim().toLowerCase()==='tuition fee'){
+      const exp=expectedTuition(st,period),old=parseFloat(v.payable)||0;
+      if(exp>0&&exp!==old)syncItems.push({v,kind:'upd',old,exp,paid});
+    }
+  });
+  if(!syncItems.length){showAlert("Everything in the current filter already matches the increment, DOJ and left-date rules.");return}
+  $('syncList').innerHTML=`<table class="w-full text-left"><thead class="bg-slate-100"><tr><th class="p-1.5"></th><th class="p-1.5">Student</th><th class="p-1.5">Period</th><th class="p-1.5">Change</th><th class="p-1.5">Note</th></tr></thead><tbody>${syncItems.map((it,i)=>{
+    const v=it.v,upd=it.kind==='upd',lockDel=!upd&&it.paid>0;
+    const chk=lockDel?'disabled':(upd&&it.paid===0?'checked':'');
+    return`<tr class="border-t ${it.paid>0?'bg-amber-50':''}"><td class="p-1.5"><input type="checkbox" class="sync-cb" data-i="${i}" ${chk}></td><td class="p-1.5 font-semibold">${esc(v.student_name)}<div class="font-mono text-slate-400">${esc(v.voucher_id)}</div></td><td class="p-1.5">${esc(v.period)}</td><td class="p-1.5 font-bold">${upd?`${fmt(it.old)} to ${fmt(it.exp)} (${it.exp>it.old?'+':''}${fmt(it.exp-it.old)})`:'Delete voucher (outside DOJ / left date)'}</td><td class="p-1.5 ${it.paid>0?'text-amber-700 font-semibold':'text-slate-500'}">${lockDel?'Payment recorded, cannot delete':it.paid>0?`Paid ${fmt(it.paid)}: status will change`:'Unpaid'}</td></tr>`}).join('')}</tbody></table>`;
+  $('syncModal').classList.add('open');
+}
+function applySync(){
+  const sel=[...document.querySelectorAll('.sync-cb:checked')].map(c=>syncItems[+c.dataset.i]);
+  if(!sel.length){showAlert("Tick at least one row to apply.");return}
+  const upd=sel.filter(i=>i.kind==='upd'),del=sel.filter(i=>i.kind==='del');
+  showConfirm(`Update ${upd.length} voucher(s) and delete ${del.length} voucher(s)?`,async()=>{
+    showLoading("Applying sync...");
+    try{
+      for(let i=0;i<upd.length;i+=10)await Promise.all(upd.slice(i,i+10).map(it=>fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent((it.v.voucher_id||'').trim())}`,{method:'PATCH',headers:HJ,body:JSON.stringify({payable:it.exp,original_payable:it.v.original_payable??it.old,remarks:`${it.v.remarks?it.v.remarks+' | ':''}Sync: ${it.old} to ${it.exp}`})}).then(r=>{if(!r.ok)throw new Error('update failed')})));
+      if(del.length){const r=await fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=in.(${del.map(i=>`"${(i.v.voucher_id||'').trim()}"`).join(',')})`,{method:'DELETE',headers:{...H,Prefer:"return=minimal"}});if(!r.ok)throw new Error('delete failed')}
+      hideLoading();closeModal('syncModal');showAlert("Sync applied successfully!");initFeePage();
+    }catch(e){hideLoading();console.error(e);showAlert("Sync failed part-way: "+e.message+". Refresh and run Sync again to see what is left.")}
+  });
+}
+
+let selStu=new Set();
+const skey=st=>String(st.admis_no||st.student_name||'');
+const isTuition=v=>(v.type||'').trim().toLowerCase()==='tuition fee';
+function stuVouchers(st,per){const a=normAdm(st.admis_no);return allFeesCache.filter(v=>normAdm(v.admis_no)===a&&isTuition(v)&&(per==='ALL_YEAR'||(v.period||'').trim()===per))}
+function stuState(st,per){
+  const vs=stuVouchers(st,per);
+  if(per==='ALL_YEAR')return{t:`${vs.length}/12`,miss:vs.length<12,c:vs.length<12?'bg-amber-50 text-amber-700':'bg-emerald-50 text-emerald-700'};
+  if(!vs.length)return{t:'No voucher',miss:true,c:'bg-rose-50 text-rose-700'};
+  const v=vs[0];return{t:v.status,miss:false,c:v.status==='Paid'?'bg-emerald-50 text-emerald-700':v.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700'};
+}
+function classStudents(){const cls=$('voucherClassSelect').value;return cls==='ALL'?[]:allStudentsCache.filter(s=>(s.class||'').trim()===cls)}
+function renderPicker(){
+  const box=$('stuPanel'),list=classStudents();
+  if(!list.length){box.classList.add('hidden');return}
+  box.classList.remove('hidden');
+  const per=$('voucherPeriod').value,q=$('stuSearch').value.trim().toLowerCase();
+  $('stuList').innerHTML=list.filter(s=>!q||(s.student_name||'').toLowerCase().includes(q)||String(s.admis_no||'').toLowerCase().includes(q))
+    .map(s=>{const st=stuState(s,per);return`<label class="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"><input type="checkbox" data-k="${esc(skey(s))}" ${selStu.has(skey(s))?'checked':''} onchange="togStu(this)"><span class="font-semibold flex-1">${esc(s.student_name)}</span><span class="font-mono text-slate-400">${esc(s.admis_no)}</span><span class="badge ${st.c}">${st.t}</span></label>`}).join('')||'<div class="p-3 text-xs text-slate-400">No students match.</div>';
+  $('stuCount').innerText=`${selStu.size} selected / ${list.length}`;
+}
+function togStu(cb){cb.checked?selStu.add(cb.dataset.k):selStu.delete(cb.dataset.k);$('stuCount').innerText=`${selStu.size} selected / ${classStudents().length}`}
+function pickStu(mode){
+  const per=$('voucherPeriod').value;selStu.clear();
+  if(mode!=='none')classStudents().forEach(s=>{if(mode==='all'||stuState(s,per).miss)selStu.add(skey(s))});
+  renderPicker();
+}
+
+function openDiscount(vId){
+  const r=allFeesCache.find(x=>(x.voucher_id||'').trim()===vId);if(!r)return;
+  $('dcVid').value=r.voucher_id;$('dcStudent').value=r.student_name||'';$('dcPayable').value=parseFloat(r.payable)||0;
+  $('dcAmt').value=r.discount||'';
+  const d=(r.remarks||'').split(' | ').find(x=>x.startsWith('Discount '));
+  $('dcRemarks').value=d?d.replace(/^Discount [^:]*: /,''):'';
+  $('discountModal').classList.add('open');
+}
+const closeDiscount=()=>$('discountModal').classList.remove('open');
+async function saveDiscount(){
+  const vid=$('dcVid').value,amt=parseFloat($('dcAmt').value)||0,rs=$('dcRemarks').value.trim(),pay=parseFloat($('dcPayable').value)||0;
+  if(amt<0||amt>pay){showAlert("Discount must be between 0 and the payable amount.");return}
+  if(amt>0&&!rs){showAlert("Remarks are required for a discount.");return}
+  const r=allFeesCache.find(x=>(x.voucher_id||'').trim()===vid)||{};
+  const parts=(r.remarks||'').split(' | ').filter(x=>x&&!x.startsWith('Discount '));
+  if(amt>0)parts.push(`Discount ${amt}: ${rs}`);
+  showLoading("Saving discount...");
+  try{
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent(vid)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({discount:amt,remarks:parts.join(' | ')})});
+    hideLoading();
+    if(res.ok){closeDiscount();showAlert("Discount saved.");initFeePage()}
+    else showAlert("Failed to save: "+await res.text());
+  }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.open').forEach(m=>m.classList.remove('open'))});
+</script>
+</body>
+</html>
