@@ -399,6 +399,7 @@ const getLow = () => { let v = parseInt(localStorage.getItem('books_low_stock'))
 //  LOAD + NORMALIZE
 // ====================================================================================
 function normTx(row, idx) {
+    if(BC) Object.keys(BC).forEach(k => { if(BC[k] && BC[k] !== k && row[k] === undefined) row[k] = row[BC[k]]; });
     const t = String(row.type || row.tx_type || 'Purchase').trim().toLowerCase();
     const kind = t.includes('return') ? (t.includes('sale') ? 'sale_return' : 'purchase_return') : (t.includes('sale') ? 'sale' : 'purchase');
     const qty = parseFloat(row.qty) || 0;
@@ -416,7 +417,7 @@ function normTx(row, idx) {
 }
 
 async function initBooks() {
-    try { await loadSettingLists(); } catch (e) {}
+    try { await Promise.all([loadSettingLists(), detectBookCols()]); } catch (e) {}
     showLoading('Loading book store...');
     let c = getSupabaseConfig();
     try {
@@ -478,11 +479,34 @@ function buildItems() {
         it.status = it.stock <= 0 ? 'out' : (it.stock <= low ? 'low' : 'ok');
     });
 }
+let BC = null;
+async function detectBookCols() {
+    try { const c = JSON.parse(sessionStorage.getItem('books_cols_v2') || 'null'); if(c) { BC = c; return; } } catch (e) {}
+    const cand = { type: ['type', 'tx_type'], party_name: ['party_name', 'party'], book_title: ['book_title', 'title', 'item_title', 'item_name', 'name'], qty: ['qty', 'quantity'], unit_price: ['unit_price', 'price', 'rate'], net_amount: ['net_amount', 'amount', 'total'] };
+    const cfg = getSupabaseConfig(), out = {};
+    await Promise.all(Object.entries(cand).map(async ([k, arr]) => {
+        out[k] = null;
+        for(const col of arr) { try { const r = await fetch(`${cfg.url}/rest/v1/books?select=${col}&limit=1`, { headers: sbHeaders() }); if(r.ok) { out[k] = col; break; } } catch (e) {} }
+    }));
+    BC = out;
+    try { sessionStorage.setItem('books_cols_v2', JSON.stringify(out)); } catch (e) {}
+}
+// rename our standard keys to the real column names of the books table
+function mapRow(p) {
+    const o = {};
+    Object.keys(p).forEach(k => { if(BC && k in BC) { if(BC[k]) o[BC[k]] = p[k]; } else o[k] = p[k]; });
+    return o;
+}
+function colsOk() {
+    if(BC && !BC.book_title) { toast('The books table has no title column. Run: select column_name from information_schema.columns where table_name = \'books\'; and send me the result.', false); return false; }
+    return true;
+}
 function fillPartyList(kind) {
     const isV = kind === 'purchase' || kind === 'purchase_return', L = (typeof _settingLists !== 'undefined' && _settingLists) || {};
     const fromTx = txs.filter(t => isV ? (t.kind === 'purchase' || t.kind === 'purchase_return') : (t.kind === 'sale' || t.kind === 'sale_return')).map(t => t.party);
     const list = [...new Set([...(isV ? (L['Book Vendor'] || []) : []), ...fromTx].map(x => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     $('partyList').innerHTML = list.map(p => `<option value="${esc(p)}">`).join('');
+    $('mPartyLabel').innerText = (isV ? 'Vendor / Supplier name' : 'Student / Customer name') + ` (${list.length} saved, click the field to choose)`;
 }
 function fillDatalists() {
     $('bookList').innerHTML = Object.values(items).sort((a, b) => a.title.localeCompare(b.title)).map(i => `<option value="${esc(i.title)}">`).join('');
@@ -807,7 +831,7 @@ async function saveTx(addAnother) {
         showLoading('Saving...');
         try {
             let c = getSupabaseConfig();
-            let res = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(payload) });
+            let res = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(mapRow(payload)) });
             if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
 
             let accNote = '';
@@ -850,6 +874,7 @@ function fillItemSelects() {
     if(cat && !cat.options.length) cat.innerHTML = (L['Book Category'] || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
 }
 async function openStudentSale() {
+    if(!colsOk()) return;
     if(!hasExt || !hasItemCols) { toast('Run the SQL shown in the yellow box first, then refresh.', false); return; }
     showLoading('Loading students...');
     if(!ssStudents) { try { const a = await (await sbFetchAll('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; } }
@@ -916,7 +941,7 @@ async function saveStudentSale() {
         showLoading('Saving sale...');
         try {
             const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
-            const r1 = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows) });
+            const r1 = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.map(mapRow)) });
             if(!r1.ok) { hideLoading(); toast('Could not save: ' + await r1.text(), false); return; }
             let note = '';
             if(acc.length) { const r2 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify(acc) }); note = r2.ok ? ' and recorded in Accounts' : ' - but it could NOT be recorded in Accounts (add it manually)'; }
@@ -929,6 +954,7 @@ async function saveStudentSale() {
 
 // ---- Import items (Excel / CSV): each row becomes a Purchase that creates / tops-up the item ----
 function openImport() {
+    if(!colsOk()) return;
     if(!hasExt || !hasItemCols) { toast('Run the SQL shown in the yellow box first, then refresh.', false); return; }
     impRows = []; $('impFile').value = ''; $('impPreview').innerHTML = ''; $('impGo').classList.add('hidden'); $('impPost').checked = false; $('impWallet').value = 'cash';
     $('importModal').classList.remove('hidden');
@@ -985,7 +1011,7 @@ function saveImp() {
         try {
             const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
             for(let i = 0; i < rows.length; i += 200) {
-                const r = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.slice(i, i + 200)) });
+                const r = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.slice(i, i + 200).map(mapRow)) });
                 if(!r.ok) { hideLoading(); toast('Import stopped: ' + await r.text(), false); return; }
             }
             if(post) await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify({ voucher_id: accV, from_account: wallet, to_account: 'Books Purchase', description: `Books purchase import ${id} (${rows.length} items)`, amount_in: 0, amount_out: total, date: todayStr(), remarks: id }) });
