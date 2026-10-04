@@ -50,14 +50,17 @@ const SETTING_DEFAULTS = {
 let _settingLists = null;
 async function loadSettingLists() {
     if (_settingLists) return _settingLists;
-    try { const c = JSON.parse(sessionStorage.getItem('sb_settings_v1') || 'null'); if (c && Date.now() - c.t < 120000) { _settingLists = c.d; return c.d; } } catch (e) {}
+    try { const c = JSON.parse(sessionStorage.getItem('sb_settings_v2') || 'null'); if (c && Date.now() - c.t < 120000) { _settingLists = c.d; return c.d; } } catch (e) {}
     const out = { rules: {} };
     Object.keys(SETTING_DEFAULTS).forEach(k => out[k] = [...SETTING_DEFAULTS[k]]);
     try {
         const rows = await (await sbFetchAll('settings', 'select=setting_key,setting_value')).json();
         if (Array.isArray(rows)) {
             const by = {};
-            rows.forEach(x => { const k = String(x.setting_key || '').trim(), v = String(x.setting_value ?? '').trim(); if (k && v !== '') (by[k] = by[k] || []).push(v); });
+            const canon = k => String(k || '').toLowerCase().replace(/[^a-z]/g, '').replace(/s$/, '');
+            const ALIAS = { 'Book Vendor': ['bookvendor', 'vendor', 'booksupplier', 'supplier'], 'Income Head': ['incomehead', 'income'], 'Expense Head': ['expensehead', 'expense'], 'Designation': ['designation'], 'Class': ['class'], 'Section': ['section'], 'Book Category': ['bookcategory', 'category'] };
+            const keyOf = raw => { const cn = canon(raw); for (const d of Object.keys(ALIAS)) if (ALIAS[d].includes(cn) || canon(d) === cn) return d; return String(raw || '').trim(); };
+            rows.forEach(x => { const k = keyOf(x.setting_key), v = String(x.setting_value ?? '').trim(); if (k && v !== '') (by[k] = by[k] || []).push(v); });
             Object.keys(SETTING_DEFAULTS).forEach(k => { if (by[k] && by[k].length) out[k] = by[k]; });
             ['Payroll Working Days', 'Payroll Free Leaves', 'Low Stock Limit'].forEach(k => { if (by[k]) out.rules[k] = by[k][0]; });
         }
@@ -69,6 +72,6 @@ async function loadSettingLists() {
         if (out.rules['Low Stock Limit'] !== undefined) localStorage.setItem('books_low_stock', out.rules['Low Stock Limit']);
     } catch (e) {}
     _settingLists = out;
-    try { sessionStorage.setItem('sb_settings_v1', JSON.stringify({ t: Date.now(), d: out })); } catch (e) {}
+    try { sessionStorage.setItem('sb_settings_v2', JSON.stringify({ t: Date.now(), d: out })); } catch (e) {}
     return out;
 }
