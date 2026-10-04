@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Dashboard</title>
-    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
 </head>
@@ -20,7 +21,7 @@
             <button onclick="initDashboard()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">🔄 Refresh</button>
         </div>
 
-        <div id="cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+        <div id="cards" class="grid grid-cols-2 lg:grid-cols-3 gap-3"></div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
@@ -55,12 +56,15 @@ async function initDashboard() {
     $('dateLine').innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
     $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 p-6">Loading...</div>';
     try {
-        const [sR, fR, aR] = await Promise.all([
+        const [sR, fR, aR, bR, pR] = await Promise.all([
             sbFetchAll('students', 'select=admis_no,status,class'),
             sbFetchAll('fees', 'select=voucher_id,class,period,payable,discount'),
-            sbFetchAll('accounts', 'select=voucher_id,amount_in,date')
+            sbFetchAll('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date'),
+            sbFetchAll('books', 'select=*'),
+            sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Promise')
         ]);
         const students = await sR.json(), fees = await fR.json(), acc = await aR.json();
+        const bookRows = bR.ok ? await bR.json() : [], promRows = pR.ok ? await pR.json() : [];
         if (![students, fees, acc].every(Array.isArray)) throw new Error('load');
 
         const active = students.filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).length;
@@ -86,6 +90,11 @@ async function initDashboard() {
             ['Collected today', 'PKR ' + fmt(today$), 'text-emerald-600', 'fee receipts'],
             ['Collected this month', 'PKR ' + fmt(month$), 'text-emerald-700', 'fee receipts']
         ];
+        const dues = computeBookDues((Array.isArray(bookRows) ? bookRows : []).map(normBookRow), acc), prom = parsePromises(Array.isArray(promRows) ? promRows : []);
+        const recv = dues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), pay = dues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
+        const overdue = dues.filter(p => (p.recv.pending > 0.005 || p.pay.pending > 0.005) && prom[p.key] && prom[p.key].d < today).length;
+        cards.push(['Book Store: to receive', 'PKR ' + fmt(recv), 'text-emerald-700', `${dues.filter(p => p.recv.pending > 0.005).length} students` + (overdue ? ` · ${overdue} promise(s) overdue` : '')]);
+        cards.push(['Book Store: to pay', 'PKR ' + fmt(pay), 'text-rose-600', `${dues.filter(p => p.pay.pending > 0.005).length} vendors`]);
         $('cards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"><div class="text-xs text-slate-500 font-semibold">${c[0]}</div><div class="text-lg md:text-2xl font-extrabold ${c[2]} mt-1">${c[1]}</div><div class="text-[11px] text-slate-400 mt-0.5">${c[3]}</div></div>`).join('');
         const rows = Object.entries(byClass).sort((a, b) => b[1] - a[1]), max = rows.length ? rows[0][1] : 1;
         $('classRows').innerHTML = rows.length ? rows.map(([c, v]) => `<div><div class="flex justify-between text-xs mb-0.5"><span class="font-semibold">${esc(c)}</span><span class="text-rose-600 font-bold">PKR ${fmt(v)}</span></div><div class="h-2 bg-slate-100 rounded"><div class="h-2 bg-rose-400 rounded" style="width:${Math.max(3, v / max * 100)}%"></div></div></div>`).join('') : '<p class="text-sm text-emerald-600">No pending dues. 🎉</p>';
