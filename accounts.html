@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Accounts & Daybook</title>
-    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
     <style>
@@ -252,9 +253,13 @@
                 </div>
                 <div id="emHeadWrap">
                     <label id="emHeadLabel" class="block text-xs font-medium text-slate-700 mb-1">Head</label>
-                    <input id="emHead" list="headList" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    <input id="emHead" list="headList" oninput="updateDuesPicker()" onchange="updateDuesPicker()" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none">
                     <datalist id="headList"></datalist>
                 </div>
+                    <div id="emPartyWrap" class="hidden">
+                        <label id="emPartyLabel" class="block text-xs font-medium text-slate-700 mb-1">Pending party</label>
+                        <select id="emParty" onchange="pickDuesParty()" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
+                    </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label id="emWalletLabel" class="block text-xs font-medium text-slate-700 mb-1">Account</label>
@@ -417,8 +422,9 @@ function normalize(row, idx) {
 }
 
 async function initAccounts() {
+    _bd = null;
     showLoading('Loading accounts...');
-    try { const L = await loadSettingLists(); INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; } catch (e) { console.error(e); }
+    try { const L = await loadSettingLists(); INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD); } catch (e) { console.error(e); }
     let c = getSupabaseConfig();
     try {
         let [aRes, fRes] = await Promise.all([
@@ -714,7 +720,7 @@ function genVoucherNo(kind) {
     return id;
 }
 function setEntryKind(kind) {
-    entryKind = kind;
+    entryKind = kind; setTimeout(updateDuesPicker, 0);
     let tabs = ['receipt', 'payment', 'transfer', 'opening'];
     $('emTypeTabs').innerHTML = tabs.map(k => `<button type="button" ${editingId ? 'disabled' : ''} onclick="setEntryKind('${k}')" class="py-2 rounded-lg border ${k === kind ? 'tab-on' : 'tab-off'} ${editingId && k !== kind ? 'opacity-40' : ''}">${KIND_META[k].label}</button>`).join('');
     $('emTitle').innerText = (editingId ? 'Edit ' : 'New ') + KIND_META[kind].title;
@@ -727,6 +733,33 @@ function setEntryKind(kind) {
     $('emHeadLabel').innerText = kind === 'payment' ? 'Expense head (category)' : 'Income head (source)';
     $('headList').innerHTML = (kind === 'payment' ? EXPENSE_HEADS : INCOME_HEADS).map(h => `<option value="${esc(h)}">`).join('');
     if(!editingId) $('emVoucherNo').innerText = 'Voucher no: ' + (editingId || 'auto');
+}
+let _bd = null;
+async function ensureBookDues() {
+    if(_bd) return _bd;
+    try {
+        const r = await sbFetchAll('books', 'select=*'); const rows = r.ok ? await r.json() : [];
+        _bd = computeBookDues((Array.isArray(rows) ? rows : []).map(normBookRow), Object.values(entryById).map(e => e.raw));
+    } catch (e) { console.error(e); _bd = []; }
+    return _bd;
+}
+async function updateDuesPicker() {
+    const wrap = $('emPartyWrap'); if(!wrap) return;
+    const h = partyKey($('emHead').value);
+    const isR = entryKind === 'receipt' && h === partyKey(BOOK_SALE_HEAD), isP = entryKind === 'payment' && h === partyKey(BOOK_BUY_HEAD);
+    if(editingId || !(isR || isP)) { wrap.classList.add('hidden'); return; }
+    wrap.classList.remove('hidden');
+    $('emPartyLabel').innerText = isR ? 'Student / customer with a pending amount (Book Store)' : 'Vendor with a pending amount (Book Store)';
+    $('emParty').innerHTML = '<option value="">Loading...</option>';
+    const pend = p => isR ? p.recv.pending : p.pay.pending;
+    const list = (await ensureBookDues()).filter(p => pend(p) > 0.005).sort((x, y) => pend(y) - pend(x));
+    $('emParty').innerHTML = list.length ? '<option value="">- choose -</option>' + list.map(p => `<option value="${esc(p.name)}">${esc(p.name)} - pending PKR ${fmt(pend(p))}</option>`).join('') : '<option value="">No pending amounts</option>';
+}
+function pickDuesParty() {
+    const v = $('emParty').value; if(!v) return;
+    $('emTitle2').value = v;
+    const p = (_bd || []).find(x => x.name === v);
+    if(p && !$('emAmount').value) $('emAmount').value = entryKind === 'receipt' ? p.recv.pending : p.pay.pending;
 }
 function openEntry(kind) {
     editingId = null;
