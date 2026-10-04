@@ -508,11 +508,19 @@ function mapRow(p) {
     return o;
 }
 function colsOk() {
-    if(BC && !BC.book_title) {
-        toast('The books table has no title column' + (BOOK_ALLCOLS.length ? ' (columns found: ' + BOOK_ALLCOLS.join(', ') + ')' : '') + '. Run this in the Supabase SQL Editor, then refresh: alter table public.books add column if not exists book_title text;', false);
+    const TYPES = { book_title: 'text', qty: 'numeric', unit_price: 'numeric', net_amount: 'numeric' };
+    const missing = BC ? Object.keys(TYPES).filter(k => !BC[k]) : [];
+    if(missing.length) {
+        const sql = missing.map(k => `alter table public.books add column if not exists ${k} ${TYPES[k]};`).join(' ');
+        toast('The books table is missing: ' + missing.join(', ') + (BOOK_ALLCOLS.length ? ' (columns found: ' + BOOK_ALLCOLS.join(', ') + ')' : '') + '. Run in the Supabase SQL Editor, then refresh: ' + sql, false);
         return false;
     }
     return true;
+}
+function errMsg(t) {
+    t = String(t || '');
+    if(/23502/.test(t) && /"id"/.test(t)) return 'The books table id has no automatic number. Run the id SQL from the chat in the Supabase SQL Editor, then try again.';
+    return t;
 }
 function fillPartyList(kind) {
     const isV = kind === 'purchase' || kind === 'purchase_return', L = (typeof _settingLists !== 'undefined' && _settingLists) || {};
@@ -824,7 +832,7 @@ function genVoucher(prefix) {
     return id;
 }
 
-async function saveTx(addAnother) {
+async function saveTx(addAnother) { if(!colsOk()) return;
     let kind = txKind, meta = KINDS[kind];
     let party = $('mParty').value.trim(), title = $('mTitleIn').value.trim(), n = calcNet(), date = $('mDate').value, notes = $('mNotes').value.trim();
     if(!title) { toast('Please enter the book / item title.', false); return; }
@@ -845,7 +853,7 @@ async function saveTx(addAnother) {
         try {
             let c = getSupabaseConfig();
             let res = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(mapRow(payload)) });
-            if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
+            if(!res.ok) { hideLoading(); toast(errMsg('Could not save: ' + await res.text()), false); return; }
 
             let accNote = '';
             if(postAcc) {
@@ -955,7 +963,7 @@ async function saveStudentSale() {
         try {
             const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
             const r1 = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.map(mapRow)) });
-            if(!r1.ok) { hideLoading(); toast('Could not save: ' + await r1.text(), false); return; }
+            if(!r1.ok) { hideLoading(); toast(errMsg('Could not save: ' + await r1.text()), false); return; }
             let note = '';
             if(acc.length) { const r2 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify(acc) }); note = r2.ok ? ' and recorded in Accounts' : ' - but it could NOT be recorded in Accounts (add it manually)'; }
             toast(`Sale saved (${rows.length} items, PKR ${fmt(T.net)})${note}.`, !note.includes('NOT'));
@@ -1025,7 +1033,7 @@ function saveImp() {
             const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
             for(let i = 0; i < rows.length; i += 200) {
                 const r = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.slice(i, i + 200).map(mapRow)) });
-                if(!r.ok) { hideLoading(); toast('Import stopped: ' + await r.text(), false); return; }
+                if(!r.ok) { hideLoading(); toast(errMsg('Import stopped: ' + await r.text()), false); return; }
             }
             if(post) await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify({ voucher_id: accV, from_account: wallet, to_account: 'Books Purchase', description: `Books purchase import ${id} (${rows.length} items)`, amount_in: 0, amount_out: total, date: todayStr(), remarks: id }) });
             toast(`${rows.length} item(s) imported.`); $('importModal').classList.add('hidden'); await initBooks();
