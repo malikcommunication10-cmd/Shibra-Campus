@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Book Store & Inventory</title>
-    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="nav.js"></script>
@@ -477,10 +478,16 @@ function buildItems() {
         it.status = it.stock <= 0 ? 'out' : (it.stock <= low ? 'low' : 'ok');
     });
 }
+function fillPartyList(kind) {
+    const isV = kind === 'purchase' || kind === 'purchase_return', L = (typeof _settingLists !== 'undefined' && _settingLists) || {};
+    const fromTx = txs.filter(t => isV ? (t.kind === 'purchase' || t.kind === 'purchase_return') : (t.kind === 'sale' || t.kind === 'sale_return')).map(t => t.party);
+    const list = [...new Set([...(isV ? (L['Book Vendor'] || []) : []), ...fromTx].map(x => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    $('partyList').innerHTML = list.map(p => `<option value="${esc(p)}">`).join('');
+}
 function fillDatalists() {
     $('bookList').innerHTML = Object.values(items).sort((a, b) => a.title.localeCompare(b.title)).map(i => `<option value="${esc(i.title)}">`).join('');
-    let parties = [...new Set(txs.map(t => t.party).filter(Boolean))].sort();
-    $('partyList').innerHTML = parties.map(p => `<option value="${esc(p)}">`).join('');
+    fillPartyList(typeof txKind !== 'undefined' ? txKind : 'sale');
+    $('mTitleIn').placeholder = Object.keys(items).length ? 'Book title' : 'No items yet: type a new title in Purchase, or use Import items';
 }
 const STATUS = {
     out: { label: 'Out of stock', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
@@ -739,6 +746,7 @@ function setTxKind(kind) {
     $('mSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + (kind === 'sale' ? 'bg-emerald-600 hover:bg-emerald-700' : (kind === 'purchase' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-500 hover:bg-amber-600'));
     $('mHint').innerText = KINDS[kind].money === 'in' ? 'Money comes in → recorded as a Receipt in Accounts' : 'Money goes out → recorded as a Payment in Accounts';
     { const show = kind === 'purchase' && hasItemCols; $('mItemExtra').classList.toggle('hidden', !show); if(show) fillItemSelects(); }
+    fillPartyList(kind);
     onTitleInput(true);
 }
 function openTx(kind, key) {
