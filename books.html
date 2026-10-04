@@ -217,12 +217,13 @@
                         <option value="customer">Students / Customers</option>
                         <option value="vendor">Vendors / Suppliers</option>
                     </select>
+                    <label class="flex items-center gap-1 text-xs text-slate-600"><input id="pPending" type="checkbox" onchange="renderParties()"> Only pending</label>
                     <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
                 </div>
                 <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
-                            <tr><th class="p-2.5">Name</th><th class="p-2.5">Role</th><th class="p-2.5 text-right">Transactions</th><th class="p-2.5 text-right">Net qty</th><th class="p-2.5 text-right">Net amount</th><th class="p-2.5">Last activity</th><th class="p-2.5 no-print"></th></tr>
+                            <tr><th class="p-2.5">Name</th><th class="p-2.5">Role</th><th class="p-2.5 text-right">Net amount</th><th class="p-2.5 text-right">To receive</th><th class="p-2.5 text-right">To pay</th><th class="p-2.5">Promise date</th><th class="p-2.5">Last activity</th><th class="p-2.5 no-print"></th></tr>
                         </thead>
                         <tbody id="pBody"></tbody>
                     </table>
@@ -258,7 +259,7 @@
                     <datalist id="partyList"></datalist>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Book / Item title</label>
+                    <div class="flex items-center justify-between mb-1"><label class="block text-xs font-medium text-slate-700">Book / Item title</label><button id="mNewItemBtn" type="button" onclick="openNewItem()" class="hidden text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg">➕ New item</button></div>
                     <input id="mTitleIn" list="bookList" type="text" oninput="onTitleInput()" placeholder="Book title" class="w-full border rounded-lg p-2.5 text-sm outline-none">
                     <datalist id="bookList"></datalist>
                     <p id="mStock" class="text-xs mt-1 text-slate-500"></p>
@@ -307,6 +308,7 @@
                             </select>
                         </div>
                         <label class="flex items-center gap-2 text-sm text-slate-700 sm:mt-6"><input id="mPostAcc" type="checkbox" checked class="w-4 h-4"> Record in Accounts</label>
+                    <div class="sm:col-span-3"><label class="block text-xs font-medium text-slate-700 mb-1">Paid now (only if "Record in Accounts" is unticked): the rest stays pending</label><input id="mPaidNow" type="number" min="0" placeholder="0" class="w-full sm:w-48 border rounded-lg p-2.5 text-sm outline-none"></div>
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
@@ -418,7 +420,7 @@ function normTx(row, idx) {
 }
 
 async function initBooks() {
-    try { await Promise.all([loadSettingLists(), detectBookCols()]); } catch (e) {}
+    try { await Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]); } catch (e) {}
     showLoading('Loading book store...');
     let c = getSupabaseConfig();
     try {
@@ -479,6 +481,7 @@ function buildItems() {
         it.value = Math.max(it.stock, 0) * it.avgCost;
         it.status = it.stock <= 0 ? 'out' : (it.stock <= low ? 'low' : 'ok');
     });
+    mergeMaster();
 }
 let BC = null, BOOK_ALLCOLS = [];
 async function detectBookCols() {
@@ -533,7 +536,8 @@ function errMsg(t) {
 function fillPartyList(kind) {
     const isV = kind === 'purchase' || kind === 'purchase_return', L = (typeof _settingLists !== 'undefined' && _settingLists) || {};
     const fromTx = txs.filter(t => isV ? (t.kind === 'purchase' || t.kind === 'purchase_return') : (t.kind === 'sale' || t.kind === 'sale_return')).map(t => t.party);
-    const list = [...new Set([...(isV ? (L['Book Vendor'] || []) : []), ...fromTx].map(x => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const studs = isV ? [] : (ssStudents || []).filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).map(s => `${s.student_name} (${s.admis_no})`);
+    const list = [...new Set([...(isV ? (L['Book Vendor'] || []) : studs), ...fromTx].map(x => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     $('partyList').innerHTML = list.map(p => `<option value="${esc(p)}">`).join('');
     $('mPartyLabel').innerText = (isV ? 'Vendor / Supplier name' : 'Student / Customer name') + ` (${list.length} saved, click the field to choose)`;
 }
@@ -609,6 +613,7 @@ function periodStats(list) {
 
 // ---------------- OVERVIEW ----------------
 function renderOverview() {
+    recomputeDues();
     let list = periodTxs(), st = periodStats(list), all = Object.values(items);
     let stockValue = all.reduce((s, i) => s + i.value, 0), attn = all.filter(i => i.status !== 'ok').length;
     $('kpiCards').innerHTML = [
@@ -617,6 +622,8 @@ function renderOverview() {
         { t: 'Est. Profit', v: 'PKR ' + fmt(st.profit), c: st.profit >= 0 ? 'text-emerald-700' : 'text-rose-600', s: 'Sales − cost of goods sold' },
         { t: 'Discounts Given', v: 'PKR ' + fmt(st.discount), c: 'text-amber-600' },
         { t: 'Stock Value (now)', v: 'PKR ' + fmt(stockValue), c: 'text-slate-900', s: `${all.length} titles` },
+        { t: 'To Receive (students)', v: 'PKR ' + fmt(bookDues.reduce((s, p) => s + Math.max(p.recv.pending, 0), 0)), c: 'text-emerald-700', s: `${bookDues.filter(p => p.recv.pending > 0.005).length} pending` },
+        { t: 'To Pay (vendors)', v: 'PKR ' + fmt(bookDues.reduce((s, p) => s + Math.max(p.pay.pending, 0), 0)), c: 'text-rose-600', s: `${bookDues.filter(p => p.pay.pending > 0.005).length} pending` },
         { t: 'Stock Alerts', v: attn, c: attn ? 'text-rose-600' : 'text-emerald-600', s: 'Low + out of stock' }
     ].map(card).join('');
 
@@ -747,25 +754,7 @@ function renderTransactions() {
 }
 
 // ---------------- PARTIES ----------------
-function renderParties() {
-    let q = norm($('pSearch').value), role = $('pRole').value, map = {};
-    periodTxs().forEach(t => {
-        if(!t.party) return;
-        let k = norm(t.party), p = map[k] || (map[k] = { name: t.party, customer: false, vendor: false, n: 0, qty: 0, amt: 0, last: '' });
-        p.n++;
-        if(t.kind === 'sale') { p.customer = true; p.qty += t.qty; p.amt += t.net; }
-        else if(t.kind === 'sale_return') { p.customer = true; p.qty -= t.qty; p.amt -= t.net; }
-        else if(t.kind === 'purchase') { p.vendor = true; p.qty += t.qty; p.amt += t.net; }
-        else if(t.kind === 'purchase_return') { p.vendor = true; p.qty -= t.qty; p.amt -= t.net; }
-        if(t.date > p.last) p.last = t.date;
-    });
-    let list = Object.values(map).filter(p => (!q || norm(p.name).includes(q)) && (role === 'ALL' || (role === 'customer' ? p.customer : p.vendor))).sort((a, b) => b.amt - a.amt);
-    const roleTxt = p => p.customer && p.vendor ? 'Student + Vendor' : (p.vendor ? 'Vendor' : 'Student / Customer');
-    $('pBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-semibold text-slate-800">${esc(p.name)}</td><td class="p-2.5 text-slate-600">${roleTxt(p)}</td><td class="p-2.5 text-right">${p.n}</td><td class="p-2.5 text-right">${fmt(p.qty)}</td><td class="p-2.5 text-right font-bold">PKR ${fmt(p.amt)}</td><td class="p-2.5 text-slate-500">${fmtDate(p.last)}</td><td class="p-2.5 no-print"><button onclick="viewParty(${esc(JSON.stringify(p.name))})" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">View</button></td></tr>`).join('')
-        : `<tr><td colspan="7" class="p-8 text-center text-slate-400">No students or vendors found in this period.</td></tr>`;
-    $('pCards').innerHTML = list.length ? list.map(p => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(p.name)}</div><div class="text-xs text-slate-500">${roleTxt(p)} · ${p.n} txns · last ${fmtDate(p.last)}</div></div><div class="text-right"><div class="font-extrabold text-slate-800">PKR ${fmt(p.amt)}</div><button onclick="viewParty(${esc(JSON.stringify(p.name))})" class="text-xs text-indigo-600 font-semibold">View</button></div></div>`).join('')
-        : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No students or vendors found.</div>';
-}
+
 function viewParty(name) { $('txSearch').value = name; $('txType').value = 'ALL'; renderTransactions(); showTab('transactions'); }
 
 // ---------------- EXPORT ----------------
@@ -798,13 +787,13 @@ function setTxKind(kind) {
     $('mPartyLabel').innerText = isVendor ? 'Vendor / Supplier name' : 'Student / Customer name';
     $('mSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + (kind === 'sale' ? 'bg-emerald-600 hover:bg-emerald-700' : (kind === 'purchase' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-500 hover:bg-amber-600'));
     $('mHint').innerText = KINDS[kind].money === 'in' ? 'Money comes in → recorded as a Receipt in Accounts' : 'Money goes out → recorded as a Payment in Accounts';
-    { const show = kind === 'purchase' && hasItemCols; $('mItemExtra').classList.toggle('hidden', !show); if(show) fillItemSelects(); }
+    { const show = kind === 'purchase' && hasItemCols; $('mItemExtra').classList.toggle('hidden', !show); if(show) fillItemSelects(); $('mNewItemBtn').classList.toggle('hidden', kind !== 'purchase'); }
     fillPartyList(kind);
     onTitleInput(true);
 }
 function openTx(kind, key) {
     $('mDate').value = todayStr(); $('mParty').value = ''; $('mTitleIn').value = ''; $('mQty').value = 1; $('mPrice').value = '';
-    $('mDiscType').value = 'percentage'; $('mDiscVal').value = 0; $('mNotes').value = ''; $('mSalePrice').value = ''; $('mWallet').value = 'cash'; $('mPostAcc').checked = true;
+    $('mDiscType').value = 'percentage'; $('mDiscVal').value = 0; $('mNotes').value = ''; $('mSalePrice').value = ''; $('mPaidNow').value = ''; $('mWallet').value = 'cash'; $('mPostAcc').checked = true;
     $('mDateWrap').classList.toggle('hidden', !hasExt);
     $('mExtWrap').classList.toggle('hidden', !hasExt);
     if(key && items[key]) $('mTitleIn').value = items[key].title;
@@ -873,6 +862,8 @@ async function saveTx(addAnother) { if(!colsOk()) return;
                 accNote = r2.ok ? ' and recorded in Accounts' : ' — but it could NOT be recorded in Accounts (add it manually)';
                 if(!r2.ok) console.error(await r2.text());
             }
+            { const pn = Math.min(parseFloat($('mPaidNow').value) || 0, payload.net_amount);
+ if(!postAcc && hasExt && pn > 0 && party && (kind === 'sale' || kind === 'purchase')) { const ok = await postDuesEntry(kind === 'sale' ? 'recv' : 'pay', party, pn, date, wallet, 'Paid at ' + (kind === 'sale' ? 'sale' : 'purchase')); accNote = ok ? ` (PKR ${fmt(pn)} paid now, the rest is pending)` : ' - but the paid-now amount could NOT be recorded in Accounts'; } }
             lastSaved = { kind, party, date };
             toast(`${meta.label} saved${accNote}.`, !accNote.includes('NOT'));
             await initBooks();
@@ -909,7 +900,7 @@ async function openStudentSale() {
     if(!ssStudents) { try { const a = await (await sbFetchAll('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; } }
     hideLoading();
     ssStudent = null; ssLines = [];
-    $('ssStudent').value = ''; $('ssDate').value = todayStr(); $('ssDiscType').value = 'percentage'; $('ssDiscVal').value = 0; $('ssNotes').value = ''; $('ssWallet').value = 'cash'; $('ssPost').checked = true;
+    $('ssStudent').value = ''; $('ssDate').value = todayStr(); $('ssDiscType').value = 'percentage'; $('ssDiscVal').value = 0; $('ssNotes').value = ''; $('ssWallet').value = 'cash'; $('ssPost').checked = true; $('ssPaidNow').value = '';
     $('ssStudentList').innerHTML = ssStudents.filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).map(s => `<option value="${esc(ssLabel(s))}">`).join('');
     $('ssOtherList').innerHTML = Object.values(items).map(i => `<option value="${esc(i.title)}">`).join('');
     renderSS(); $('studentSaleModal').classList.remove('hidden');
@@ -974,6 +965,7 @@ async function saveStudentSale() {
             if(!r1.ok) { hideLoading(); toast(errMsg('Could not save: ' + await r1.text()), false); return; }
             let note = '';
             if(acc.length) { const r2 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify(acc) }); note = r2.ok ? ' and recorded in Accounts' : ' - but it could NOT be recorded in Accounts (add it manually)'; }
+            { const pn = Math.min(parseFloat($('ssPaidNow').value) || 0, T.net); if(!post && pn > 0) { const ok = await postDuesEntry('recv', who, pn, date, wallet, 'Paid at sale ' + bill); note = ok ? ` (PKR ${fmt(pn)} paid now, the rest is pending)` : ' - but the paid-now amount could NOT be recorded'; } }
             toast(`Sale saved (${rows.length} items, PKR ${fmt(T.net)})${note}.`, !note.includes('NOT'));
             closeSS(); await initBooks();
         } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
@@ -1047,6 +1039,188 @@ function saveImp() {
             toast(`${rows.length} item(s) imported.`); $('importModal').classList.add('hidden'); await initBooks();
         } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
     });
+}
+
+// ====================================================================================
+// NEW ITEM (+ button in Purchase): saves only the item (title, class, category, default sale price)
+// Items are stored in the settings table as rows with setting_key = 'Book Item' (JSON value).
+// ====================================================================================
+let masterItems = [];
+async function loadMasterItems() {
+    try {
+        const r = await sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Item');
+        const a = r.ok ? await r.json() : [];
+        masterItems = (Array.isArray(a) ? a : []).map(x => { try { const o = JSON.parse(x.setting_value); return o && o.t ? { t: String(o.t).trim(), c: o.c || '', k: o.k || '', p: parseFloat(o.p) || 0, raw: x.setting_value } : null; } catch (e) { return null; } }).filter(Boolean);
+    } catch (e) { masterItems = []; }
+}
+function mergeMaster() {
+    masterItems.forEach(m => {
+        const key = norm(m.t); if(!key) return;
+        const it = items[key] || (items[key] = { key, title: m.t, p: 0, pr: 0, s: 0, sr: 0, pAmt: 0, prAmt: 0, lastSale: 0, lastBuy: 0, lastDate: '', stock: 0, avgCost: 0, value: 0, status: 'out' });
+        if(!it.cls && m.c) it.cls = m.c;
+        if(!it.cat && m.k) it.cat = m.k;
+        if(!it.sp && m.p) it.sp = m.p;
+    });
+}
+function openNewItem() {
+    fillItemSelects();
+    $('niClass').innerHTML = $('mItemClass').innerHTML; $('niCat').innerHTML = $('mItemCat').innerHTML;
+    $('niTitle').value = $('mTitleIn').value.trim(); $('niPrice').value = '';
+    renderMasterList();
+    $('newItemModal').classList.remove('hidden');
+    setTimeout(() => $('niTitle').focus(), 50);
+}
+function closeNewItem() { $('newItemModal').classList.add('hidden'); }
+function renderMasterList() {
+    $('niList').innerHTML = masterItems.length ? masterItems.slice().sort((a, b) => a.t.localeCompare(b.t)).map((m, i) => `<div class="flex items-center justify-between gap-2 py-1 border-b last:border-0"><span class="truncate"><b>${esc(m.t)}</b> <span class="text-slate-500">${esc([m.c, m.k, m.p ? 'Sale ' + fmt(m.p) : ''].filter(Boolean).join(' · '))}</span></span><button type="button" onclick="deleteMasterItem(${i})" class="text-rose-500 hover:text-rose-700 px-1" title="Delete item">✕</button></div>`).join('') : '<p class="text-slate-400">No items saved from here yet.</p>';
+}
+async function saveNewItem() {
+    const t = $('niTitle').value.trim().replace(/\s+/g, ' '), c = $('niClass').value || 'All', k = $('niCat').value || '', p = parseFloat($('niPrice').value) || 0;
+    if(!t) { toast('Please enter the item title.', false); return; }
+    if(items[norm(t)]) { toast('This item already exists in the list.', false); return; }
+    const raw = JSON.stringify({ t, c, k, p });
+    showLoading('Saving item...');
+    try {
+        const cfg = getSupabaseConfig();
+        const r = await fetch(`${cfg.url}/rest/v1/settings`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify({ setting_key: 'Book Item', setting_value: raw }) });
+        hideLoading();
+        if(!r.ok) { toast('Could not save the item: ' + await r.text(), false); return; }
+        masterItems.push({ t, c, k, p, raw });
+        buildItems(); fillDatalists(); renderAll();
+        closeNewItem();
+        $('mTitleIn').value = t; onTitleInput();
+        toast(`Item "${t}" added. Enter qty and purchase price, then save the purchase.`);
+    } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+}
+function deleteMasterItem(i) {
+    const m = masterItems.slice().sort((a, b) => a.t.localeCompare(b.t))[i]; if(!m) return;
+    const used = txs.some(x => x.key === norm(m.t));
+    confirmBox(`Delete the item "${m.t}" from the list?` + (used ? '\n\nIt already has transactions, so it will stay in the inventory.' : ''), 'Delete', async () => {
+        showLoading('Deleting...');
+        try {
+            const cfg = getSupabaseConfig();
+            const r = await fetch(`${cfg.url}/rest/v1/settings?setting_key=eq.Book%20Item&setting_value=eq.${encodeURIComponent(m.raw)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
+            hideLoading();
+            if(!r.ok) { toast('Could not delete: ' + await r.text(), false); return; }
+            masterItems = masterItems.filter(x => x.raw !== m.raw);
+            buildItems(); fillDatalists(); renderAll(); renderMasterList();
+        } catch (e) { hideLoading(); toast('Could not connect to the database.', false); }
+    });
+}
+
+// ====================================================================================
+// PENDING AMOUNTS (to receive from students / to pay to vendors), FIFO, promise dates
+// ====================================================================================
+let accRows = [], bookPromises = {}, bookDues = [], bookDuesMap = {};
+async function loadDuesData() {
+    try { const r = await sbFetchAll('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date'); const a = r.ok ? await r.json() : []; accRows = Array.isArray(a) ? a : []; } catch (e) { accRows = []; }
+    try { const r = await sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Promise'); const a = r.ok ? await r.json() : []; bookPromises = parsePromises(Array.isArray(a) ? a : []); } catch (e) { bookPromises = {}; }
+}
+async function ensureStudents() {
+    if(ssStudents) return;
+    try { const a = await (await sbFetchAll('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; }
+}
+function recomputeDues() {
+    bookDues = computeBookDues(txs, accRows);
+    bookDuesMap = {}; bookDues.forEach(p => { bookDuesMap[p.key] = p; });
+}
+async function postDuesEntry(kind, partyName, amt, date, wallet, notes) {
+    const used = new Set(accRows.map(r => String(r.voucher_id || '').toUpperCase()));
+    let id; do { id = (kind === 'recv' ? 'RV-' : 'PV-') + Math.floor(100000 + Math.random() * 900000); } while(used.has(id));
+    const row = kind === 'recv'
+        ? { voucher_id: id, from_account: BOOK_SALE_HEAD, to_account: wallet, description: partyName, amount_in: amt, amount_out: 0, date, remarks: notes || '' }
+        : { voucher_id: id, from_account: wallet, to_account: BOOK_BUY_HEAD, description: partyName, amount_in: 0, amount_out: amt, date, remarks: notes || '' };
+    try {
+        const c = getSupabaseConfig();
+        const r = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(row) });
+        if(!r.ok) { console.error(await r.text()); return false; }
+        accRows.push(row); return true;
+    } catch (e) { console.error(e); return false; }
+}
+function openSettle(kind, key) {
+    const p = bookDuesMap[key]; if(!p) return;
+    const side = kind === 'recv' ? p.recv : p.pay;
+    $('sdKind').value = kind; $('sdKey').value = key;
+    $('sdTitle').innerText = kind === 'recv' ? '💵 Receive from student / customer' : '💸 Pay to vendor';
+    $('sdParty').value = p.name; $('sdPending').value = 'PKR ' + fmt(side.pending);
+    $('sdAmount').value = side.pending > 0 ? side.pending : ''; $('sdDate').value = todayStr(); $('sdNotes').value = ''; $('sdWallet').value = 'cash';
+    $('settleModal').classList.remove('hidden');
+}
+async function saveSettle() {
+    const kind = $('sdKind').value, p = bookDuesMap[$('sdKey').value]; if(!p) return;
+    const amt = parseFloat($('sdAmount').value) || 0, date = $('sdDate').value, side = kind === 'recv' ? p.recv : p.pay;
+    if(amt <= 0) { toast('Please enter an amount greater than 0.', false); return; }
+    if(!date) { toast('Please select a date.', false); return; }
+    const go = async () => {
+        showLoading('Saving...');
+        const ok = await postDuesEntry(kind, p.name, amt, date, $('sdWallet').value, $('sdNotes').value.trim());
+        if(ok) { await loadDuesData(); }
+        hideLoading();
+        if(!ok) { toast('Could not save the entry in Accounts.', false); return; }
+        $('settleModal').classList.add('hidden'); renderAll();
+        toast(`${kind === 'recv' ? 'Received' : 'Paid'} PKR ${fmt(amt)} - recorded in Accounts.`);
+    };
+    if(amt > side.pending + 0.005) confirmBox(`The amount (PKR ${fmt(amt)}) is more than the pending PKR ${fmt(side.pending)}. The extra is kept as an advance. Continue?`, 'Continue', go); else go();
+}
+function openStatement(key) {
+    const p = bookDuesMap[key]; if(!p) return;
+    const pr = bookPromises[key];
+    const sec = (title, E, S, side, cls) => (!E.length && !S.length) ? '' : `<h4 class="font-bold text-sm mt-4 mb-1 ${cls}">${title}</h4>
+        <div class="overflow-x-auto"><table class="w-full text-left text-xs border-collapse"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Item</th><th class="p-2 text-right">Amount</th><th class="p-2 text-right">Cleared</th><th class="p-2 text-right">Remaining</th></tr></thead><tbody>
+        ${E.map(e => `<tr class="border-b ${e.rem > 0 ? '' : 'text-slate-400'}"><td class="p-2">${fmtDate(e.date)}</td><td class="p-2 font-mono">${esc(e.voucher)}</td><td class="p-2">${esc(e.title)}${e.qty ? ' x ' + fmt(e.qty) : ''}</td><td class="p-2 text-right">${fmt(e.amt)}</td><td class="p-2 text-right text-emerald-600">${fmt(e.paid)}</td><td class="p-2 text-right font-bold ${e.rem > 0 ? 'text-rose-600' : ''}">${fmt(e.rem)}</td></tr>`).join('')}
+        </tbody></table></div>
+        ${S.length ? `<div class="text-xs mt-2 font-semibold text-slate-600">Received / adjusted</div><div class="overflow-x-auto"><table class="w-full text-left text-xs"><tbody>${S.map(x => `<tr class="border-b"><td class="p-1.5">${fmtDate(x.date)}</td><td class="p-1.5 font-mono">${esc(x.voucher)}</td><td class="p-1.5">${esc(x.label)}</td><td class="p-1.5 text-right font-bold text-emerald-600">${fmt(x.amt)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        <div class="mt-2 text-sm font-bold flex flex-wrap justify-between gap-2 bg-slate-50 rounded-xl p-2"><span>Total: ${fmt(side.total)}</span><span>Cleared: ${fmt(side.settled)}</span><span class="${side.pending > 0 ? 'text-rose-600' : 'text-emerald-600'}">${side.pending >= 0 ? 'Pending' : 'Advance'}: PKR ${fmt(Math.abs(side.pending))}</span></div>`;
+    $('stmtName').innerText = p.name;
+    $('stmtBody').innerHTML = sec('Amount to receive (sales on credit)', p.recvE, p.recvS, p.recv, 'text-emerald-700') + sec('Amount to pay (purchases on credit)', p.payE, p.payS, p.pay, 'text-indigo-700')
+        + (pr ? `<p class="mt-3 text-sm">Promise to pay: <b>${fmtDate(pr.d)}</b>${pr.a ? ' (PKR ' + fmt(pr.a) + ')' : ''}${pr.note ? ' - ' + esc(pr.note) : ''}</p>` : '');
+    $('stmtModal').classList.remove('hidden');
+}
+function printStatement() { document.body.classList.add('print-stmt'); window.print(); }
+window.addEventListener('afterprint', () => document.body.classList.remove('print-stmt'));
+function openPromise(key) {
+    const p = bookDuesMap[key]; if(!p) return; const pr = bookPromises[key];
+    $('prKey').value = key; $('prParty').innerText = p.name;
+    $('prDate').value = pr ? pr.d : ''; $('prAmt').value = pr && pr.a ? pr.a : ''; $('prNote').value = pr ? (pr.note || '') : '';
+    $('promiseModal').classList.remove('hidden');
+}
+async function savePromise(clear) {
+    const key = $('prKey').value, p = bookDuesMap[key], d = $('prDate').value;
+    if(!clear && !d) { toast('Please select the promise date.', false); return; }
+    const o = { k: key, n: p ? p.name : '', d: clear ? '' : d, a: parseFloat($('prAmt').value) || 0, note: $('prNote').value.trim(), ts: Date.now() };
+    showLoading('Saving...');
+    try {
+        const c = getSupabaseConfig();
+        const r = await fetch(`${c.url}/rest/v1/settings`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify({ setting_key: 'Book Promise', setting_value: JSON.stringify(o) }) });
+        hideLoading();
+        if(!r.ok) { toast('Could not save: ' + await r.text(), false); return; }
+        if(clear) delete bookPromises[key]; else bookPromises[key] = o;
+        $('promiseModal').classList.add('hidden'); renderAll(); toast(clear ? 'Promise removed.' : 'Promise date saved.');
+    } catch (e) { hideLoading(); toast('Could not connect to the database.', false); }
+}
+function renderParties() {
+    recomputeDues();
+    const q = norm($('pSearch').value), role = $('pRole').value, onlyP = $('pPending').checked, map = {}, today = todayStr();
+    periodTxs().forEach(t => {
+        if(!t.party) return;
+        const k = partyKey(t.party), p = map[k] || (map[k] = { key: k, name: t.party, customer: false, vendor: false, n: 0, qty: 0, amt: 0, last: '' });
+        p.n++;
+        if(t.kind === 'sale') { p.customer = true; p.qty += t.qty; p.amt += t.net; }
+        else if(t.kind === 'sale_return') { p.customer = true; p.qty -= t.qty; p.amt -= t.net; }
+        else if(t.kind === 'purchase') { p.vendor = true; p.qty += t.qty; p.amt += t.net; }
+        else if(t.kind === 'purchase_return') { p.vendor = true; p.qty -= t.qty; p.amt -= t.net; }
+        if(t.date > p.last) p.last = t.date;
+    });
+    bookDues.forEach(d => { if(!map[d.key]) map[d.key] = { key: d.key, name: d.name, customer: d.recvE.length > 0, vendor: d.payE.length > 0, n: 0, qty: 0, amt: 0, last: d.last }; });
+    let list = Object.values(map).map(p => { const d = bookDuesMap[p.key]; p.recv = d && d.recv.pending > 0.005 ? d.recv.pending : 0; p.pay = d && d.pay.pending > 0.005 ? d.pay.pending : 0; p.pr = bookPromises[p.key]; return p; })
+        .filter(p => (!q || norm(p.name).includes(q)) && (role === 'ALL' || (role === 'customer' ? p.customer : p.vendor)) && (!onlyP || p.recv || p.pay))
+        .sort((a, b) => (b.recv + b.pay) - (a.recv + a.pay) || b.amt - a.amt);
+    const roleTxt = p => p.customer && p.vendor ? 'Student + Vendor' : (p.vendor ? 'Vendor' : 'Student / Customer');
+    const prTxt = p => (p.recv || p.pay) && p.pr ? `<span class="${p.pr.d < today ? 'text-rose-600 font-bold' : 'text-slate-700'}">${fmtDate(p.pr.d)}${p.pr.d < today ? ' (overdue)' : ''}</span>` : '<span class="text-slate-300">-</span>';
+    const btns = p => `<div class="flex flex-wrap gap-1 no-print" data-k="${esc(p.key)}">${p.recv ? `<button onclick="openSettle('recv', this.parentNode.dataset.k)" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold">Receive</button>` : ''}${p.pay ? `<button onclick="openSettle('pay', this.parentNode.dataset.k)" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded font-semibold">Pay</button>` : ''}${(p.recv || p.pay) ? `<button onclick="openPromise(this.parentNode.dataset.k)" class="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded font-semibold">Promise</button>` : ''}${bookDuesMap[p.key] ? `<button onclick="openStatement(this.parentNode.dataset.k)" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">Statement</button>` : ''}<button onclick="viewParty(this.parentNode.dataset.n)" data-x="" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded font-semibold">View</button></div>`;
+    $('pBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-semibold text-slate-800">${esc(p.name)}</td><td class="p-2.5 text-slate-600">${roleTxt(p)}</td><td class="p-2.5 text-right">PKR ${fmt(p.amt)}</td><td class="p-2.5 text-right font-bold ${p.recv ? 'text-emerald-700' : 'text-slate-300'}">${p.recv ? 'PKR ' + fmt(p.recv) : '-'}</td><td class="p-2.5 text-right font-bold ${p.pay ? 'text-rose-600' : 'text-slate-300'}">${p.pay ? 'PKR ' + fmt(p.pay) : '-'}</td><td class="p-2.5">${prTxt(p)}</td><td class="p-2.5 text-slate-500">${fmtDate(p.last)}</td><td class="p-2.5 no-print">${btns(p).replace('data-k="', 'data-n="' + esc(p.name) + '" data-k="')}</td></tr>`).join('')
+        : `<tr><td colspan="8" class="p-8 text-center text-slate-400">No students or vendors found.</td></tr>`;
+    $('pCards').innerHTML = list.map(p => `<div class="bg-white rounded-xl border p-3"><div class="font-semibold text-sm">${esc(p.name)}</div><div class="text-[11px] text-slate-500 mb-1">${roleTxt(p)} · last ${fmtDate(p.last)}</div><div class="flex flex-wrap gap-3 text-xs mb-2"><span>Net: <b>PKR ${fmt(p.amt)}</b></span>${p.recv ? `<span class="text-emerald-700">To receive: <b>PKR ${fmt(p.recv)}</b></span>` : ''}${p.pay ? `<span class="text-rose-600">To pay: <b>PKR ${fmt(p.pay)}</b></span>` : ''}</div>${(p.recv || p.pay) ? `<div class="text-xs mb-2">Promise: ${prTxt(p)}</div>` : ''}${btns(p).replace('data-k="', 'data-n="' + esc(p.name) + '" data-k="')}</div>`).join('');
 }
 
 function deleteTx(uid) {
@@ -1125,6 +1299,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeTx(); 
                                 <option value="online">📱 Online / JazzCash</option>
                             </select></div>
     <label class="flex items-end gap-2 text-xs pb-2"><input id="ssPost" type="checkbox" checked> Record in Accounts</label>
+    <div class="col-span-2"><label class="block text-xs font-medium text-slate-700 mb-1">Paid now (if unticked): the rest stays pending</label><input id="ssPaidNow" type="number" min="0" placeholder="0" class="w-full border rounded-lg p-2 text-sm"></div>
    </div>
    <input id="ssNotes" placeholder="Notes (optional)" class="w-full border rounded-lg p-2.5 text-sm outline-none">
    <div class="bg-slate-50 rounded-xl p-3 text-sm flex flex-wrap justify-between gap-2"><span>Gross: <b id="ssGross">0</b></span><span>Discount: <b id="ssDisc">0</b></span><span>Net: <b id="ssNet" class="text-emerald-700">PKR 0</b></span></div>
@@ -1148,6 +1323,52 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeTx(); 
                             </select></div>
   </div>
   <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('importModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button><button id="impGo" onclick="saveImp()" class="hidden px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Import valid rows</button></div>
+ </div></div>
+
+<div id="newItemModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center"><h3 class="font-bold text-emerald-700">➕ New item</h3><button onclick="closeNewItem()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+  <div class="p-4 space-y-3">
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Item title</label><input id="niTitle" type="text" placeholder="e.g. Math - Class Five" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+   <div class="grid grid-cols-2 gap-2">
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Class (course)</label><select id="niClass" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select></div>
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Category</label><select id="niCat" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select></div>
+   </div>
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Sale price (optional, can be set in the purchase)</label><input id="niPrice" type="number" min="0" placeholder="PKR" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+   <div class="rounded-xl border bg-slate-50 p-2 text-xs max-h-40 overflow-y-auto"><div class="font-semibold text-slate-600 mb-1">Items added from here</div><div id="niList"></div></div>
+  </div>
+  <div class="p-4 border-t flex justify-end gap-2"><button onclick="closeNewItem()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="saveNewItem()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save item</button></div>
+ </div></div>
+
+<style>@media print{body.print-stmt *{visibility:hidden!important}body.print-stmt #stmtModal,body.print-stmt #stmtModal *{visibility:visible!important}body.print-stmt #stmtModal{position:absolute!important;left:0;top:0;width:100%;background:#fff!important;display:block!important}body.print-stmt #stmtBox{max-height:none!important;box-shadow:none!important}}</style>
+<div id="settleModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center"><h3 id="sdTitle" class="font-bold text-indigo-900"></h3><button onclick="document.getElementById('settleModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">&#10005;</button></div>
+  <div class="p-4 space-y-3"><input type="hidden" id="sdKind"><input type="hidden" id="sdKey">
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Name</label><input id="sdParty" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 font-semibold"></div>
+   <div class="grid grid-cols-2 gap-2"><div><label class="block text-xs font-medium text-slate-700 mb-1">Pending</label><input id="sdPending" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 font-bold text-rose-600"></div>
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Amount</label><input id="sdAmount" type="number" min="1" class="w-full border rounded-lg p-2.5 text-sm font-bold"></div></div>
+   <div class="grid grid-cols-2 gap-2"><div><label class="block text-xs font-medium text-slate-700 mb-1">Date</label><input id="sdDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div>
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Account</label><select id="sdWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white">
+                                <option value="cash">💵 Cash in Hand</option>
+                                <option value="bank">🏦 Bank</option>
+                                <option value="online">📱 Online / JazzCash</option>
+                            </select></div></div>
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label><input id="sdNotes" class="w-full border rounded-lg p-2.5 text-sm"></div>
+   <p class="text-xs text-slate-500">It is recorded in Accounts and clears the oldest pending entries first.</p></div>
+  <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('settleModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="saveSettle()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save</button></div>
+ </div></div>
+<div id="stmtModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div id="stmtBox" class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto p-5">
+  <div class="flex justify-between items-start border-b pb-3 mb-2 gap-2"><div><h3 class="font-bold text-indigo-950">Concept School - Book Store Statement</h3><p id="stmtName" class="text-sm font-semibold text-slate-700"></p></div>
+  <div class="flex gap-2 no-print"><button onclick="printStatement()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">Print</button><button onclick="document.getElementById('stmtModal').classList.add('hidden')" class="bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">&#10005;</button></div></div>
+  <div id="stmtBody"></div></div></div>
+<div id="promiseModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3"><h3 class="font-bold text-amber-700">Promise to pay</h3><input type="hidden" id="prKey"><p id="prParty" class="text-sm font-semibold"></p>
+  <div><label class="block text-xs font-medium text-slate-700 mb-1">Promise date</label><input id="prDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div>
+  <div><label class="block text-xs font-medium text-slate-700 mb-1">Promised amount (optional)</label><input id="prAmt" type="number" min="0" class="w-full border rounded-lg p-2.5 text-sm"></div>
+  <div><label class="block text-xs font-medium text-slate-700 mb-1">Note (optional)</label><input id="prNote" class="w-full border rounded-lg p-2.5 text-sm"></div>
+  <div class="flex justify-between gap-2 pt-1"><button onclick="savePromise(true)" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Remove</button><div class="flex gap-2"><button onclick="document.getElementById('promiseModal').classList.add('hidden')" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="savePromise(false)" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg text-sm">Save</button></div></div>
  </div></div>
 </body>
 </html>
