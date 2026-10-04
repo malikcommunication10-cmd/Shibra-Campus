@@ -479,17 +479,27 @@ function buildItems() {
         it.status = it.stock <= 0 ? 'out' : (it.stock <= low ? 'low' : 'ok');
     });
 }
-let BC = null;
+let BC = null, BOOK_ALLCOLS = [];
 async function detectBookCols() {
-    try { const c = JSON.parse(sessionStorage.getItem('books_cols_v2') || 'null'); if(c) { BC = c; return; } } catch (e) {}
-    const cand = { type: ['type', 'tx_type'], party_name: ['party_name', 'party'], book_title: ['book_title', 'title', 'item_title', 'item_name', 'name'], qty: ['qty', 'quantity'], unit_price: ['unit_price', 'price', 'rate'], net_amount: ['net_amount', 'amount', 'total'] };
-    const cfg = getSupabaseConfig(), out = {};
-    await Promise.all(Object.entries(cand).map(async ([k, arr]) => {
-        out[k] = null;
-        for(const col of arr) { try { const r = await fetch(`${cfg.url}/rest/v1/books?select=${col}&limit=1`, { headers: sbHeaders() }); if(r.ok) { out[k] = col; break; } } catch (e) {} }
-    }));
-    BC = out;
-    try { sessionStorage.setItem('books_cols_v2', JSON.stringify(out)); } catch (e) {}
+    try { const c = JSON.parse(sessionStorage.getItem('books_cols_v3') || 'null'); if(c && c.map && c.map.book_title) { BC = c.map; BOOK_ALLCOLS = c.all || []; return; } } catch (e) {}
+    const cfg = getSupabaseConfig(), H = sbHeaders();
+    let cols = [];
+    try { const j = await (await fetch(`${cfg.url}/rest/v1/`, { headers: H })).json(); const pr = (j.definitions && j.definitions.books && j.definitions.books.properties) || (j.components && j.components.schemas && j.components.schemas.books && j.components.schemas.books.properties); if(pr) cols = Object.keys(pr); } catch (e) {}
+    if(!cols.length) { try { const r = await (await fetch(`${cfg.url}/rest/v1/books?select=*&limit=1`, { headers: H })).json(); if(Array.isArray(r) && r[0]) cols = Object.keys(r[0]); } catch (e) {} }
+    const cand = { type: ['type', 'tx_type', 'transaction_type', 'kind'], party_name: ['party_name', 'party', 'vendor', 'customer', 'student_name'], book_title: ['book_title', 'title', 'item_title', 'item_name', 'book_name', 'book', 'item', 'name', 'product', 'product_name', 'particulars', 'description'], qty: ['qty', 'quantity'], unit_price: ['unit_price', 'price', 'rate'], net_amount: ['net_amount', 'amount', 'total'] };
+    const out = {};
+    if(cols.length) {
+        const low = cols.map(c => c.toLowerCase());
+        Object.entries(cand).forEach(([k, arr]) => { const hit = arr.find(a => low.includes(a)); out[k] = hit ? cols[low.indexOf(hit)] : null; });
+        if(!out.book_title) { const f = cols.find(c => /title|name|book|item|product|particular/i.test(c) && !/party|vendor|student|customer|supplier/i.test(c)); if(f) out.book_title = f; }
+    } else {
+        await Promise.all(Object.entries(cand).map(async ([k, arr]) => {
+            out[k] = null;
+            for(const col of arr) { try { const r = await fetch(`${cfg.url}/rest/v1/books?select=${col}&limit=1`, { headers: H }); if(r.ok) { out[k] = col; break; } } catch (e) {} }
+        }));
+    }
+    BC = out; BOOK_ALLCOLS = cols;
+    if(out.book_title) { try { sessionStorage.setItem('books_cols_v3', JSON.stringify({ map: out, all: cols })); } catch (e) {} }
 }
 // rename our standard keys to the real column names of the books table
 function mapRow(p) {
@@ -498,7 +508,10 @@ function mapRow(p) {
     return o;
 }
 function colsOk() {
-    if(BC && !BC.book_title) { toast('The books table has no title column. Run: select column_name from information_schema.columns where table_name = \'books\'; and send me the result.', false); return false; }
+    if(BC && !BC.book_title) {
+        toast('The books table has no title column' + (BOOK_ALLCOLS.length ? ' (columns found: ' + BOOK_ALLCOLS.join(', ') + ')' : '') + '. Run this in the Supabase SQL Editor, then refresh: alter table public.books add column if not exists book_title text;', false);
+        return false;
+    }
     return true;
 }
 function fillPartyList(kind) {
