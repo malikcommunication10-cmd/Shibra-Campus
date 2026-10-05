@@ -104,6 +104,7 @@
                 <button data-tab="fees" onclick="showTab('fees')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🎓 Fee Collection</button>
                 <button data-tab="heads" onclick="showTab('heads')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🗂️ Heads Summary</button>
                 <button data-tab="wallets" onclick="showTab('wallets')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🏦 Cash & Bank</button>
+        <button data-tab="dues" onclick="showTab('dues')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🧾 Receivable / Payable</button>
             </div>
 
             <div id="printHeader">
@@ -207,7 +208,24 @@
                 <div class="mt-3 no-print"><button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button></div>
             </section>
 
-            <!-- WALLETS -->
+            <!-- RECEIVABLE / PAYABLE -->
+        <section id="tab-dues" class="hidden space-y-4">
+            <div id="duesCards" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+            <div class="flex flex-wrap gap-2 items-center no-print">
+                <button onclick="openEntry('bill_raised')" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">🧾 Bill Raised (to receive)</button>
+                <button onclick="openEntry('bill_received')" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">📥 Bill Received (to pay)</button>
+                <input id="duesSearch" oninput="renderDues()" type="text" placeholder="Search party..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[160px]">
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
+                <table class="w-full text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Party (open bills)</th><th class="p-2.5 text-right">To receive</th><th class="p-2.5 text-right">To pay</th><th class="p-2.5">Oldest bill</th><th class="p-2.5 no-print"></th></tr></thead><tbody id="duesBody"></tbody></table>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
+                <div class="p-3 font-bold text-sm text-indigo-900 border-b">Bills created in Accounts</div>
+                <table class="w-full text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Voucher</th><th class="p-2.5">Date</th><th class="p-2.5">Type</th><th class="p-2.5">Party</th><th class="p-2.5 text-right">Amount</th><th class="p-2.5 text-right">Remaining</th><th class="p-2.5 no-print"></th></tr></thead><tbody id="billsBody"></tbody></table>
+            </div>
+        </section>
+
+        <!-- WALLETS -->
             <section id="tab-wallets" class="hidden space-y-4">
                 <div id="walletCards" class="grid grid-cols-1 md:grid-cols-4 gap-3"></div>
                 <div class="flex flex-wrap gap-2 no-print">
@@ -240,7 +258,7 @@
                 <button onclick="closeEntry()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
             </div>
             <div class="p-5 space-y-3">
-                <div id="emTypeTabs" class="grid grid-cols-4 gap-1.5 text-xs font-semibold"></div>
+                <div id="emTypeTabs" class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 text-xs font-semibold"></div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-medium text-slate-700 mb-1">Date</label>
@@ -260,8 +278,12 @@
                         <label id="emPartyLabel" class="block text-xs font-medium text-slate-700 mb-1">Pending party</label>
                         <select id="emParty" onchange="pickDuesParty()" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
                     </div>
+                    <div id="emBillsWrap" class="hidden">
+                        <div class="text-xs font-medium text-slate-700 mb-1">Pending bills (tick the bills to settle; the voucher number stays the same)</div>
+                        <div id="emBills" class="max-h-48 overflow-y-auto border rounded-lg divide-y bg-white"></div>
+                    </div>
                 <div class="grid grid-cols-2 gap-3">
-                    <div>
+                    <div id="emWalletWrap">
                         <label id="emWalletLabel" class="block text-xs font-medium text-slate-700 mb-1">Account</label>
                         <select id="emWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none">
                             <option value="cash">💵 Cash in Hand</option>
@@ -279,8 +301,8 @@
                     </div>
                 </div>
                 <div id="emTitleWrap">
-                    <label class="block text-xs font-medium text-slate-700 mb-1">Particulars (what for / from whom / to whom)</label>
-                    <input id="emTitle2" type="text" placeholder="e.g. Electricity bill for September" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    <label id="emTitleLabel" class="block text-xs font-medium text-slate-700 mb-1">Particulars (what for / from whom / to whom)</label>
+                    <input id="emTitle2" list="partyNames" type="text" placeholder="e.g. Electricity bill for September" class="w-full border rounded-lg p-2.5 text-sm outline-none"><datalist id="partyNames"></datalist>
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
@@ -309,6 +331,8 @@ const WALLETS = {
 let INCOME_HEADS  = ['Admission / Registration Fee', 'Annual Fund', 'Book Store Sale', 'Uniform / Stationery Sale', 'Transport Fee', 'Donation', 'Other Income'];
 let EXPENSE_HEADS = ['Salaries', 'Utility Bills', 'Rent', 'Stationery', 'Repair & Maintenance', 'Fuel / Transport', 'Events / Functions', 'Books Purchase', 'Printing', 'Internet / Phone', 'Refreshments', 'Misc Expense'];
 const KIND_META = {
+    bill_raised: { label: 'Bill Raised', prefix: 'AR-', cls: 'bg-teal-50 text-teal-700 border-teal-200', title: 'Bill Raised (Accounts Receivable)' },
+    bill_received: { label: 'Bill Received', prefix: 'AP-', cls: 'bg-orange-50 text-orange-700 border-orange-200', title: 'Bill Received (Accounts Payable)' },
     receipt:  { label: 'Receipt',  prefix: 'RV-', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', title: 'Receipt Voucher' },
     payment:  { label: 'Payment',  prefix: 'PV-', cls: 'bg-rose-50 text-rose-700 border-rose-200',          title: 'Payment Voucher' },
     transfer: { label: 'Transfer', prefix: 'TV-', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200',    title: 'Transfer Voucher' },
@@ -387,7 +411,19 @@ function normalize(row, idx) {
     const up = id.toUpperCase();
     let e = { id, idx, date: String(row.date || '').slice(0, 10), raw: row, notes: rem, legacy: false, isFee: false, manual: false, wallet2: null, fee: null };
 
-    if(up.startsWith('TV-')) {
+    const mb = up.match(/^(AR|AP)-\d+$/), ms = up.match(/^((?:AR|AP|BK)-\d+)-/);
+
+    if(mb) {
+
+        Object.assign(e, { kind: mb[1] === 'AR' ? 'bill_raised' : 'bill_received', wallet: 'cash', amount: inAmt || outAmt, head: mb[1] === 'AR' ? 'Accounts Receivable' : 'Accounts Payable', title: desc, manual: true });
+
+    } else if(ms) {
+
+        const isIn = inAmt > 0;
+
+        Object.assign(e, { kind: isIn ? 'receipt' : 'payment', wallet: normWallet(isIn ? to : from), amount: inAmt || outAmt, head: isIn ? 'Accounts Receivable' : 'Accounts Payable', title: desc, manual: true, billRef: ms[1] });
+
+    } else if(up.startsWith('TV-')) {
         Object.assign(e, { kind: 'transfer', wallet: normWallet(from), wallet2: normWallet(to), amount: inAmt || outAmt, head: 'Transfer', title: desc, manual: true });
     } else if(up.startsWith('OB-')) {
         Object.assign(e, { kind: 'opening', wallet: normWallet(to), amount: inAmt || outAmt, head: 'Opening Balance', title: desc || 'Opening Balance', manual: true });
@@ -416,7 +452,7 @@ function normalize(row, idx) {
             if(fv) { e.fee.cls = fv.class || ''; e.fee.adm = fv.admis_no || ''; if(!e.fee.student) e.fee.student = fv.student_name || ''; }
         }
     }
-    e.ref = e.isFee ? shortId(id) : id;
+    e.ref = e.isFee ? shortId(id) : (e.billRef || id);
     e.headLabel = e.isFee ? 'Fee – ' + titleCase((e.fee && e.fee.type) || 'Tuition Fee') : e.head;
     return e;
 }
@@ -424,7 +460,7 @@ function normalize(row, idx) {
 async function initAccounts() {
     _bd = null;
     showLoading('Loading accounts...');
-    try { const L = await loadSettingLists(); INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD); } catch (e) { console.error(e); }
+    try { const L = await loadSettingLists(); INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD); if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable'); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable'); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD); } catch (e) { console.error(e); }
     let c = getSupabaseConfig();
     try {
         let [aRes, fRes] = await Promise.all([
@@ -435,8 +471,9 @@ async function initAccounts() {
         feesByVoucher = {};
         (Array.isArray(fees) ? fees : []).forEach(f => { feesByVoucher[String(f.voucher_id || '').trim()] = f; });
         if(!Array.isArray(acc)) throw new Error('accounts failed to load');
-        entries = acc.map(normalize);
-        entryById = {}; entries.forEach(e => entryById[e.id] = e);
+        const allE = acc.map(normalize); entryById = {}; allE.forEach(e => entryById[e.id] = e);
+        billEntries = allE.filter(e => e.kind === 'bill_raised' || e.kind === 'bill_received');
+        entries = allE.filter(e => e.kind !== 'bill_raised' && e.kind !== 'bill_received');
         if(!$('gFrom').value) applyPreset();
         renderAll();
     } catch (e) {
@@ -485,16 +522,16 @@ function scopeList() {
 //  TABS + RENDER
 // ====================================================================================
 function showTab(t) {
-    ['overview', 'daybook', 'fees', 'heads', 'wallets'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    ['overview', 'daybook', 'fees', 'heads', 'wallets', 'dues'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
-    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank' };
+    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable' };
     let r = getRange();
     $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;
 }
 function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
 
 function renderAll() {
-    renderOverview(); renderDaybook(); renderFeeTab(); renderHeads(); renderWallets();
+    renderOverview(); renderDaybook(); renderFeeTab(); renderHeads(); renderWallets(); renderDues();
     showTab(currentTab());
 }
 
@@ -721,12 +758,14 @@ function genVoucherNo(kind) {
 }
 function setEntryKind(kind) {
     entryKind = kind; setTimeout(updateDuesPicker, 0);
-    let tabs = ['receipt', 'payment', 'transfer', 'opening'];
+    let tabs = ['receipt', 'payment', 'bill_raised', 'bill_received', 'transfer', 'opening'];
     $('emTypeTabs').innerHTML = tabs.map(k => `<button type="button" ${editingId ? 'disabled' : ''} onclick="setEntryKind('${k}')" class="py-2 rounded-lg border ${k === kind ? 'tab-on' : 'tab-off'} ${editingId && k !== kind ? 'opacity-40' : ''}">${KIND_META[k].label}</button>`).join('');
     $('emTitle').innerText = (editingId ? 'Edit ' : 'New ') + KIND_META[kind].title;
-    $('emSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + (kind === 'payment' ? 'bg-rose-600 hover:bg-rose-700' : (kind === 'transfer' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'));
-    let isT = kind === 'transfer', isO = kind === 'opening';
-    $('emHeadWrap').classList.toggle('hidden', isT || isO);
+    $('emSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + ((kind === 'payment' || kind === 'bill_received') ? 'bg-rose-600 hover:bg-rose-700' : (kind === 'transfer' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'));
+    let isT = kind === 'transfer', isO = kind === 'opening', isB = kind === 'bill_raised' || kind === 'bill_received';
+ $('emWalletWrap').classList.toggle('hidden', isB);
+ $('emTitleLabel').innerText = isB ? 'Party name (student / vendor / customer)' : 'Particulars (what for / from whom / to whom)';
+    $('emHeadWrap').classList.toggle('hidden', isT || isO || isB);
     $('emWallet2Wrap').classList.toggle('hidden', !isT);
     $('emTitleWrap').classList.toggle('hidden', isO);
     $('emWalletLabel').innerText = isT ? 'From account' : (kind === 'payment' ? 'Paid from account' : (kind === 'receipt' ? 'Received in account' : 'Account'));
@@ -735,32 +774,104 @@ function setEntryKind(kind) {
     if(!editingId) $('emVoucherNo').innerText = 'Voucher no: ' + (editingId || 'auto');
 }
 let _bd = null;
+
+
+
+// ====================================================================================
+// ACCOUNTS RECEIVABLE / PAYABLE: bills (AR-/AP- or Book Store BK-) are settled with receipts / payments
+// that carry the SAME voucher number as the bill (e.g. BK-123456-1234567) until the bill is cleared.
+// ====================================================================================
+let billEntries = [];
 async function ensureBookDues() {
     if(_bd) return _bd;
+    const accRaw = Object.values(entryById).map(e => e.raw);
     try {
         const r = await sbFetchAll('books', 'select=*'); const rows = r.ok ? await r.json() : [];
-        _bd = computeBookDues((Array.isArray(rows) ? rows : []).map(normBookRow), Object.values(entryById).map(e => e.raw));
-    } catch (e) { console.error(e); _bd = []; }
+        _bd = computeDues((Array.isArray(rows) ? rows : []).map(normBookRow), accRaw);
+    } catch (e) { console.error(e); _bd = computeDues([], accRaw); }
     return _bd;
 }
+const isRecvHead = h => [partyKey('Accounts Receivable'), partyKey(BOOK_SALE_HEAD)].includes(partyKey(h));
+const isPayHead = h => [partyKey('Accounts Payable'), partyKey(BOOK_BUY_HEAD)].includes(partyKey(h));
+let duesSide = null;     // 'recv' | 'pay' while the pending-bills picker is active
 async function updateDuesPicker() {
-    const wrap = $('emPartyWrap'); if(!wrap) return;
-    const h = partyKey($('emHead').value);
-    const isR = entryKind === 'receipt' && h === partyKey(BOOK_SALE_HEAD), isP = entryKind === 'payment' && h === partyKey(BOOK_BUY_HEAD);
-    if(editingId || !(isR || isP)) { wrap.classList.add('hidden'); return; }
-    wrap.classList.remove('hidden');
-    $('emPartyLabel').innerText = isR ? 'Student / customer with a pending amount (Book Store)' : 'Vendor with a pending amount (Book Store)';
+    const wrap = $('emPartyWrap'), bw = $('emBillsWrap'); if(!wrap) return;
+    const isR = entryKind === 'receipt' && isRecvHead($('emHead').value), isP = entryKind === 'payment' && isPayHead($('emHead').value);
+    duesSide = (!editingId && (isR || isP)) ? (isR ? 'recv' : 'pay') : null;
+    wrap.classList.toggle('hidden', !duesSide); bw.classList.add('hidden'); $('emBills').innerHTML = '';
+    if(!duesSide) return;
+    $('emPartyLabel').innerText = duesSide === 'recv' ? 'Student / customer with pending bills' : 'Vendor / party with pending bills';
     $('emParty').innerHTML = '<option value="">Loading...</option>';
-    const pend = p => isR ? p.recv.pending : p.pay.pending;
-    const list = (await ensureBookDues()).filter(p => pend(p) > 0.005).sort((x, y) => pend(y) - pend(x));
-    $('emParty').innerHTML = list.length ? '<option value="">- choose -</option>' + list.map(p => `<option value="${esc(p.name)}">${esc(p.name)} - pending PKR ${fmt(pend(p))}</option>`).join('') : '<option value="">No pending amounts</option>';
+    const pend = p => p[duesSide].pending;
+    const list = (await ensureBookDues()).filter(p => pend(p) > 0.005).sort((a, b) => pend(b) - pend(a));
+    $('emParty').innerHTML = list.length ? '<option value="">- choose -</option>' + list.map(p => `<option value="${esc(p.key)}">${esc(p.name)} - pending PKR ${fmt(pend(p))}</option>`).join('') : '<option value="">No pending bills</option>';
 }
+function dueBills() { const d = (_bd || []).find(x => x.key === $('emParty').value); return d ? (duesSide === 'recv' ? d.recvE : d.payE).filter(e => e.rem > 0.005) : []; }
 function pickDuesParty() {
-    const v = $('emParty').value; if(!v) return;
-    $('emTitle2').value = v;
-    const p = (_bd || []).find(x => x.name === v);
-    if(p && !$('emAmount').value) $('emAmount').value = entryKind === 'receipt' ? p.recv.pending : p.pay.pending;
+    const bills = dueBills();
+    $('emBillsWrap').classList.toggle('hidden', !bills.length);
+    $('emBills').innerHTML = bills.map((b, i) => `<label class="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"><input type="checkbox" class="bill-cb" data-i="${i}" checked onchange="billTick()"><span class="font-mono text-indigo-900">${esc(b.voucher)}</span><span class="flex-1 truncate">${fmtDate(b.date)} - ${esc(b.title || (b.src === 'acct' ? 'Bill' : 'Book Store'))}</span><b class="text-rose-600">${fmt(b.rem)}</b></label>`).join('');
+    billTick();
 }
+function billTick() {
+    const bills = dueBills(); let sum = 0;
+    document.querySelectorAll('.bill-cb').forEach(cb => { if(cb.checked && bills[+cb.dataset.i]) sum += bills[+cb.dataset.i].rem; });
+    $('emAmount').value = Math.round(sum * 100) / 100 || '';
+    const d = (_bd || []).find(x => x.key === $('emParty').value); if(d) $('emTitle2').value = d.name;
+}
+async function saveAgainstBills(kind, date, amount, w, notes) {
+    const d = (_bd || []).find(x => x.key === $('emParty').value);
+    if(!d) { toast('Please choose the party first.', false); return; }
+    const bills = dueBills(), ticked = [...document.querySelectorAll('.bill-cb')].filter(cb => cb.checked).map(cb => bills[+cb.dataset.i]).filter(Boolean);
+    if(!ticked.length) { toast('Tick at least one bill to settle.', false); return; }
+    const cap = ticked.reduce((s, b) => s + b.rem, 0);
+    if(amount > cap + 0.005) { toast(`The amount is more than the ticked bills (PKR ${fmt(cap)}).`, false); return; }
+    let left = amount; const stamp = String(Date.now()).slice(-7), rows = [];
+    ticked.sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach((b, i) => {
+        if(left <= 0.004) return;
+        const a = Math.round(Math.min(left, b.rem) * 100) / 100; left = Math.round((left - a) * 100) / 100;
+        const vid = `${b.voucher}-${stamp}${i}`, rem = `Against ${b.voucher}` + (notes ? ' | ' + notes : '');
+        rows.push(kind === 'receipt' ? { voucher_id: vid, from_account: 'Accounts Receivable', to_account: w, description: d.name, amount_in: a, amount_out: 0, date, remarks: rem }
+                                     : { voucher_id: vid, from_account: w, to_account: 'Accounts Payable', description: d.name, amount_in: 0, amount_out: a, date, remarks: rem });
+    });
+    showLoading('Saving...');
+    try {
+        const c = getSupabaseConfig();
+        const res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(rows) });
+        if(!res.ok) { const t = await res.text(); hideLoading(); toast('Could not save: ' + t, false); return; }
+        closeEntry(); toast(`${kind === 'receipt' ? 'Received' : 'Paid'} PKR ${fmt(amount)} against ${rows.map(r => r.voucher_id.split('-').slice(0, 2).join('-')).join(', ')}.`);
+        await initAccounts();
+    } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
+}
+async function startSettle(kind, key) {
+    openEntry(kind);
+    $('emHead').value = kind === 'receipt' ? 'Accounts Receivable' : 'Accounts Payable';
+    await updateDuesPicker();
+    $('emParty').value = key; pickDuesParty();
+}
+async function renderDues() {
+    if(!$('duesBody')) return;
+    const list = await ensureBookDues(), q = ($('duesSearch').value || '').trim().toLowerCase();
+    const sumP = k => list.reduce((s, p) => s + Math.max(p[k].pending, 0), 0);
+    const open = list.filter(p => p.recv.pending > 0.005 || p.pay.pending > 0.005);
+    $('duesCards').innerHTML = [['To receive (Accounts Receivable)', 'PKR ' + fmt(sumP('recv')), 'text-emerald-700'], ['To pay (Accounts Payable)', 'PKR ' + fmt(sumP('pay')), 'text-rose-600'], ['Parties with pending bills', open.length, 'text-indigo-900']]
+        .map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c[0]}</div><div class="text-xl font-extrabold ${c[2]} mt-1">${c[1]}</div></div>`).join('');
+    const rows = open.filter(p => !q || p.name.toLowerCase().includes(q)).sort((a, b) => (b.recv.pending + b.pay.pending) - (a.recv.pending + a.pay.pending));
+    const chips = p => [...p.recvE, ...p.payE].filter(e => e.rem > 0.005).map(e => `<span class="inline-block mr-1 mb-1 px-1.5 py-0.5 rounded border bg-slate-50 font-mono text-[10px]">${esc(e.voucher)} ${fmt(e.rem)}</span>`).join('');
+    $('duesBody').innerHTML = rows.length ? rows.map(p => {
+        const oldest = [...p.recvE, ...p.payE].filter(e => e.rem > 0.005).map(e => e.date).sort()[0];
+        return `<tr class="border-b hover:bg-slate-50 align-top"><td class="p-2.5 font-semibold text-slate-800">${esc(p.name)}<div class="mt-1 font-normal">${chips(p)}</div></td>
+        <td class="p-2.5 text-right font-bold ${p.recv.pending > 0.005 ? 'text-emerald-700' : 'text-slate-300'}">${p.recv.pending > 0.005 ? 'PKR ' + fmt(p.recv.pending) : '-'}</td>
+        <td class="p-2.5 text-right font-bold ${p.pay.pending > 0.005 ? 'text-rose-600' : 'text-slate-300'}">${p.pay.pending > 0.005 ? 'PKR ' + fmt(p.pay.pending) : '-'}</td>
+        <td class="p-2.5 text-slate-500 whitespace-nowrap">${fmtDate(oldest)}</td>
+        <td class="p-2.5 no-print" data-k="${esc(p.key)}">${p.recv.pending > 0.005 ? `<button onclick="startSettle('receipt', this.parentNode.dataset.k)" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold mr-1">Receive</button>` : ''}${p.pay.pending > 0.005 ? `<button onclick="startSettle('payment', this.parentNode.dataset.k)" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded font-semibold">Pay</button>` : ''}</td></tr>`;
+    }).join('') : '<tr><td colspan="5" class="p-8 text-center text-slate-400">No pending bills.</td></tr>';
+    const remOf = {}; list.forEach(p => [...p.recvE, ...p.payE].forEach(e => { remOf[String(e.voucher).toUpperCase()] = e.rem; }));
+    const bl = [...billEntries].sort((a, b) => b.date.localeCompare(a.date));
+    $('billsBody').innerHTML = bl.length ? bl.map(e => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-mono text-indigo-900">${esc(e.id)}</td><td class="p-2.5 whitespace-nowrap">${fmtDate(e.date)}</td><td class="p-2.5"><span class="px-2 py-0.5 rounded-md border ${KIND_META[e.kind].cls}">${KIND_META[e.kind].label}</span></td><td class="p-2.5">${esc(e.title)}${e.notes ? `<div class="text-[11px] text-slate-400">${esc(e.notes)}</div>` : ''}</td><td class="p-2.5 text-right font-bold">PKR ${fmt(e.amount)}</td><td class="p-2.5 text-right font-bold ${remOf[e.id.toUpperCase()] > 0.005 ? 'text-rose-600' : 'text-emerald-600'}">${remOf[e.id.toUpperCase()] > 0.005 ? 'PKR ' + fmt(remOf[e.id.toUpperCase()]) : 'Cleared'}</td><td class="p-2.5 no-print whitespace-nowrap"><button onclick="editEntry('${esc(e.id)}')" class="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-semibold mr-1">Edit</button><button onclick="deleteEntry('${esc(e.id)}')" class="text-[11px] bg-rose-50 text-rose-700 px-2 py-1 rounded font-semibold">Delete</button></td></tr>`).join('')
+        : '<tr><td colspan="7" class="p-6 text-center text-slate-400">No bills created here yet. Use "Bill Raised" or "Bill Received".</td></tr>';
+}
+
 function openEntry(kind) {
     editingId = null;
     $('emDate').value = todayStr(); $('emAmount').value = ''; $('emHead').value = ''; $('emTitle2').value = ''; $('emNotes').value = '';
@@ -788,6 +899,8 @@ async function saveEntry() {
     let w = $('emWallet').value, w2 = $('emWallet2').value;
     if(!date) { toast('Please enter a date.', false); return; }
     if(amount <= 0) { toast('Amount must be greater than 0.', false); return; }
+ if(duesSide && !editingId && (kind === 'receipt' || kind === 'payment')) { await saveAgainstBills(kind, date, amount, w, notes); return; }
+ if((kind === 'bill_raised' || kind === 'bill_received') && !title) { toast('Please enter the party name.', false); return; }
     if((kind === 'receipt' || kind === 'payment') && !head) { toast('Please enter or select a head (category).', false); return; }
     if(kind === 'transfer' && w === w2) { toast('From and To accounts must be different.', false); return; }
 
@@ -798,7 +911,9 @@ async function saveEntry() {
     let payload;
     if(kind === 'receipt')       payload = { voucher_id: id, from_account: head, to_account: w, description: title || head, amount_in: amount, amount_out: 0, date, remarks: notes };
     else if(kind === 'payment')  payload = { voucher_id: id, from_account: w, to_account: head, description: title || head, amount_in: 0, amount_out: amount, date, remarks: notes };
-    else if(kind === 'transfer') payload = { voucher_id: id, from_account: w, to_account: w2, description: title || 'Account transfer', amount_in: amount, amount_out: amount, date, remarks: notes };
+    else if(kind === 'bill_raised') payload = { voucher_id: id, from_account: 'Accounts Receivable', to_account: 'Bill', description: title, amount_in: amount, amount_out: 0, date, remarks: notes };
+ else if(kind === 'bill_received') payload = { voucher_id: id, from_account: 'Bill', to_account: 'Accounts Payable', description: title, amount_in: 0, amount_out: amount, date, remarks: notes };
+ else if(kind === 'transfer') payload = { voucher_id: id, from_account: w, to_account: w2, description: title || 'Account transfer', amount_in: amount, amount_out: amount, date, remarks: notes };
     else                         payload = { voucher_id: id, from_account: 'Opening Balance', to_account: w, description: 'Opening Balance', amount_in: amount, amount_out: 0, date, remarks: notes };
 
     showLoading('Saving...');
@@ -821,6 +936,7 @@ async function saveEntry() {
 // ====================================================================================
 function deleteEntry(id) {
     let e = entryById[id]; if(!e) return;
+ if(e.kind === 'bill_raised' || e.kind === 'bill_received') { const n = entries.filter(x => x.billRef === e.id).length; if(n) { toast(`This bill has ${n} receipt/payment entr${n > 1 ? 'ies' : 'y'}. Delete those first.`, false); return; } }
     let msg = e.isFee
         ? `This is a fee payment for ${e.fee.student || 'a student'} (PKR ${fmt(e.amount)}, ${e.fee.period || ''}).\n\nDeleting it will reopen the balance on the Fee Vouchers page.\n\nDelete it?`
         : `${KIND_META[e.kind].label} voucher ${e.id} (PKR ${fmt(e.amount)}) will be permanently deleted. Delete it?`;
