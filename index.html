@@ -90,11 +90,12 @@ async function initDashboard() {
             ['Collected today', 'PKR ' + fmt(today$), 'text-emerald-600', 'fee receipts'],
             ['Collected this month', 'PKR ' + fmt(month$), 'text-emerald-700', 'fee receipts']
         ];
-        const dues = computeBookDues((Array.isArray(bookRows) ? bookRows : []).map(normBookRow), acc), prom = parsePromises(Array.isArray(promRows) ? promRows : []);
+        const nbr = (Array.isArray(bookRows) ? bookRows : []).map(normBookRow), dues = computeDues(nbr, acc), bdues = computeBookDues(nbr, acc), prom = parsePromises(Array.isArray(promRows) ? promRows : []);
         const recv = dues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), pay = dues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
         const overdue = dues.filter(p => (p.recv.pending > 0.005 || p.pay.pending > 0.005) && prom[p.key] && prom[p.key].d < today).length;
-        cards.push(['Book Store: to receive', 'PKR ' + fmt(recv), 'text-emerald-700', `${dues.filter(p => p.recv.pending > 0.005).length} students` + (overdue ? ` · ${overdue} promise(s) overdue` : '')]);
-        cards.push(['Book Store: to pay', 'PKR ' + fmt(pay), 'text-rose-600', `${dues.filter(p => p.pay.pending > 0.005).length} vendors`]);
+        const brecv = bdues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), bpay = bdues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
+        cards.push(['Receivable (to receive)', 'PKR ' + fmt(recv), 'text-emerald-700', `${dues.filter(p => p.recv.pending > 0.005).length} parties · Book Store PKR ${fmt(brecv)}` + (overdue ? ` · ${overdue} promise(s) overdue` : '')]);
+        cards.push(['Payable (to pay)', 'PKR ' + fmt(pay), 'text-rose-600', `${dues.filter(p => p.pay.pending > 0.005).length} parties · Book Store PKR ${fmt(bpay)}`]);
         $('cards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"><div class="text-xs text-slate-500 font-semibold">${c[0]}</div><div class="text-lg md:text-2xl font-extrabold ${c[2]} mt-1">${c[1]}</div><div class="text-[11px] text-slate-400 mt-0.5">${c[3]}</div></div>`).join('');
         const rows = Object.entries(byClass).sort((a, b) => b[1] - a[1]), max = rows.length ? rows[0][1] : 1;
         $('classRows').innerHTML = rows.length ? rows.map(([c, v]) => `<div><div class="flex justify-between text-xs mb-0.5"><span class="font-semibold">${esc(c)}</span><span class="text-rose-600 font-bold">PKR ${fmt(v)}</span></div><div class="h-2 bg-slate-100 rounded"><div class="h-2 bg-rose-400 rounded" style="width:${Math.max(3, v / max * 100)}%"></div></div></div>`).join('') : '<p class="text-sm text-emerald-600">No pending dues. 🎉</p>';
