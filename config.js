@@ -91,38 +91,59 @@ function normBookRow(row) {
     return { kind, party: String(row.party_name ?? row.party ?? '').trim(), net: parseFloat(row.net_amount ?? row.amount) || 0, voucher: String(row.voucher_no ?? '').trim(),
         notes: String(row.notes ?? '').trim(), date: String(row.date ?? '').slice(0, 10), title: String(row.book ?? row.book_title ?? row.title ?? '').trim(), qty: parseFloat(row.qty) || 0 };
 }
-function computeBookDues(txs, accRows) {
-    const P = {};
+function computeDues(txs, accRows, opts) {
+    opts = opts || {};
+    const P = {}, bills = {}, rows = accRows || [];
     const get = name => { const k = partyKey(name); return P[k] || (P[k] = { key: k, name: String(name).trim(), recvE: [], payE: [], recvS: [], payS: [] }); };
-    (txs || []).forEach(t => {
+    (txs || []).forEach(t => {                                   // Book Store sales / purchases that were NOT recorded in Accounts
         if (!t.party) return;
         const v = String(t.voucher || '').toUpperCase();
-        if (!v || v.startsWith('RV-') || v.startsWith('PV-') || v.startsWith('BK-IMP') || /^imported/i.test(t.notes || '')) return;   // paid at once / opening stock
-        const p = get(t.party), e = { date: t.date, amt: t.net, voucher: t.voucher, title: t.title, qty: t.qty };
-        if (t.kind === 'sale') p.recvE.push(e);
-        else if (t.kind === 'purchase') p.payE.push(e);
-        else if (t.kind === 'sale_return') p.recvS.push({ date: t.date, amt: t.net, voucher: t.voucher, label: 'Sale return' });
-        else if (t.kind === 'purchase_return') p.payS.push({ date: t.date, amt: t.net, voucher: t.voucher, label: 'Purchase return' });
+        if (!v || v.startsWith('RV-') || v.startsWith('PV-') || v.startsWith('BK-IMP') || /^imported/i.test(t.notes || '')) return;
+        const p = get(t.party);
+        if (t.kind === 'sale' || t.kind === 'purchase') {
+            const e = { date: t.date, amt: t.net, voucher: t.voucher, title: t.title, qty: t.qty, src: 'book', paid: 0, pk: p.key, side: t.kind === 'sale' ? 'recv' : 'pay' };
+            (t.kind === 'sale' ? p.recvE : p.payE).push(e); bills[v] = e;
+        } else if (t.kind === 'sale_return') p.recvS.push({ date: t.date, amt: t.net, voucher: t.voucher, label: 'Sale return', pool: true });
+        else if (t.kind === 'purchase_return') p.payS.push({ date: t.date, amt: t.net, voucher: t.voucher, label: 'Purchase return', pool: true });
     });
-    (accRows || []).forEach(r => {
-        const p = P[partyKey(r.description)]; if (!p) return;
-        const v = String(r.voucher_id || '').toUpperCase(), d = String(r.date || '').slice(0, 10), inA = parseFloat(r.amount_in) || 0, outA = parseFloat(r.amount_out) || 0;
-        if (v.startsWith('RV-') && partyKey(r.from_account) === partyKey(BOOK_SALE_HEAD) && inA > 0) p.recvS.push({ date: d, amt: inA, voucher: r.voucher_id, label: 'Receipt' });
-        else if (v.startsWith('PV-') && partyKey(r.to_account) === partyKey(BOOK_BUY_HEAD) && outA > 0) p.payS.push({ date: d, amt: outA, voucher: r.voucher_id, label: 'Payment' });
+    if (!opts.bookOnly) rows.forEach(r => {                      // bills raised (AR-) / received (AP-) in Accounts
+        const v = String(r.voucher_id || '').trim().toUpperCase(), m = v.match(/^(AR|AP)-\d+$/);
+        if (!m || !r.description) return;
+        const recv = m[1] === 'AR', amt = parseFloat(recv ? r.amount_in : r.amount_out) || 0;
+        if (amt <= 0) return;
+        const p = get(r.description), e = { date: String(r.date || '').slice(0, 10), amt, voucher: v, title: String(r.remarks || '').trim(), qty: 0, src: 'acct', paid: 0, pk: p.key, side: recv ? 'recv' : 'pay' };
+        (recv ? p.recvE : p.payE).push(e); bills[v] = e;
+    });
+    rows.forEach(r => {                                          // settlements: they carry the bill voucher (BK-123456-xxxx)
+        const vid = String(r.voucher_id || '').trim(), up = vid.toUpperCase(), d = String(r.date || '').slice(0, 10);
+        const inA = parseFloat(r.amount_in) || 0, outA = parseFloat(r.amount_out) || 0, ref = up.match(/^((?:AR|AP|BK)-\d+)-/);
+        if (ref) {
+            const b = bills[ref[1]]; if (!b) return;
+            const amt = b.side === 'recv' ? inA : outA; if (amt <= 0) return;
+            b.paid += amt;
+            P[b.pk][b.side === 'recv' ? 'recvS' : 'payS'].push({ date: d, amt, voucher: vid, bill: b.voucher, label: b.side === 'recv' ? 'Receipt' : 'Payment' });
+            return;
+        }
+        const p = P[partyKey(r.description)]; if (!p) return;     // older receipts / payments matched by party name
+        if (up.startsWith('RV-') && partyKey(r.from_account) === partyKey(BOOK_SALE_HEAD) && inA > 0) p.recvS.push({ date: d, amt: inA, voucher: vid, label: 'Receipt', pool: true });
+        else if (up.startsWith('PV-') && partyKey(r.to_account) === partyKey(BOOK_BUY_HEAD) && outA > 0) p.payS.push({ date: d, amt: outA, voucher: vid, label: 'Payment', pool: true });
     });
     const byDate = (a, b) => (a.date || '').localeCompare(b.date || '') || String(a.voucher).localeCompare(String(b.voucher));
-    const fifo = (E, S) => {
+    const r2 = n => Math.round(n * 100) / 100;
+    const side = (E, S) => {
         E.sort(byDate); S.sort(byDate);
-        const settled = S.reduce((s, x) => s + x.amt, 0), total = E.reduce((s, x) => s + x.amt, 0); let pool = settled;
-        E.forEach(e => { const use = Math.min(pool, e.amt); e.paid = Math.round(use * 100) / 100; e.rem = Math.round((e.amt - use) * 100) / 100; pool -= use; });
-        return { total: Math.round(total * 100) / 100, settled: Math.round(settled * 100) / 100, pending: Math.round((total - settled) * 100) / 100 };
+        let pool = S.filter(x => x.pool).reduce((t, x) => t + x.amt, 0);
+        E.forEach(e => { const rem0 = Math.max(0, e.amt - e.paid), use = Math.min(pool, rem0); pool -= use; e.rem = r2(rem0 - use); e.paid = r2(e.amt - e.rem); });
+        const total = E.reduce((t, e) => t + e.amt, 0), settled = S.reduce((t, x) => t + x.amt, 0);
+        return { total: r2(total), settled: r2(settled), pending: r2(total - settled) };
     };
     return Object.values(P).filter(p => p.recvE.length || p.payE.length).map(p => {
-        p.recv = fifo(p.recvE, p.recvS); p.pay = fifo(p.payE, p.payS);
+        p.recv = side(p.recvE, p.recvS); p.pay = side(p.payE, p.payS);
         p.last = [...p.recvE, ...p.payE, ...p.recvS, ...p.payS].reduce((m, x) => ((x.date || '') > m ? x.date : m), '');
         return p;
     });
 }
+const computeBookDues = (txs, accRows) => computeDues(txs, accRows, { bookOnly: true });
 // latest promise-to-pay per party, stored in the settings table (key "Book Promise")
 function parsePromises(rows) {
     const out = {};
