@@ -863,7 +863,7 @@ async function saveTx(addAnother) { if(!colsOk()) return;
                 if(!r2.ok) console.error(await r2.text());
             }
             { const pn = Math.min(parseFloat($('mPaidNow').value) || 0, payload.net_amount);
- if(!postAcc && hasExt && pn > 0 && party && (kind === 'sale' || kind === 'purchase')) { const ok = await postDuesEntry(kind === 'sale' ? 'recv' : 'pay', party, pn, date, wallet, 'Paid at ' + (kind === 'sale' ? 'sale' : 'purchase')); accNote = ok ? ` (PKR ${fmt(pn)} paid now, the rest is pending)` : ' - but the paid-now amount could NOT be recorded in Accounts'; } }
+ if(!postAcc && hasExt && pn > 0 && party && (kind === 'sale' || kind === 'purchase')) { const ok = await postDuesEntry(kind === 'sale' ? 'recv' : 'pay', party, pn, date, wallet, 'Paid at ' + (kind === 'sale' ? 'sale' : 'purchase'), [{ voucher, rem: payload.net_amount }]); accNote = ok ? ` (PKR ${fmt(pn)} paid now, the rest is pending)` : ' - but the paid-now amount could NOT be recorded in Accounts'; } }
             lastSaved = { kind, party, date };
             toast(`${meta.label} saved${accNote}.`, !accNote.includes('NOT'));
             await initBooks();
@@ -965,7 +965,7 @@ async function saveStudentSale() {
             if(!r1.ok) { hideLoading(); toast(errMsg('Could not save: ' + await r1.text()), false); return; }
             let note = '';
             if(acc.length) { const r2 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify(acc) }); note = r2.ok ? ' and recorded in Accounts' : ' - but it could NOT be recorded in Accounts (add it manually)'; }
-            { const pn = Math.min(parseFloat($('ssPaidNow').value) || 0, T.net); if(!post && pn > 0) { const ok = await postDuesEntry('recv', who, pn, date, wallet, 'Paid at sale ' + bill); note = ok ? ` (PKR ${fmt(pn)} paid now, the rest is pending)` : ' - but the paid-now amount could NOT be recorded'; } }
+            { const pn = Math.min(parseFloat($('ssPaidNow').value) || 0, T.net); if(!post && pn > 0) { const ok = await postDuesEntry('recv', who, pn, date, wallet, 'Paid at sale ' + bill, rows.map(rw => ({ voucher: rw.voucher_no, rem: rw.net_amount }))); note = ok ? ` (PKR ${fmt(pn)} paid now, the rest is pending)` : ' - but the paid-now amount could NOT be recorded'; } }
             toast(`Sale saved (${rows.length} items, PKR ${fmt(T.net)})${note}.`, !note.includes('NOT'));
             closeSS(); await initBooks();
         } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
@@ -1124,17 +1124,25 @@ function recomputeDues() {
     bookDues = computeBookDues(txs, accRows);
     bookDuesMap = {}; bookDues.forEach(p => { bookDuesMap[p.key] = p; });
 }
-async function postDuesEntry(kind, partyName, amt, date, wallet, notes) {
-    const used = new Set(accRows.map(r => String(r.voucher_id || '').toUpperCase()));
-    let id; do { id = (kind === 'recv' ? 'RV-' : 'PV-') + Math.floor(100000 + Math.random() * 900000); } while(used.has(id));
-    const row = kind === 'recv'
-        ? { voucher_id: id, from_account: BOOK_SALE_HEAD, to_account: wallet, description: partyName, amount_in: amt, amount_out: 0, date, remarks: notes || '' }
-        : { voucher_id: id, from_account: wallet, to_account: BOOK_BUY_HEAD, description: partyName, amount_in: 0, amount_out: amt, date, remarks: notes || '' };
+async function postDuesEntry(kind, partyName, amt, date, wallet, notes, bills) {
+    // Settlement rows carry the voucher number of the bill they clear (BK-123456-xxxxxxx), oldest bill first
+    if(!bills) { const d = bookDuesMap[partyKey(partyName)]; bills = d ? (kind === 'recv' ? d.recvE : d.payE).filter(e => e.rem > 0.005) : []; }
+    bills = bills.slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+    let left = amt; const stamp = String(Date.now()).slice(-7), rows = [];
+    bills.forEach((bl, i) => {
+        if(left <= 0.004) return;
+        const a = Math.round(Math.min(left, bl.rem) * 100) / 100; left = Math.round((left - a) * 100) / 100;
+        const vid = `${bl.voucher}-${stamp}${i}`, rem = `Against ${bl.voucher}` + (notes ? ' | ' + notes : '');
+        rows.push(kind === 'recv'
+            ? { voucher_id: vid, from_account: 'Accounts Receivable', to_account: wallet, description: partyName, amount_in: a, amount_out: 0, date, remarks: rem }
+            : { voucher_id: vid, from_account: wallet, to_account: 'Accounts Payable', description: partyName, amount_in: 0, amount_out: a, date, remarks: rem });
+    });
+    if(!rows.length) return false;
     try {
         const c = getSupabaseConfig();
-        const r = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(row) });
+        const r = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(rows) });
         if(!r.ok) { console.error(await r.text()); return false; }
-        accRows.push(row); return true;
+        rows.forEach(x => accRows.push(x)); return true;
     } catch (e) { console.error(e); return false; }
 }
 function openSettle(kind, key) {
@@ -1151,16 +1159,14 @@ async function saveSettle() {
     const amt = parseFloat($('sdAmount').value) || 0, date = $('sdDate').value, side = kind === 'recv' ? p.recv : p.pay;
     if(amt <= 0) { toast('Please enter an amount greater than 0.', false); return; }
     if(!date) { toast('Please select a date.', false); return; }
-    const go = async () => {
-        showLoading('Saving...');
-        const ok = await postDuesEntry(kind, p.name, amt, date, $('sdWallet').value, $('sdNotes').value.trim());
-        if(ok) { await loadDuesData(); }
-        hideLoading();
-        if(!ok) { toast('Could not save the entry in Accounts.', false); return; }
-        $('settleModal').classList.add('hidden'); renderAll();
-        toast(`${kind === 'recv' ? 'Received' : 'Paid'} PKR ${fmt(amt)} - recorded in Accounts.`);
-    };
-    if(amt > side.pending + 0.005) confirmBox(`The amount (PKR ${fmt(amt)}) is more than the pending PKR ${fmt(side.pending)}. The extra is kept as an advance. Continue?`, 'Continue', go); else go();
+    if(amt > side.pending + 0.005) { toast(`The amount is more than the pending PKR ${fmt(side.pending)}.`, false); return; }
+    showLoading('Saving...');
+    const ok = await postDuesEntry(kind, p.name, amt, date, $('sdWallet').value, $('sdNotes').value.trim());
+    if(ok) await loadDuesData();
+    hideLoading();
+    if(!ok) { toast('Could not save the entry in Accounts.', false); return; }
+    $('settleModal').classList.add('hidden'); renderAll();
+    toast(`${kind === 'recv' ? 'Received' : 'Paid'} PKR ${fmt(amt)} against the oldest pending bills and recorded in Accounts.`);
 }
 function openStatement(key) {
     const p = bookDuesMap[key]; if(!p) return;
@@ -1169,7 +1175,7 @@ function openStatement(key) {
         <div class="overflow-x-auto"><table class="w-full text-left text-xs border-collapse"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Item</th><th class="p-2 text-right">Amount</th><th class="p-2 text-right">Cleared</th><th class="p-2 text-right">Remaining</th></tr></thead><tbody>
         ${E.map(e => `<tr class="border-b ${e.rem > 0 ? '' : 'text-slate-400'}"><td class="p-2">${fmtDate(e.date)}</td><td class="p-2 font-mono">${esc(e.voucher)}</td><td class="p-2">${esc(e.title)}${e.qty ? ' x ' + fmt(e.qty) : ''}</td><td class="p-2 text-right">${fmt(e.amt)}</td><td class="p-2 text-right text-emerald-600">${fmt(e.paid)}</td><td class="p-2 text-right font-bold ${e.rem > 0 ? 'text-rose-600' : ''}">${fmt(e.rem)}</td></tr>`).join('')}
         </tbody></table></div>
-        ${S.length ? `<div class="text-xs mt-2 font-semibold text-slate-600">Received / adjusted</div><div class="overflow-x-auto"><table class="w-full text-left text-xs"><tbody>${S.map(x => `<tr class="border-b"><td class="p-1.5">${fmtDate(x.date)}</td><td class="p-1.5 font-mono">${esc(x.voucher)}</td><td class="p-1.5">${esc(x.label)}</td><td class="p-1.5 text-right font-bold text-emerald-600">${fmt(x.amt)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        ${S.length ? `<div class="text-xs mt-2 font-semibold text-slate-600">Received / adjusted</div><div class="overflow-x-auto"><table class="w-full text-left text-xs"><tbody>${S.map(x => `<tr class="border-b"><td class="p-1.5">${fmtDate(x.date)}</td><td class="p-1.5 font-mono">${esc(x.voucher)}</td><td class="p-1.5">${esc(x.label)}${x.bill ? ' (against ' + esc(x.bill) + ')' : ''}</td><td class="p-1.5 text-right font-bold text-emerald-600">${fmt(x.amt)}</td></tr>`).join('')}</tbody></table></div>` : ''}
         <div class="mt-2 text-sm font-bold flex flex-wrap justify-between gap-2 bg-slate-50 rounded-xl p-2"><span>Total: ${fmt(side.total)}</span><span>Cleared: ${fmt(side.settled)}</span><span class="${side.pending > 0 ? 'text-rose-600' : 'text-emerald-600'}">${side.pending >= 0 ? 'Pending' : 'Advance'}: PKR ${fmt(Math.abs(side.pending))}</span></div>`;
     $('stmtName').innerText = p.name;
     $('stmtBody').innerHTML = sec('Amount to receive (sales on credit)', p.recvE, p.recvS, p.recv, 'text-emerald-700') + sec('Amount to pay (purchases on credit)', p.payE, p.payS, p.pay, 'text-indigo-700')
@@ -1355,7 +1361,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeTx(); 
                                 <option value="online">📱 Online / JazzCash</option>
                             </select></div></div>
    <div><label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label><input id="sdNotes" class="w-full border rounded-lg p-2.5 text-sm"></div>
-   <p class="text-xs text-slate-500">It is recorded in Accounts and clears the oldest pending entries first.</p></div>
+   <p class="text-xs text-slate-500">It is recorded in Accounts against the oldest pending bills (same voucher number as the bill).</p></div>
   <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('settleModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="saveSettle()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save</button></div>
  </div></div>
 <div id="stmtModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
