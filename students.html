@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Students Directory</title>
-    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
 </head>
@@ -167,7 +168,20 @@
                             <div><label class="block text-xs font-medium text-slate-700 mb-1">Arrears 2025 (PKR)</label><input type="number" min="0" id="arrears2025" placeholder="0" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
                             <div><label class="block text-xs font-medium text-slate-700 mb-1">Left date</label><input type="date" id="left_date" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
                         </div>
-                        <div class="flex gap-2 pt-2">
+                        <div id="vouchSection" class="border-t pt-2 space-y-2">
+                    <label class="flex items-center gap-2 text-xs font-bold text-indigo-900 uppercase tracking-wider"><input type="checkbox" id="vouchOn" checked> Create unpaid fee vouchers on save</label>
+                    <div id="vouchBody" class="space-y-2">
+                        <div>
+                            <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-slate-700">Tuition fee months (2026)</span>
+                                <span class="text-[10px]"><button type="button" onclick="pickMonths(true)" class="text-indigo-600 underline mr-2">From joining</button><button type="button" onclick="pickMonths(false)" class="text-slate-500 underline">Clear</button></span></div>
+                            <div id="monthChips" class="grid grid-cols-4 gap-1 mt-1"></div>
+                        </div>
+                        <div id="oneTime" class="grid grid-cols-2 gap-1"></div>
+                        <div><label class="block text-[11px] font-semibold text-slate-700 mb-1">Month of the one-time fees</label><select id="oneMonth" class="w-full border rounded-lg p-1.5 text-xs bg-white"></select></div>
+                        <p id="vouchSummary" class="text-[11px] text-slate-500"></p>
+                    </div>
+                </div>
+                <div class="flex gap-2 pt-2">
                             <button type="submit" id="saveBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg transition text-sm">Save Student</button>
                             <button type="button" id="cancelBtn" onclick="resetForm()" class="hidden px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm">Cancel</button>
                         </div>
@@ -253,6 +267,7 @@
             let annFee = parseFloat(document.getElementById('annual_fund').value) || 0;
             let annDisc = parseFloat(document.getElementById('annual_fund_disc').value) || 0;
             document.getElementById('annual_fund_pay').value = Math.max(0, annFee - annDisc);
+            if(typeof refreshVouch === 'function') refreshVouch();
         }
 
         async function fetchStudents() {
@@ -338,6 +353,77 @@
             document.getElementById('totalTuitionFee').innerText = `PKR ${totalFee.toLocaleString()}`;
         }
 
+        // ====================================================================================
+        // UNPAID FEE VOUCHERS CREATED TOGETHER WITH A NEW STUDENT
+        // ====================================================================================
+        const VM = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const OT = [['regCk', 'regritation_fee', 'regritation_disc', 'registration fee', 'Registration fee'], ['admCk', 'admission_fee', 'admission_disc', 'admission fee', 'Admission fee'], ['annCk', 'annual_fund', 'annual_fund_disc', 'annual fund', 'Annual fund'], ['arrCk', 'arrears2025', null, 'arrears', 'Arrears 2025']];
+        let vmSel = Array(12).fill(false), otOn = {};
+        const gv = id => document.getElementById(id);
+        const numOf = id => parseFloat((gv(id) || {}).value) || 0;
+        function dojVal() { const m = String(gv('doj').value || '').match(/^(\d{4})-(\d{2})/); return m ? (+m[1]) * 12 + (+m[2]) : null; }
+        function leftEndVal() { const m = String(gv('left_date').value || '').match(/^(\d{4})-(\d{2})-(\d{2})/); if(gv('status').value === 'Active' || !m) return null; return (+m[1]) * 12 + (+m[2]) - (+m[3] > 15 ? 0 : 1); }
+        function monthOk(i) { const dv = dojVal(); if(dv === null) return false; const v = 2026 * 12 + i + 1, e = leftEndVal(); return v >= dv && (e === null || v <= e); }
+        function resetMonthDefaults() {
+            vmSel = VM.map((_, i) => monthOk(i));
+            const dv = dojVal(); gv('oneMonth').value = dv !== null && Math.floor((dv - 1) / 12) === 2026 ? (dv - 1) % 12 : 0;
+            refreshVouch();
+        }
+        function pickMonths(on) { vmSel = VM.map((_, i) => on && monthOk(i)); refreshVouch(); }
+        function refreshVouch() {
+            if(!gv('vouchSection')) return;
+            gv('vouchBody').classList.toggle('hidden', !gv('vouchOn').checked);
+            gv('monthChips').innerHTML = VM.map((m, i) => { const ok = monthOk(i); return `<label class="flex items-center justify-center gap-1 text-[11px] border rounded p-1 ${ok ? 'bg-white cursor-pointer' : 'opacity-40'}"><input type="checkbox" ${vmSel[i] && ok ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="vmSel[${i}] = this.checked; refreshVouch()">${m.slice(0, 3)}</label>`; }).join('');
+            gv('oneTime').innerHTML = OT.map(o => { const amt = numOf(o[1]), on = otOn[o[0]] !== undefined ? otOn[o[0]] : amt > 0; return `<label class="flex items-center gap-1.5 text-[11px]"><input type="checkbox" id="${o[0]}" ${on ? 'checked' : ''} onchange="otOn['${o[0]}'] = this.checked; refreshVouch()"> ${o[4]} <b>${amt.toLocaleString()}</b></label>`; }).join('');
+            const plan = vouchPlan();
+            gv('vouchSummary').innerText = dojVal() === null ? 'Select the date of joining (DOJ) first.' : (plan.length ? `${plan.length} unpaid voucher(s), total PKR ${plan.reduce((s, r) => s + r.payable - r.discount, 0).toLocaleString()} after discount.` : 'No voucher selected.');
+        }
+        function initVouchSection() {
+            gv('vouchSection').classList.remove('hidden'); gv('vouchOn').checked = true; otOn = {};
+            if(!gv('oneMonth').options.length) gv('oneMonth').innerHTML = VM.map((m, i) => `<option value="${i}">${m} 2026</option>`).join('');
+            resetMonthDefaults();
+        }
+        // the list of vouchers to create from the current form values
+        function vouchPlan() {
+            if(!gv('vouchOn').checked || dojVal() === null) return [];
+            const plan = [], tPay = numOf('monthly_tution_fee'), tDisc = Math.min(numOf('monthly_tution_disc'), tPay), one = VM[+gv('oneMonth').value] + ' 2026';
+            VM.forEach((m, i) => { if(vmSel[i] && monthOk(i) && tPay > 0) plan.push({ type: 'tuition fee', period: m + ' 2026', payable: tPay, discount: tDisc, remarks: tDisc > 0 ? `Discount ${tDisc}: at admission` : '' }); });
+            OT.forEach(o => {
+                const el = gv(o[0]); if(!el || !el.checked) return;
+                const pay = o[0] === 'arrCk' ? (parseFloat(gv('arrears2025').value) || 0) : numOf(o[1]);
+                if(pay <= 0) return;
+                const disc = o[2] ? Math.min(numOf(o[2]), pay) : 0;
+                plan.push(o[0] === 'arrCk' ? { type: 'arrears', period: 'January 2026', payable: pay, discount: 0, remarks: 'Previous year arrears (2025)', arrears: String(pay) }
+                    : { type: o[3], period: one, payable: pay, discount: disc, remarks: disc > 0 ? `Discount ${disc}: at admission` : '' });
+            });
+            return plan;
+        }
+        async function createStudentVouchers(p) {
+            const plan = vouchPlan(); if(!plan.length) return '';
+            const ex = await (await sbFetchAll('fees', 'select=voucher_id,admis_no,period,type')).json();
+            const used = new Set(), keys = new Set(); let max = 100000;
+            (Array.isArray(ex) ? ex : []).forEach(r => {
+                const m = String(r.voucher_id || '').match(/^V-(\d+)/i); if(m) { used.add(+m[1]); if(+m[1] > max) max = +m[1]; }
+                keys.add(`${String(r.admis_no || '').trim().toLowerCase()}_${String(r.period || '').trim()}_${String(r.type || '').trim().toLowerCase()}`);
+            });
+            const adm = String(p.admis_no || '').trim().toLowerCase(), today = new Date().toISOString().split('T')[0]; let n = max, dup = 0; const rows = [];
+            plan.forEach(v => {
+                if(keys.has(`${adm}_${v.period}_${v.type}`)) { dup++; return; }
+                do { n++; } while(used.has(n)); used.add(n);
+                rows.push({ sr_no: p.sr_no || '', voucher_id: 'V-' + n, admis_no: p.admis_no, student_name: p.student_name, type: v.type, period: v.period, payable: v.payable, discount: v.discount || 0, class: p.class, status: 'Unpaid', date: today, remarks: v.remarks, siblings: p.siblings, arrears2025: v.arrears || null });
+            });
+            if(!rows.length) return `\n\nNo new vouchers: ${dup} already exist.`;
+            const c = getSupabaseConfig();
+            const r = await fetch(`${c.url}/rest/v1/fees`, { method: 'POST', headers: { "apikey": c.key, "Authorization": `Bearer ${c.key}`, "Content-Type": "application/json", "Prefer": "return=minimal" }, body: JSON.stringify(rows) });
+            if(!r.ok) throw new Error(await r.text());
+            return `\n\n${rows.length} unpaid fee voucher(s) created (${rows[0].voucher_id} to ${rows[rows.length - 1].voucher_id}), total PKR ${rows.reduce((s, x) => s + x.payable - x.discount, 0).toLocaleString()}.` + (dup ? ` ${dup} already existed.` : '');
+        }
+        window.addEventListener('load', () => {
+            ['doj', 'left_date', 'status'].forEach(id => gv(id).addEventListener('change', resetMonthDefaults));
+            gv('oneMonth').addEventListener('change', refreshVouch); gv('vouchOn').addEventListener('change', refreshVouch);
+            initVouchSection();
+        });
+
         async function saveStudent(event) {
             event.preventDefault();
             let config = getSupabaseConfig();
@@ -380,11 +466,16 @@
                         headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
                         body: JSON.stringify(payloadData)
                     });
-                    if(res.ok) alert("Student Saved Successfully!");
+                    if(res.ok) {
+                    let msg = "Student Saved Successfully!";
+                    try { msg += await createStudentVouchers(payloadData); } catch(e) { console.error(e); msg += "\n\nBut the fee vouchers could NOT be created (" + e.message + "). Create them from Fee Vouchers -> Generate."; }
+                    alert(msg);
                 }
-                hideLoading();
-                resetForm();
-                fetchStudents();
+            }
+            if(res && !res.ok) { hideLoading(); alert("Could not save: " + await res.text()); return; }
+            hideLoading();
+            resetForm();
+            fetchStudents();
             } catch (error) {
                 hideLoading();
                 console.error("Error:", error);
@@ -413,6 +504,7 @@ function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
             document.getElementById('siblings').value = row.siblings || '';
             document.getElementById('arrears2025').value = row.arrears2025 || '';
             document.getElementById('left_date').value = row.left_date || '';
+            document.getElementById('vouchSection').classList.add('hidden'); document.getElementById('vouchOn').checked = false;
             document.getElementById('formTitle').innerText = "Edit Student Record";
             document.getElementById('saveBtn').innerText = "Update Student";
             document.getElementById('cancelBtn').classList.remove('hidden');
@@ -435,6 +527,7 @@ function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
 
         function resetForm() {
             document.getElementById('studentForm').reset();
+            if(typeof initVouchSection === 'function') initVouchSection();
             document.getElementById('editOriginalAdm').value = '';
             calculatePayables();
             document.getElementById('formTitle').innerText = "Add New Student";
