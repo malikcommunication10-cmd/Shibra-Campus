@@ -27,166 +27,11 @@
                     <h2 class="text-2xl font-extrabold text-indigo-950">Students Management</h2>
                     <p class="text-sm text-slate-500">Add, Edit & Manage Student Records</p>
                 </div>
-                <div>
-                    </div>
+                <div><button type="button" onclick="addStudentClick()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm">&#10133; Add Student</button></div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Form Section -->
-                <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-1">
-                    <h3 id="formTitle" class="text-base font-semibold mb-4 text-indigo-700 border-b pb-2">Add New Student</h3>
-                    <form id="studentForm" onsubmit="saveStudent(event)" class="space-y-3">
-                        <input type="hidden" id="editOriginalAdm" value="">
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Sr No</label>
-                                <input type="number" id="sr_no" required class="w-full border rounded-lg p-2 text-sm outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Admission No (Unique)</label>
-                                <input type="text" id="admis_no" required class="w-full border rounded-lg p-2 text-sm outline-none">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-700 mb-1">Student Name</label>
-                            <input type="text" id="student_name" required placeholder="Full Name" class="w-full border rounded-lg p-2 text-sm outline-none">
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">DOJ</label>
-                                <input type="date" id="doj" class="w-full border rounded-lg p-2 text-sm outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Class</label>
-                                <input type="text" id="class" list="classList" required placeholder="Select or type class" class="w-full border rounded-lg p-2 text-sm outline-none"><datalist id="classList"></datalist>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Father Contact</label>
-                                <input type="text" id="contact_no_father" placeholder="03XXXXXXXXX" class="w-full border rounded-lg p-2 text-sm outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Mother Contact</label>
-                                <input type="text" id="contact_no_mother" placeholder="03XXXXXXXXX" class="w-full border rounded-lg p-2 text-sm outline-none">
-                            </div>
-                        </div>
-
-                        <!-- FEE STRUCTURE SECTION -->
-                        <div class="border-t pt-2 space-y-2">
-                            <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wider">Fee Structure & Discounts</h4>
-                            
-                            <div class="bg-slate-50 p-2 rounded-lg border">
-                                <label class="block text-[11px] font-semibold text-slate-700 mb-1">Monthly Tuition Fee</label>
-                                <div class="grid grid-cols-3 gap-1">
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Actual</span>
-                                        <input type="number" id="monthly_tution_fee" value="0" oninput="calculatePayables()" class="w-full border rounded p-1.5 text-xs outline-none">
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Discount</span>
-                                        <input type="number" id="monthly_tution_disc" value="0" oninput="calculatePayables()" class="w-full border rounded p-1.5 text-xs outline-none text-rose-600">
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Payable</span>
-                                        <input type="number" id="monthly_tution_pay" value="0" readonly class="w-full border rounded p-1.5 text-xs bg-slate-100 font-bold text-indigo-700">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-slate-50 p-2 rounded-lg border">
-                                <label class="block text-[11px] font-semibold text-slate-700 mb-1">Registration Fee</label>
-                                <div class="grid grid-cols-3 gap-1">
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Actual</span>
-                                        <input type="number" id="regritation_fee" value="0" oninput="calculatePayables()" class="w-full border rounded p-1.5 text-xs outline-none">
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Discount</span>
-                                        <input type="number" id="regritation_disc" value="0" oninput="calculatePayables()" class="w-full border rounded p-1.5 text-xs outline-none text-rose-600">
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Payable</span>
-                                        <input type="number" id="regritation_pay" value="0" readonly class="w-full border rounded p-1.5 text-xs bg-slate-100 font-bold text-indigo-700">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-slate-50 p-2 rounded-lg border">
-                                <label class="block text-[11px] font-semibold text-slate-700 mb-1">Admission Fee</label>
-                                <div class="grid grid-cols-3 gap-1">
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Actual</span>
-                                        <input type="number" id="admission_fee" value="0" oninput="calculatePayables()" class="w-full border rounded p-1.5 text-xs outline-none">
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Discount</span>
-                                        <input type="number" id="admission_disc" value="0" oninput="calculatePayables()" class="w-full border rounded p-1.5 text-xs outline-none text-rose-600">
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Payable</span>
-                                        <input type="number" id="admission_pay" value="0" readonly class="w-full border rounded p-1.5 text-xs bg-slate-100 font-bold text-indigo-700">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-slate-50 p-2 rounded-lg border">
-                                <label class="block text-[11px] font-semibold text-slate-700 mb-1">Annual Fund</label>
-                                <div class="grid grid-cols-3 gap-1">
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Actual</span>
-                                        <input type="number" id="annual_fund" value="0" oninput="calculatePayables()" class="w-full border rounded p-1.5 text-xs outline-none">
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Discount</span>
-                                        <input type="number" id="annual_fund_disc" value="0" oninput="calculatePayables()" class="w-full border rounded p-1.5 text-xs outline-none text-rose-600">
-                                    </div>
-                                    <div>
-                                        <span class="text-[10px] text-slate-500">Payable</span>
-                                        <input type="number" id="annual_fund_pay" value="0" readonly class="w-full border rounded p-1.5 text-xs bg-slate-100 font-bold text-indigo-700">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-2 pt-1">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Status</label>
-                                <select id="status" class="w-full border rounded-lg p-2 text-sm bg-white outline-none">
-                                    <option value="Active">Active</option>
-                                    <option value="Left">Left</option>
-                                    <option value="Graduated">Graduated</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-700 mb-1">Remarks</label>
-                                <input type="text" id="remarks" placeholder="Optional" class="w-full border rounded-lg p-2 text-sm outline-none">
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Family code (siblings)</label><input type="text" id="siblings" placeholder="e.g. 101" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
-                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Arrears 2025 (PKR)</label><input type="number" min="0" id="arrears2025" placeholder="0" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
-                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Left date</label><input type="date" id="left_date" class="w-full border rounded-lg p-2 text-sm outline-none"></div>
-                        </div>
-                        <div id="vouchSection" class="border-t pt-2 space-y-2">
-                    <label class="flex items-center gap-2 text-xs font-bold text-indigo-900 uppercase tracking-wider"><input type="checkbox" id="vouchOn" checked> Create unpaid fee vouchers on save</label>
-                    <div id="vouchBody" class="space-y-2">
-                        <div>
-                            <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-slate-700">Tuition fee months (2026)</span>
-                                <span class="text-[10px]"><button type="button" onclick="pickMonths(true)" class="text-indigo-600 underline mr-2">From joining</button><button type="button" onclick="pickMonths(false)" class="text-slate-500 underline">Clear</button></span></div>
-                            <div id="monthChips" class="grid grid-cols-4 gap-1 mt-1"></div>
-                        </div>
-                        <div id="oneTime" class="grid grid-cols-2 gap-1"></div>
-                        <div><label class="block text-[11px] font-semibold text-slate-700 mb-1">Month of the one-time fees</label><select id="oneMonth" class="w-full border rounded-lg p-1.5 text-xs bg-white"></select></div>
-                        <p id="vouchSummary" class="text-[11px] text-slate-500"></p>
-                    </div>
-                </div>
-                <div class="flex gap-2 pt-2">
-                            <button type="submit" id="saveBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg transition text-sm">Save Student</button>
-                            <button type="button" id="cancelBtn" onclick="resetForm()" class="hidden px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm">Cancel</button>
-                        </div>
-                    </form>
-                </section>
+            <div class="space-y-6">
+                
 
                 <!-- Table Section -->
                 <section class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2 flex flex-col">
@@ -373,8 +218,8 @@
         function refreshVouch() {
             if(!gv('vouchSection')) return;
             gv('vouchBody').classList.toggle('hidden', !gv('vouchOn').checked);
-            gv('monthChips').innerHTML = VM.map((m, i) => { const ok = monthOk(i); return `<label class="flex items-center justify-center gap-1 text-[11px] border rounded p-1 ${ok ? 'bg-white cursor-pointer' : 'opacity-40'}"><input type="checkbox" ${vmSel[i] && ok ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="vmSel[${i}] = this.checked; refreshVouch()">${m.slice(0, 3)}</label>`; }).join('');
-            gv('oneTime').innerHTML = OT.map(o => { const amt = numOf(o[1]), on = otOn[o[0]] !== undefined ? otOn[o[0]] : amt > 0; return `<label class="flex items-center gap-1.5 text-[11px]"><input type="checkbox" id="${o[0]}" ${on ? 'checked' : ''} onchange="otOn['${o[0]}'] = this.checked; refreshVouch()"> ${o[4]} <b>${amt.toLocaleString()}</b></label>`; }).join('');
+            gv('monthChips').innerHTML = VM.map((m, i) => { const ok = monthOk(i); return `<label class="flex items-center justify-center gap-1.5 text-xs font-semibold border rounded-lg px-2 py-1.5 ${ok ? 'bg-white cursor-pointer hover:border-indigo-300 has-[:checked]:bg-indigo-100 has-[:checked]:border-indigo-400 has-[:checked]:text-indigo-800' : 'opacity-40 bg-slate-50'}"><input type="checkbox" ${vmSel[i] && ok ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="vmSel[${i}] = this.checked; refreshVouch()">${m.slice(0, 3)}</label>`; }).join('');
+            gv('oneTime').innerHTML = OT.map(o => { const amt = numOf(o[1]), on = otOn[o[0]] !== undefined ? otOn[o[0]] : amt > 0; return `<label class="flex items-center gap-2 text-xs border rounded-lg px-3 py-2 bg-white cursor-pointer has-[:checked]:bg-emerald-50 has-[:checked]:border-emerald-400"><input type="checkbox" id="${o[0]}" ${on ? 'checked' : ''} onchange="otOn['${o[0]}'] = this.checked; refreshVouch()"> ${o[4]} <b>${amt.toLocaleString()}</b></label>`; }).join('');
             const plan = vouchPlan();
             gv('vouchSummary').innerText = dojVal() === null ? 'Select the date of joining (DOJ) first.' : (plan.length ? `${plan.length} unpaid voucher(s), total PKR ${plan.reduce((s, r) => s + r.payable - r.discount, 0).toLocaleString()} after discount.` : 'No voucher selected.');
         }
@@ -424,6 +269,12 @@
             initVouchSection();
         });
 
+        function openStudentModal() { document.getElementById('studentModal').classList.remove('hidden'); document.body.style.overflow = 'hidden'; }
+        function closeStudentModal() { document.getElementById('studentModal').classList.add('hidden'); document.body.style.overflow = ''; }
+        function addStudentClick() { resetForm(); openStudentModal(); setTimeout(() => document.getElementById('sr_no').focus(), 60); }
+        function cancelStudentForm() { resetForm(); closeStudentModal(); }
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') cancelStudentForm(); });
+
         async function saveStudent(event) {
             event.preventDefault();
             let config = getSupabaseConfig();
@@ -450,6 +301,13 @@
             if(payloadData.status !== 'Active' && !payloadData.left_date) { alert('Left date is required when the status is not Active.'); return; }
             if(payloadData.status === 'Active') payloadData.left_date = null;
             let editOriginalAdm = document.getElementById('editOriginalAdm').value;
+            if(editOriginalAdm === '' && allStudentsCache.some(x => String(x.admis_no || '').trim().toLowerCase() === payloadData.admis_no.toLowerCase())) { alert('This admission number already exists. Please use a different one.'); return; }
+            const vouchP = { ...payloadData };
+            let dropped = [];
+            if(allStudentsCache.length) {          // only send columns that really exist in the students table
+                const cols = new Set(Object.keys(allStudentsCache[0])), ALIAS = { regritation_fee: ['regritation_fee', 'registration_fee', 'reg_fee'] };
+                Object.keys(payloadData).forEach(k => { const c = (ALIAS[k] || [k]).find(x => cols.has(x)); if(!c) { dropped.push(k); delete payloadData[k]; } else if(c !== k) { payloadData[c] = payloadData[k]; delete payloadData[k]; } });
+            }
             showLoading("Saving Student Record...");
             try {
                 let res;
@@ -459,7 +317,7 @@
                         headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
                         body: JSON.stringify(payloadData)
                     });
-                    if(res.ok) alert("Student Updated Successfully!");
+                    if(res.ok) alert("Student Updated Successfully!" + (dropped.length ? "\n\nNote: the students table has no column for " + dropped.join(", ") + "." : ""));
                 } else {
                     res = await fetch(`${config.url}/rest/v1/students`, {
                         method: 'POST',
@@ -468,13 +326,13 @@
                     });
                     if(res.ok) {
                     let msg = "Student Saved Successfully!";
-                    try { msg += await createStudentVouchers(payloadData); } catch(e) { console.error(e); msg += "\n\nBut the fee vouchers could NOT be created (" + e.message + "). Create them from Fee Vouchers -> Generate."; }
-                    alert(msg);
+                    try { msg += await createStudentVouchers(vouchP); } catch(e) { console.error(e); msg += "\n\nBut the fee vouchers could NOT be created (" + e.message + "). Create them from Fee Vouchers -> Generate."; }
+                    alert(msg + (dropped.length ? "\n\nNote: the students table has no column for " + dropped.join(", ") + " (these amounts were used for the vouchers only)." : ""));
                 }
             }
             if(res && !res.ok) { hideLoading(); alert("Could not save: " + await res.text()); return; }
             hideLoading();
-            resetForm();
+            resetForm(); closeStudentModal();
             fetchStudents();
             } catch (error) {
                 hideLoading();
@@ -486,6 +344,7 @@
 function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
         function editStudentByAdm(a) { const r = allStudentsCache.find(x => String(x.admis_no || '') === String(a)); if(r) editStudent(r); }
         function editStudent(row) {
+            openStudentModal();
             document.getElementById('editOriginalAdm').value = row.admis_no || '';
             document.getElementById('sr_no').value = row.sr_no || '';
             document.getElementById('admis_no').value = row.admis_no || '';
@@ -495,7 +354,7 @@ function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
             document.getElementById('contact_no_mother').value = row.contact_no_mother || '';
             document.getElementById('class').value = row.class || '';
             document.getElementById('monthly_tution_fee').value = row.monthly_tution_fee || 0;
-            document.getElementById('regritation_fee').value = row.regritation_fee || 0;
+            document.getElementById('regritation_fee').value = (row.regritation_fee ?? row.registration_fee) || 0;
             document.getElementById('admission_fee').value = row.admission_fee || 0;
             document.getElementById('annual_fund').value = row.annual_fund || 0;
             calculatePayables();
@@ -532,12 +391,123 @@ function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
             calculatePayables();
             document.getElementById('formTitle').innerText = "Add New Student";
             document.getElementById('saveBtn').innerText = "Save Student";
-            document.getElementById('cancelBtn').classList.add('hidden');
         }
 
 
 
 
     </script>
+<!-- ADD / EDIT STUDENT (modal) -->
+<div id="studentModal" class="fixed inset-0 z-50 hidden flex items-start sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-3xl h-full sm:h-auto sm:max-h-[94vh] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3 bg-slate-50">
+      <div>
+        <h3 id="formTitle" class="text-lg font-bold text-indigo-950">Add New Student</h3>
+        <p class="text-xs text-slate-500 mt-0.5">Fields marked <span class="text-rose-500">*</span> are required</p>
+      </div>
+      <button type="button" onclick="cancelStudentForm()" class="w-9 h-9 rounded-full bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 text-lg leading-none" aria-label="Close">&#10005;</button>
+    </div>
+
+    <form id="studentForm" onsubmit="saveStudent(event)" class="flex-1 overflow-y-auto">
+      <input type="hidden" id="editOriginalAdm" value="">
+      <div class="p-4 sm:p-5 space-y-4">
+
+        <!-- 1. STUDENT INFORMATION -->
+        <section class="rounded-xl border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-3"><span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm">👤</span><h4 class="text-sm font-bold text-indigo-950">Student information</h4></div>
+          <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+            <div class="sm:col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Sr No <span class="text-rose-500">*</span></label>
+              <input type="number" id="sr_no" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></div>
+            <div class="sm:col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Admission No <span class="text-rose-500">*</span></label>
+              <input type="text" id="admis_no" required placeholder="Unique number" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></div>
+            <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Class <span class="text-rose-500">*</span></label>
+              <input type="text" id="class" list="classList" required placeholder="Select or type" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><datalist id="classList"></datalist></div>
+            <div class="col-span-2 sm:col-span-4"><label class="block text-xs font-semibold text-slate-600 mb-1">Student name <span class="text-rose-500">*</span></label>
+              <input type="text" id="student_name" required placeholder="Full name" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></div>
+            <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Date of joining <span class="text-rose-500">*</span></label>
+              <input type="date" id="doj" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></div>
+            <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Status</label>
+              <select id="status" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><option value="Active">Active</option><option value="Left">Left</option><option value="Graduated">Graduated</option></select></div>
+            <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Left date</label>
+              <input type="date" id="left_date" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><p class="text-[10px] text-slate-400 mt-0.5">Needed when status is not Active</p></div>
+            <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Family code (siblings)</label>
+              <input type="text" id="siblings" placeholder="e.g. 101" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><p class="text-[10px] text-slate-400 mt-0.5">Same code for brothers and sisters</p></div>
+          </div>
+        </section>
+
+        <!-- 2. CONTACT -->
+        <section class="rounded-xl border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-3"><span class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm">📞</span><h4 class="text-sm font-bold text-indigo-950">Parents' contact</h4></div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><label class="block text-xs font-semibold text-slate-600 mb-1">Father contact</label>
+              <input type="text" id="contact_no_father" inputmode="tel" placeholder="03XXXXXXXXX" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></div>
+            <div><label class="block text-xs font-semibold text-slate-600 mb-1">Mother contact</label>
+              <input type="text" id="contact_no_mother" inputmode="tel" placeholder="03XXXXXXXXX" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></div>
+          </div>
+        </section>
+
+        <!-- 3. FEE STRUCTURE -->
+        <section class="rounded-xl border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-3"><span class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-sm">💰</span><h4 class="text-sm font-bold text-indigo-950">Fee structure &amp; discounts</h4></div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead><tr class="text-[11px] uppercase tracking-wide text-slate-500"><th class="pb-2 pr-2 font-semibold">Fee</th><th class="pb-2 px-1 font-semibold">Actual (PKR)</th><th class="pb-2 px-1 font-semibold text-rose-600">Discount</th><th class="pb-2 pl-1 font-semibold text-indigo-700">Payable</th></tr></thead>
+              <tbody class="[&>tr>td]:py-1">
+                <tr><td class="pr-2 text-xs font-semibold text-slate-700 whitespace-nowrap">Monthly tuition</td>
+                  <td class="px-1"><input type="number" min="0" id="monthly_tution_fee" value="0" oninput="calculatePayables()" class="w-full min-w-[80px] border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-200 outline-none"></td>
+                  <td class="px-1"><input type="number" min="0" id="monthly_tution_disc" value="0" oninput="calculatePayables()" class="w-full min-w-[70px] border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-rose-600 focus:ring-2 focus:ring-rose-200 outline-none"></td>
+                  <td class="pl-1"><input type="number" id="monthly_tution_pay" value="0" readonly class="w-full min-w-[80px] border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-slate-50 font-bold text-indigo-700"></td></tr>
+                <tr><td class="pr-2 text-xs font-semibold text-slate-700 whitespace-nowrap">Registration fee</td>
+                  <td class="px-1"><input type="number" min="0" id="regritation_fee" value="0" oninput="calculatePayables()" class="w-full min-w-[80px] border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-200 outline-none"></td>
+                  <td class="px-1"><input type="number" min="0" id="regritation_disc" value="0" oninput="calculatePayables()" class="w-full min-w-[70px] border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-rose-600 focus:ring-2 focus:ring-rose-200 outline-none"></td>
+                  <td class="pl-1"><input type="number" id="regritation_pay" value="0" readonly class="w-full min-w-[80px] border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-slate-50 font-bold text-indigo-700"></td></tr>
+                <tr><td class="pr-2 text-xs font-semibold text-slate-700 whitespace-nowrap">Admission fee</td>
+                  <td class="px-1"><input type="number" min="0" id="admission_fee" value="0" oninput="calculatePayables()" class="w-full min-w-[80px] border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-200 outline-none"></td>
+                  <td class="px-1"><input type="number" min="0" id="admission_disc" value="0" oninput="calculatePayables()" class="w-full min-w-[70px] border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-rose-600 focus:ring-2 focus:ring-rose-200 outline-none"></td>
+                  <td class="pl-1"><input type="number" id="admission_pay" value="0" readonly class="w-full min-w-[80px] border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-slate-50 font-bold text-indigo-700"></td></tr>
+                <tr><td class="pr-2 text-xs font-semibold text-slate-700 whitespace-nowrap">Annual fund</td>
+                  <td class="px-1"><input type="number" min="0" id="annual_fund" value="0" oninput="calculatePayables()" class="w-full min-w-[80px] border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-200 outline-none"></td>
+                  <td class="px-1"><input type="number" min="0" id="annual_fund_disc" value="0" oninput="calculatePayables()" class="w-full min-w-[70px] border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-rose-600 focus:ring-2 focus:ring-rose-200 outline-none"></td>
+                  <td class="pl-1"><input type="number" id="annual_fund_pay" value="0" readonly class="w-full min-w-[80px] border border-slate-200 rounded-lg px-2 py-1.5 text-sm bg-slate-50 font-bold text-indigo-700"></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-3 sm:w-1/2"><label class="block text-xs font-semibold text-slate-600 mb-1">Arrears of last year (2025)</label>
+            <input type="number" min="0" id="arrears2025" placeholder="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><p class="text-[10px] text-slate-400 mt-0.5">Billed as a separate voucher in January 2026</p></div>
+        </section>
+
+        <!-- 4. VOUCHERS (new students only) -->
+        <section id="vouchSection" class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
+          <div class="flex items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2"><span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm">🧾</span><h4 class="text-sm font-bold text-indigo-950">Unpaid fee vouchers</h4></div>
+            <label class="flex items-center gap-2 text-xs font-semibold text-indigo-900 cursor-pointer"><input type="checkbox" id="vouchOn" checked class="w-4 h-4 accent-indigo-600"> Create when saving</label>
+          </div>
+          <div id="vouchBody" class="space-y-3">
+            <div>
+              <div class="flex items-center justify-between mb-1.5"><span class="text-xs font-semibold text-slate-700">Tuition months (2026)</span>
+                <span class="text-[11px]"><button type="button" onclick="pickMonths(true)" class="text-indigo-600 font-semibold hover:underline mr-3">From joining</button><button type="button" onclick="pickMonths(false)" class="text-slate-500 hover:underline">Clear</button></span></div>
+              <div id="monthChips" class="grid grid-cols-4 sm:grid-cols-6 gap-1.5"></div>
+            </div>
+            <div><div class="text-xs font-semibold text-slate-700 mb-1.5">One-time fees</div><div id="oneTime" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5"></div></div>
+            <div class="sm:w-1/2"><label class="block text-xs font-semibold text-slate-700 mb-1">Month of the one-time fees</label>
+              <select id="oneMonth" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-200 outline-none"></select></div>
+            <p id="vouchSummary" class="text-xs font-semibold text-indigo-800 bg-white border border-indigo-100 rounded-lg px-3 py-2"></p>
+          </div>
+        </section>
+
+        <!-- 5. NOTES -->
+        <section class="rounded-xl border border-slate-200 p-4">
+          <div class="flex items-center gap-2 mb-2"><span class="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-sm">📝</span><h4 class="text-sm font-bold text-indigo-950">Remarks</h4></div>
+          <textarea id="remarks" rows="2" placeholder="Optional notes about this student" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></textarea>
+        </section>
+      </div>
+
+      <div class="sticky bottom-0 bg-white border-t border-slate-200 px-4 sm:px-5 py-3 flex items-center justify-end gap-2">
+        <button type="button" id="cancelBtn" onclick="cancelStudentForm()" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold">Cancel</button>
+        <button type="submit" id="saveBtn" class="px-6 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm">Save Student</button>
+      </div>
+    </form>
+  </div>
+</div>
 </body>
 </html>
