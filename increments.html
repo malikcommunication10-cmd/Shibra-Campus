@@ -15,19 +15,6 @@
         <p id="loadingText" class="text-sm font-semibold tracking-wide">Processing...</p>
     </div>
 
-    <!-- Result / diagnostics popup (inline styles so it never depends on the stylesheet) -->
-    <div id="resultModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:80;align-items:center;justify-content:center;padding:16px">
-        <div style="background:#fff;border-radius:16px;max-width:600px;width:100%;max-height:90vh;overflow:auto;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.25)">
-            <h3 id="resTitle" style="font-weight:800;font-size:18px;margin:0 0 10px"></h3>
-            <div id="resBody" style="font-size:13px;line-height:1.55;color:#334155"></div>
-            <pre id="resSql" style="display:none;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:10px;font-size:12px;overflow:auto;margin-top:10px;white-space:pre"></pre>
-            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
-                <button id="resCopy" onclick="copyResultSql()" style="display:none;background:#fef3c7;color:#92400e;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600">Copy SQL</button>
-                <button onclick="closeResult()" style="background:#4338ca;color:#fff;border-radius:10px;padding:8px 18px;font-size:13px;font-weight:600">OK</button>
-            </div>
-        </div>
-    </div>
-
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside id="appNav"></aside>
@@ -40,10 +27,9 @@
                     <p class="text-sm text-slate-500">Apply bulk increments, manage separate fee & annual fund entries with remarks</p>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button onclick="reloadFromDatabase()" style="background:#f1f5f9;color:#334155;border-radius:12px;padding:8px 16px;font-size:14px;font-weight:600">🔄 Reload</button>
                     <button onclick="bulkDeleteSelected()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm">🗑️ Bulk Delete</button>
                     <button onclick="saveAllIncrementsBatch()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition shadow-sm">💾 Save Checked Changes</button>
-                </div>
+                    </div>
             </div>
 
             <!-- Bulk Controls Toolbar -->
@@ -127,27 +113,14 @@
         </main>
     </div>
 
+    <!-- Settings Modal -->
+    
+
     <script>
         let allStudentsCache = [];
         let incrementsCache = [];
         let currentSortColumn = '';
         let sortDirection = 'asc';
-
-        const FIX_SQL = `alter table public.increments
-  add column if not exists fee_type text,
-  add column if not exists new_fee numeric,
-  add column if not exists old_fee numeric,
-  add column if not exists fee_increament numeric,
-  add column if not exists effective_period text,
-  add column if not exists annual_fund numeric,
-  add column if not exists remarks text;
-alter table public.increments disable row level security;
-notify pgrst, 'reload schema';`;
-        let resultSql = '';
-
-        const enc = encodeURIComponent;
-        const num = v => parseFloat(v) || 0;
-        const rawTrim = v => String(v ?? '').trim();
 
         function showLoading(text = "Processing...") {
             document.getElementById('loadingText').innerText = text;
@@ -155,18 +128,7 @@ notify pgrst, 'reload schema';`;
         }
         function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
 
-        /* ---------- result popup ---------- */
-        function showResult(title, lines, sql) {
-            document.getElementById('resTitle').innerHTML = title;
-            document.getElementById('resBody').innerHTML = lines.map(l => `<div style="margin-bottom:6px">${l}</div>`).join('');
-            resultSql = sql || '';
-            const pre = document.getElementById('resSql');
-            pre.style.display = sql ? 'block' : 'none'; pre.innerText = sql || '';
-            document.getElementById('resCopy').style.display = sql ? 'inline-block' : 'none';
-            document.getElementById('resultModal').style.display = 'flex';
-        }
-        function closeResult() { document.getElementById('resultModal').style.display = 'none'; }
-        function copyResultSql() { navigator.clipboard.writeText(resultSql).then(() => alert('SQL copied. Paste it in Supabase → SQL Editor and run it.')); }
+
 
         async function initPage() {
             let config = getSupabaseConfig();
@@ -179,11 +141,10 @@ notify pgrst, 'reload schema';`;
             }
         }
 
-        // fresh = true bypasses the shared cache (used right after saving / deleting)
-        async function fetchIncrementsCache(fresh) {
+        async function fetchIncrementsCache() {
+            let config = getSupabaseConfig();
             incrementsCache = [];
             try {
-                if(fresh && typeof sbCacheClear === 'function') await sbCacheClear('increments');
                 let res = await sbFetchAll('increments', 'select=*');
                 let data = await res.json();
                 if(Array.isArray(data)) incrementsCache = data;
@@ -191,6 +152,7 @@ notify pgrst, 'reload schema';`;
         }
 
         async function fetchStudents() {
+            let config = getSupabaseConfig();
             try {
                 let res = await sbFetchAll('students', 'select=*');
                 let data = await res.json();
@@ -200,13 +162,6 @@ notify pgrst, 'reload schema';`;
                     filterIncrementStudents();
                 }
             } catch(e) { console.error("Error fetching students:", e); }
-        }
-
-        async function reloadFromDatabase() {
-            showLoading("Reloading from the database...");
-            await fetchIncrementsCache(true);
-            filterIncrementStudents();
-            hideLoading();
         }
 
         function populateClassDropdown(data) {
@@ -228,7 +183,7 @@ notify pgrst, 'reload schema';`;
             let selectedClass = document.getElementById('classFilter').value;
 
             let filtered = allStudentsCache.filter(st => {
-                let adm = (st.admis_no || '').toString().toLowerCase();
+                let adm = (st.admis_no || '').toLowerCase();
                 let name = (st.student_name || '').toLowerCase();
                 let cls = (st.class || '').trim();
                 let matchesQuery = adm.includes(q) || name.includes(q);
@@ -274,9 +229,6 @@ notify pgrst, 'reload schema';`;
             document.getElementById(`newfee_${idx}`).value = oldFee + feeInc;
         }
 
-        // the saved increment row of a student (matched on the trimmed admission number)
-        function findExisting(admNo) { return incrementsCache.find(i => rawTrim(i.admis_no) === admNo); }
-
         function renderIncrementTable(studentsList) {
             let tbody = document.getElementById('incrementTableBody');
             tbody.innerHTML = '';
@@ -291,19 +243,18 @@ notify pgrst, 'reload schema';`;
             let defaultFeeType = document.getElementById('bulkFeeType').value;
 
             studentsList.forEach((st, idx) => {
-                let admNo = rawTrim(st.admis_no || st.sr_no);
+                let admNo = (st.admis_no || st.sr_no || '').trim();
                 let sName = (st.student_name || '').trim();
                 let sClass = (st.class || '').trim();
-                let existingInc = findExisting(admNo);
+                let existingInc = incrementsCache.find(i => (i.admis_no || '').trim() === admNo);
 
                 let feeType = existingInc ? (existingInc.fee_type || defaultFeeType) : defaultFeeType;
                 let oldFee = existingInc ? (existingInc.old_fee || st.monthly_tution_fee || 0) : (st.monthly_tution_fee || 0);
                 let feeInc = existingInc ? (existingInc.fee_increament || '') : '';
-                let newFee = existingInc ? (existingInc.new_fee || (num(oldFee) + num(feeInc))) : '';
+                let newFee = existingInc ? (existingInc.new_fee || (oldFee + (parseFloat(feeInc) || 0))) : '';
                 let effPeriod = existingInc ? (existingInc.effective_period || 'March 2026') : 'March 2026';
                 let annualFund = existingInc ? (existingInc.annual_fund || st.annual_fund || '') : (st.annual_fund || '');
                 let remarks = existingInc ? (existingInc.remarks || '') : '';
-                let fromStudent = !(existingInc && existingInc.annual_fund) && st.annual_fund;
 
                 let tr = document.createElement('tr');
                 tr.className = "border-b hover:bg-slate-50 inc-row";
@@ -319,11 +270,10 @@ notify pgrst, 'reload schema';`;
                     <td class="p-2.5"><input type="text" id="eff_${idx}" value="${esc(effPeriod)}" class="w-24 border rounded p-1 text-xs bg-white outline-none"></td>
                     <td class="p-2.5 font-bold text-slate-700">PKR <input type="number" id="oldfee_${idx}" value="${oldFee}" class="w-20 border rounded p-1 text-xs bg-slate-100 font-bold" readonly></td>
                     <td class="p-2.5"><input type="number" id="feeinc_${idx}" value="${feeInc}" placeholder="Increment" oninput="calculateNewFee(${idx})" class="w-24 border rounded p-1 text-xs bg-white outline-none font-bold text-indigo-700"></td>
-                    <td class="p-2.5"><input type="number" id="annualfund_${idx}" value="${annualFund}" placeholder="Annual Fund" ${fromStudent ? 'title="Value taken from the student record - not saved in increments yet"' : ''} class="w-24 border rounded p-1 text-xs bg-white outline-none font-bold text-emerald-700"></td>
+                    <td class="p-2.5"><input type="number" id="annualfund_${idx}" value="${annualFund}" placeholder="Annual Fund" class="w-24 border rounded p-1 text-xs bg-white outline-none font-bold text-emerald-700"></td>
                     <td class="p-2.5"><input type="text" id="remarks_${idx}" value="${esc(remarks)}" placeholder="Remarks" class="w-28 border rounded p-1 text-xs bg-white outline-none"></td>
                     <td class="p-2.5 text-center">
                         <button onclick="saveByIdx(${idx})" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1 rounded font-semibold transition text-[11px] border border-indigo-200">💾 Save</button>
-                        <div style="font-size:10px;margin-top:3px;font-weight:600;color:${existingInc ? '#047857' : '#94a3b8'}">${existingInc ? '✔ saved in database' : 'not saved yet'}</div>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -331,9 +281,8 @@ notify pgrst, 'reload schema';`;
             document.getElementById('incCountInfo').innerText = `Total Students: ${studentsList.length}`;
         }
 
-        function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-        function saveByIdx(i) { const tr = document.querySelectorAll('.inc-row')[i]; if(tr) saveRows([i]); }
-
+function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+        function saveByIdx(i) { const tr = document.querySelectorAll('.inc-row')[i]; if(tr) saveOrUpdateIncrement(tr.dataset.admNo, tr.dataset.sName, i); }
         function applyBulkToCheckedRows() {
             let checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
             if(checkedBoxes.length === 0) { alert("Please check at least one student row!"); return; }
@@ -343,181 +292,191 @@ notify pgrst, 'reload schema';`;
             let incVal = parseFloat(document.getElementById('bulkIncVal').value) || 0;
             let effectivePeriod = document.getElementById('bulkIncPeriod').value;
 
-            const run = () => {
-                checkedBoxes.forEach(cb => {
-                    let idx = cb.getAttribute('data-index');
-                    document.getElementById(`ftype_${idx}`).value = feeType;
-                    document.getElementById(`eff_${idx}`).value = effectivePeriod;
+            checkedBoxes.forEach(cb => {
+                let idx = cb.getAttribute('data-index');
+                document.getElementById(`ftype_${idx}`).value = feeType;
+                document.getElementById(`eff_${idx}`).value = effectivePeriod;
 
-                    let oldFee = parseFloat(document.getElementById(`oldfee_${idx}`).value) || 0;
-                    if(incVal > 0) {
-                        let calculatedInc = incType === 'percentage' ? Math.round(oldFee * incVal / 100) : incVal;
-                        if(feeType === 'tution fee') {
-                            document.getElementById(`feeinc_${idx}`).value = calculatedInc;
-                            document.getElementById(`newfee_${idx}`).value = oldFee + calculatedInc;
-                        } else if(feeType === 'annual fund') {
-                            document.getElementById(`annualfund_${idx}`).value = calculatedInc;
-                        }
+                let oldFee = parseFloat(document.getElementById(`oldfee_${idx}`).value) || 0;
+                if(incVal > 0) {
+                    let calculatedInc = incType === 'percentage' ? Math.round(oldFee * incVal / 100) : incVal;
+                    if(feeType === 'tution fee') {
+                        document.getElementById(`feeinc_${idx}`).value = calculatedInc;
+                        document.getElementById(`newfee_${idx}`).value = oldFee + calculatedInc;
+                    } else if(feeType === 'annual fund') {
+                        document.getElementById(`annualfund_${idx}`).value = calculatedInc;
                     }
-                });
-                alert("Bulk values applied to checked rows. Now press 'Save Checked Changes' to store them in the database.");
-            };
-
-            // one row holds one fee type + one effective period: an annual-fund entry replaces a tuition increment of the same student
-            if(feeType === 'annual fund') {
-                let clash = 0;
-                checkedBoxes.forEach(cb => { let tr = cb.closest('tr'); let ex = findExisting(tr.dataset.admNo); if(ex && num(ex.new_fee) > 0 && String(ex.fee_type || '').toLowerCase().includes('tution') ) clash++; });
-                if(clash > 0 && !confirm(`${clash} selected student(s) already have a TUITION increment.\n\nA student has only one increment row, so the fee type and effective period of that row will change to the annual fund values.\n\nContinue?`)) return;
-            }
-            run();
-        }
-
-        /* ------------------------------------------------------------------
-           SAVING - every request is checked, nothing is reported as saved
-           unless the database sent the row back.
-        ------------------------------------------------------------------ */
-        function readRow(idx) {
-            const tr = document.querySelectorAll('.inc-row')[idx];
-            const g = id => document.getElementById(`${id}_${idx}`).value;
-            return {
-                admNo: tr.dataset.admNo,
-                payload: {
-                    admis_no: tr.dataset.admNo,
-                    student_name: tr.dataset.sName,
-                    fee_type: g('ftype').trim(),
-                    new_fee: num(g('newfee')),
-                    effective_period: g('eff').trim(),
-                    old_fee: num(g('oldfee')),
-                    fee_increament: num(g('feeinc')),
-                    annual_fund: num(g('annualfund')),
-                    remarks: g('remarks').trim()
                 }
+            });
+            alert("Bulk values applied to checked rows successfully!");
+        }
+
+        async function saveOrUpdateIncrement(admNo, sName, idx) {
+            let config = getSupabaseConfig();
+            let feeType = document.getElementById(`ftype_${idx}`).value.trim();
+            let newFee = parseFloat(document.getElementById(`newfee_${idx}`).value) || 0;
+            let effPeriod = document.getElementById(`eff_${idx}`).value.trim();
+            let oldFee = parseFloat(document.getElementById(`oldfee_${idx}`).value) || 0;
+            let feeInc = parseFloat(document.getElementById(`feeinc_${idx}`).value) || 0;
+            let annualFund = parseFloat(document.getElementById(`annualfund_${idx}`).value) || 0;
+            let remarks = document.getElementById(`remarks_${idx}`).value.trim();
+
+            let payload = { 
+                admis_no: admNo, 
+                student_name: sName, 
+                fee_type: feeType, 
+                new_fee: newFee, 
+                effective_period: effPeriod, 
+                old_fee: oldFee, 
+                fee_increament: feeInc, 
+                annual_fund: annualFund,
+                remarks: remarks
             };
-        }
 
-        async function saveRecords(items, onProgress) {
-            const c = getSupabaseConfig(), base = `${c.url}/rest/v1/increments`;
-            const hdr = { "apikey": c.key, "Authorization": `Bearer ${c.key}`, "Content-Type": "application/json", "Prefer": "return=representation" };
-            const results = [], ups = [], ins = [];
-            items.forEach(it => { const ex = findExisting(it.admNo); (ex ? ups : ins).push({ ...it, ex }); });
-            let done = 0; const tick = () => { done++; if(onProgress) onProgress(done, items.length); };
-
-            const insertOne = async it => {
-                try {
-                    const r = await fetch(base, { method: 'POST', headers: hdr, body: JSON.stringify(it.payload) });
-                    if(r.ok) { const rows = await r.json(); results.push({ ...it, ok: true, row: rows[0] || null }); }
-                    else results.push({ ...it, ok: false, error: await r.text() });
-                } catch(e) { results.push({ ...it, ok: false, error: String(e.message || e) }); }
-                tick();
-            };
-
-            // existing rows: update by id (or by the exact stored admission number); if nothing matched, create the row
-            for(let i = 0; i < ups.length; i += 8) {
-                await Promise.all(ups.slice(i, i + 8).map(async it => {
-                    try {
-                        const f = (it.ex.id !== undefined && it.ex.id !== null) ? `id=eq.${enc(it.ex.id)}` : `admis_no=eq.${enc(it.ex.admis_no)}`;
-                        const r = await fetch(`${base}?${f}`, { method: 'PATCH', headers: hdr, body: JSON.stringify(it.payload) });
-                        if(!r.ok) { results.push({ ...it, ok: false, error: await r.text() }); tick(); return; }
-                        const rows = await r.json();
-                        if(rows.length) { results.push({ ...it, ok: true, row: rows[0] }); tick(); }
-                        else await insertOne(it);
-                    } catch(e) { results.push({ ...it, ok: false, error: String(e.message || e) }); tick(); }
-                }));
-            }
-            // new rows: in chunks; if a chunk fails, retry row by row to see exactly which ones fail
-            for(let i = 0; i < ins.length; i += 100) {
-                const chunk = ins.slice(i, i + 100);
-                try {
-                    const r = await fetch(base, { method: 'POST', headers: hdr, body: JSON.stringify(chunk.map(x => x.payload)) });
-                    if(r.ok) {
-                        const rows = await r.json();
-                        chunk.forEach(it => { results.push({ ...it, ok: true, row: rows.find(x => rawTrim(x.admis_no) === it.admNo) || null }); tick(); });
-                        continue;
-                    }
-                } catch(e) { /* fall through to row-by-row */ }
-                await Promise.all(chunk.map(insertOne));
-            }
-            return results;
-        }
-
-        function reportSave(results) {
-            const ok = results.filter(r => r.ok), bad = results.filter(r => !r.ok);
-            const diff = ok.filter(r => r.row && (
-                num(r.row.annual_fund) !== r.payload.annual_fund ||
-                num(r.row.new_fee) !== r.payload.new_fee ||
-                rawTrim(r.row.fee_type) !== r.payload.fee_type ||
-                rawTrim(r.row.effective_period) !== r.payload.effective_period));
-            const noEcho = ok.filter(r => !r.row);
-            const lines = [];
-            let title = '✅ Saved in the database';
-            lines.push(`<b>${ok.length - diff.length - noEcho.length}</b> record(s) saved and confirmed by the database.`);
-            if(diff.length) {
-                title = '⚠️ Saved, but the database kept different values';
-                lines.push(`<b style="color:#b45309">${diff.length}</b> record(s) were stored with different values than entered, for example: ` +
-                    diff.slice(0, 5).map(r => `Adm ${esc(r.admNo)} (annual fund entered ${r.payload.annual_fund}, stored ${num(r.row.annual_fund)})`).join('; ') +
-                    '. This usually means the column is missing or has a different type.');
-            }
-            if(noEcho.length) lines.push(`${noEcho.length} record(s) were accepted but the database did not send them back. Press 🔄 Reload and check the “saved in database” label.`);
-            let sql = '';
-            if(bad.length) {
-                title = '❌ Some records were NOT saved';
-                const errs = [...new Set(bad.map(b => b.error))].slice(0, 3);
-                lines.push(`<b style="color:#be123c">${bad.length}</b> record(s) failed. Database message:`);
-                errs.forEach(e => lines.push(`<code style="display:block;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:6px 8px;font-size:12px;word-break:break-word">${esc(String(e).slice(0, 400))}</code>`));
-                if(errs.some(e => /column|schema cache|PGRST204|42703/i.test(e))) { lines.push('A column is missing in the <b>increments</b> table. Run this SQL once in Supabase → SQL Editor, then save again:'); sql = FIX_SQL; }
-                else if(errs.some(e => /row-level security|42501/i.test(e))) { lines.push('The table is blocking writes (row-level security). Run this SQL once, then save again:'); sql = FIX_SQL; }
-            } else if(diff.length) sql = FIX_SQL;
-            showResult(title, lines, sql);
-        }
-
-        async function saveRows(indexes) {
-            showLoading("Saving...");
+            showLoading("Saving Increment Record...");
             try {
-                const items = indexes.map(readRow);
-                const results = await saveRecords(items, (d, t) => { document.getElementById('loadingText').innerText = `Saving ${d} / ${t}...`; });
-                await fetchIncrementsCache(true);
-                filterIncrementStudents();
-                hideLoading();
-                reportSave(results);
-            } catch(e) { hideLoading(); console.error(e); showResult('❌ Error', [esc(String(e.message || e))]); }
+                let existing = incrementsCache.find(i => (i.admis_no || '').trim() === admNo);
+                let res;
+
+                if (existing) {
+                    res = await fetch(`${config.url}/rest/v1/increments?admis_no=eq.${encodeURIComponent(admNo)}`, {
+                        method: 'PATCH',
+                        headers: { 
+                            "apikey": config.key, 
+                            "Authorization": `Bearer ${config.key}`, 
+                            "Content-Type": "application/json", 
+                            "Prefer": "return=minimal" 
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    res = await fetch(`${config.url}/rest/v1/increments`, {
+                        method: 'POST',
+                        headers: { 
+                            "apikey": config.key, 
+                            "Authorization": `Bearer ${config.key}`, 
+                            "Content-Type": "application/json", 
+                            "Prefer": "return=minimal" 
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                }
+
+                if(res.ok) {
+                    await fetchIncrementsCache();
+                    filterIncrementStudents();
+                    hideLoading();
+                    alert("Increment Saved Successfully!");
+                } else {
+                    let err = await res.text();
+                    hideLoading();
+                    alert("Failed to save increment: " + err);
+                }
+            } catch(e) { hideLoading(); console.error(e); alert("Connection error."); }
         }
 
         async function saveAllIncrementsBatch() {
-            let checked = [...document.querySelectorAll('.row-checkbox:checked')].map(cb => parseInt(cb.getAttribute('data-index')));
-            if(checked.length === 0) { alert("Please check at least one student row to save!"); return; }
-            await saveRows(checked);
-        }
+            let checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+            if(checkedBoxes.length === 0) { alert("Please check at least one student row to save!"); return; }
 
-        async function bulkDeleteSelected() {
-            let checkedBoxes = [...document.querySelectorAll('.row-checkbox:checked')];
-            if(checkedBoxes.length === 0) { alert("Please select at least one row to delete!"); return; }
-            if(!confirm("Delete the saved increments of the selected students?")) return;
+            showLoading("Saving Checked Changes...");
+            let config = getSupabaseConfig();
 
-            showLoading("Deleting Selected Records...");
-            const c = getSupabaseConfig();
-            let deleted = 0, failed = [], none = 0;
             try {
                 for(let cb of checkedBoxes) {
-                    const admNo = cb.closest('tr').dataset.admNo, ex = findExisting(admNo);
-                    if(!ex) { none++; continue; }
-                    const f = (ex.id !== undefined && ex.id !== null) ? `id=eq.${enc(ex.id)}` : `admis_no=eq.${enc(ex.admis_no)}`;
-                    const r = await fetch(`${c.url}/rest/v1/increments?${f}`, { method: 'DELETE', headers: { "apikey": c.key, "Authorization": `Bearer ${c.key}`, "Prefer": "return=representation" } });
-                    if(r.ok) { const rows = await r.json(); if(rows.length) deleted++; else none++; }
-                    else failed.push(await r.text());
+                    let idx = cb.getAttribute('data-index');
+                    let row = cb.closest('tr');
+                    let admNo = row.dataset.admNo;
+                    let sName = row.dataset.sName;
+                    let feeType = document.getElementById(`ftype_${idx}`).value.trim();
+                    let newFee = parseFloat(document.getElementById(`newfee_${idx}`).value) || 0;
+                    let effPeriod = document.getElementById(`eff_${idx}`).value.trim();
+                    let oldFee = parseFloat(document.getElementById(`oldfee_${idx}`).value) || 0;
+                    let feeInc = parseFloat(document.getElementById(`feeinc_${idx}`).value) || 0;
+                    let annualFund = parseFloat(document.getElementById(`annualfund_${idx}`).value) || 0;
+                    let remarks = document.getElementById(`remarks_${idx}`).value.trim();
+
+                    let payload = { 
+                        admis_no: admNo, 
+                        student_name: sName, 
+                        fee_type: feeType, 
+                        new_fee: newFee, 
+                        effective_period: effPeriod, 
+                        old_fee: oldFee, 
+                        fee_increament: feeInc, 
+                        annual_fund: annualFund,
+                        remarks: remarks
+                    };
+
+                    let existing = incrementsCache.find(i => (i.admis_no || '').trim() === admNo);
+
+                    if (existing) {
+                        await fetch(`${config.url}/rest/v1/increments?admis_no=eq.${encodeURIComponent(admNo)}`, {
+                            method: 'PATCH',
+                            headers: { 
+                                "apikey": config.key, 
+                                "Authorization": `Bearer ${config.key}`, 
+                                "Content-Type": "application/json", 
+                                "Prefer": "return=minimal" 
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                    } else {
+                        await fetch(`${config.url}/rest/v1/increments`, {
+                            method: 'POST',
+                            headers: { 
+                                "apikey": config.key, 
+                                "Authorization": `Bearer ${config.key}`, 
+                                "Content-Type": "application/json", 
+                                "Prefer": "return=minimal" 
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                    }
                 }
-                await fetchIncrementsCache(true);
+
+                await fetchIncrementsCache();
                 filterIncrementStudents();
                 hideLoading();
-                const lines = [`<b>${deleted}</b> increment record(s) deleted.`];
-                if(none) lines.push(`${none} selected student(s) had no saved increment.`);
-                if(failed.length) lines.push(`<b style="color:#be123c">${failed.length}</b> failed: <code>${esc(failed[0].slice(0, 300))}</code>`);
-                showResult(failed.length ? '⚠️ Delete finished with errors' : '✅ Delete finished', lines);
+                alert("Checked Increments Saved Successfully!");
             } catch(e) {
                 hideLoading();
                 console.error(e);
-                showResult('❌ Error', [esc(String(e.message || e))]);
+                alert("Error during batch saving.");
             }
         }
+
+        async function bulkDeleteSelected() {
+            let checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+            if(checkedBoxes.length === 0) { alert("Please select at least one row to delete!"); return; }
+            if(!confirm(`Kya aap selected students ke increments delete karna chahte hain?`)) return;
+
+            showLoading("Deleting Selected Records...");
+            let config = getSupabaseConfig();
+
+            try {
+                for(let cb of checkedBoxes) {
+                    let row = cb.closest('tr');
+                    let admNo = row.dataset.admNo;
+                    await fetch(`${config.url}/rest/v1/increments?admis_no=eq.${encodeURIComponent(admNo)}`, {
+                        method: 'DELETE',
+                        headers: { "apikey": config.key, "Authorization": `Bearer ${config.key}` }
+                    });
+                }
+                await fetchIncrementsCache();
+                filterIncrementStudents();
+                hideLoading();
+                alert("Selected Records Successfully Deleted!");
+            } catch(e) {
+                hideLoading();
+                console.error(e);
+                alert("Error during bulk delete.");
+            }
+        }
+
+
+
+
     </script>
 </body>
 </html>
