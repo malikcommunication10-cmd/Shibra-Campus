@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fee Vouchers - Concept School Shibra Campus</title>
-<script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
-    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+<link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -116,7 +115,6 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button onclick="generateVouchers()" class="btn b-pri">Generate vouchers</button>
           <button onclick="generateVouchers(true)" class="btn b-ok">Create / Update selected</button>
-          <button onclick="generateAnnualFund()" class="btn b-gh sm:col-span-2">🎁 Create annual fund vouchers (from Bulk Updation)</button>
         </div>
       </div>
     </section>
@@ -389,51 +387,6 @@ function renderStudentSummary(){
     <td data-l="Total balance" class="font-extrabold ${o.bal>0?'text-rose-600':o.bal<0?'text-indigo-600':'text-slate-500'}">${o.bal<0?'Adv '+fmt(-o.bal):'PKR '+fmt(o.bal)}</td></tr>`}).join('')
     +(list.length?`<tr class="bg-slate-100 font-bold"><td colspan="3" class="nl text-right">Total (${list.length} students, up to ${esc(lbl)}):</td><td data-l="Previous">PKR ${fmt(T.prev)}</td><td data-l="Payable">PKR ${fmt(T.pay)}</td><td data-l="Paid">PKR ${fmt(T.paid)}</td><td data-l="Balance" class="text-rose-600">PKR ${fmt(T.bal)}</td></tr>`:`<tr><td colspan="7" class="nl p-6 text-center text-slate-400">No students found.</td></tr>`);
 }
-function parsePeriod(x) {
-  const t = String(x || '').trim().toLowerCase(); if(!t) return null;
-  let m = null, y = (t.match(/(20\d\d)/) || [])[1] || '2026';
-  const names = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  for(let i = 0; i < 12; i++) if(t.includes(names[i])) { m = i; break; }
-  if(m === null) { const n = t.match(/^(\d{1,2})[\/\-.](20\d\d)$/) || t.match(/^(20\d\d)[\/\-.](\d{1,2})$/); if(n) { const a = +n[1], b = +n[2]; m = (a > 31 ? b : a) - 1; y = String(a > 31 ? a : b); } }
-  if(m === null || m < 0 || m > 11 || y !== '2026') return null;
-  return MONTHS[m];
-}
-const periodNum = x => monthOrder[parsePeriod(x)] || 0;
-
-async function generateAnnualFund() {
-  if(!allStudentsCache.length) { showAlert("No students found in students directory!"); return; }
-  if(vidMode() === 'manual' && !parseStart()) { showAlert("Please enter a starting voucher number, e.g. V-586545."); return; }
-  const selPeriod = $('voucherPeriod').value === 'ALL_YEAR' ? null : $('voucherPeriod').value;
-  const used = new Set(); allFeesCache.forEach(f => { const n = vNum(f.voucher_id); if(n) used.add(n); });
-  const nextId = makeVidGenerator(used);
-  const keys = new Set(); allFeesCache.forEach(f => keys.add(`${normAdm(f.admis_no)}_${(f.period || '').trim()}_${(f.type || '').trim().toLowerCase()}`));
-  const out = [], skip = { exists: 0, noStudent: 0, notEligible: 0, noPeriod: 0, notAnnual: 0 }, byMonth = {}; let usedSel = 0;
-  Object.values(incrementsCacheMap).forEach(inc => {
-    if(!(parseFloat(inc.annual_fund) > 0)) return;
-    if(!/annual/i.test(inc.fee_type || '')) { skip.notAnnual++; return; }
-    let period = parsePeriod(inc.effective_period);
-    if(!period && selPeriod) { period = selPeriod; usedSel++; }
-    if(!period) { skip.noPeriod++; return; }
-    const st = allStudentsCache.find(x => normAdm(x.admis_no) === normAdm(inc.admis_no));
-    if(!st) { skip.noStudent++; return; }
-    if(eligibility(st, period) !== 'ok') { skip.notEligible++; return; }
-    const key = `${normAdm(st.admis_no)}_${period}_annual fund`;
-    if(keys.has(key)) { skip.exists++; return; }
-    keys.add(key);
-    out.push({ sr_no: st.sr_no || '', voucher_id: nextId(), admis_no: st.admis_no || '', student_name: st.student_name || '', type: 'annual fund', period, payable: parseFloat(inc.annual_fund), class: st.class || '', status: 'Unpaid', date: today(), remarks: inc.remarks || '', [FEES_SIBLINGS_COL]: getStudentSiblings(st), [FEES_ARREARS_COL]: null });
-    byMonth[period] = (byMonth[period] || 0) + 1;
-  });
-  const sk = `\n\nSkipped: ${skip.exists} already have it, ${skip.notEligible} not eligible (joined later / left), ${skip.noStudent} student not found, ${skip.noPeriod} no effective month, ${skip.notAnnual} fee type is not "annual fund".`;
-  if(!out.length) { showAlert("No annual fund vouchers to create." + sk + (usedSel ? '' : '\n\nTip: in Bulk Updation the Effective period must be a month like "October 2026".')); return; }
-  showConfirm(`${out.length} annual fund voucher(s) will be created:\n` + Object.entries(byMonth).map(([m, n]) => `${m}: ${n}`).join(', ') + (usedSel ? `\n(${usedSel} had no effective month, so ${selPeriod} is used)` : '') + sk + `\n\nProceed?`, async () => {
-    showLoading("Creating annual fund vouchers...");
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/fees`, { method: 'POST', headers: HJ, body: JSON.stringify(out) });
-      hideLoading();
-      if(res.ok) { showAlert("Annual fund vouchers created!"); initFeePage(); } else showAlert("Failed: " + await res.text());
-    } catch(e) { hideLoading(); console.error(e); showAlert("Error connecting to database."); }
-  });
-}
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
   $('fromMonth').value=1;$('toMonth').value=ci;if(!silent)filterVouchers();
@@ -643,7 +596,7 @@ function generateVouchers(withUpdate){
         ev=(+lm[1])*12+(+lm[2])-(+lm[3]>15?0:1);
       }
       if(pv<sv||(ev!==null&&pv>ev))return;
-      const inc=incrementsCacheMap[adm],cm=monthOrder[period]||0,em=inc?periodNum(inc.effective_period):0;
+      const inc=incrementsCacheMap[adm],cm=monthOrder[period]||0,em=inc?(monthOrder[(inc.effective_period||'').trim()]||0):0;
       let tp=parseFloat(st.monthly_tution_fee)||0,rm='';
       if(inc){
         if(em>0&&cm>=em){if(parseFloat(inc.new_fee)>0)tp=parseFloat(inc.new_fee)}
@@ -771,7 +724,7 @@ function eligibility(st,period){
 function expectedTuition(st,period){
   const inc=incrementsCacheMap[(st.admis_no||'').trim().toLowerCase()],cm=monthOrder[period]||0;
   let t=parseFloat(st.monthly_tution_fee)||0;
-  if(inc){const em=periodNum(inc.effective_period);
+  if(inc){const em=monthOrder[(inc.effective_period||'').trim()]||0;
     if(em>0&&cm>=em){if(parseFloat(inc.new_fee)>0)t=parseFloat(inc.new_fee)}else t=parseFloat(inc.old_fee)||t}
   return t;
 }
