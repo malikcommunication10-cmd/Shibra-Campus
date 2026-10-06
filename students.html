@@ -271,7 +271,27 @@
 
         function openStudentModal() { document.getElementById('studentModal').classList.remove('hidden'); document.body.style.overflow = 'hidden'; }
         function closeStudentModal() { document.getElementById('studentModal').classList.add('hidden'); document.body.style.overflow = ''; }
-        function addStudentClick() { resetForm(); openStudentModal(); setTimeout(() => document.getElementById('sr_no').focus(), 60); }
+        // next Sr No / Admission No = the last number + 1 (keeps a prefix, suffix and leading zeros, e.g. A-0099 -> A-0100)
+        function nextNum(list) {
+            let best = null;
+            list.forEach(v => { const m = String(v ?? '').trim().match(/^(\D*?)(\d+)(\D*)$/); if(!m) return; const n = parseInt(m[2], 10); if(!best || n > best.n) best = { n, pre: m[1], suf: m[3], len: m[2].length, pad: m[2].length > 1 && m[2].startsWith('0') }; });
+            if(!best) return '';
+            const nx = String(best.n + 1);
+            return best.pre + (best.pad ? nx.padStart(best.len, '0') : nx) + best.suf;
+        }
+        function fillNextNumbers(rows) {
+            const sr = document.getElementById('sr_no'), ad = document.getElementById('admis_no');
+            if(document.getElementById('editOriginalAdm').value !== '') return;
+            if(!sr.dataset.touched) sr.value = nextNum(rows.map(r => r.sr_no));
+            if(!ad.dataset.touched) ad.value = nextNum(rows.map(r => r.admis_no));
+        }
+        async function addStudentClick() {
+            resetForm(); openStudentModal();
+            ['sr_no', 'admis_no'].forEach(id => { const el = document.getElementById(id); delete el.dataset.touched; el.oninput = () => { el.dataset.touched = '1'; }; });
+            fillNextNumbers(allStudentsCache);                       // instantly from the loaded list
+            try { const r = await sbFetchAll('students', 'select=sr_no,admis_no'); const rows = r.ok ? await r.json() : null; if(Array.isArray(rows) && rows.length) fillNextNumbers(rows); } catch (e) { /* keep the cached values */ }
+            setTimeout(() => document.getElementById('student_name').focus(), 60);
+        }
         function cancelStudentForm() { resetForm(); closeStudentModal(); }
         document.addEventListener('keydown', e => { if(e.key === 'Escape') cancelStudentForm(); });
 
@@ -417,9 +437,9 @@ function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
           <div class="flex items-center gap-2 mb-3"><span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm">👤</span><h4 class="text-sm font-bold text-indigo-950">Student information</h4></div>
           <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
             <div class="sm:col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Sr No <span class="text-rose-500">*</span></label>
-              <input type="number" id="sr_no" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></div>
+              <input type="number" id="sr_no" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><p class="text-[10px] text-slate-400 mt-0.5">Auto: next number</p></div>
             <div class="sm:col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Admission No <span class="text-rose-500">*</span></label>
-              <input type="text" id="admis_no" required placeholder="Unique number" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"></div>
+              <input type="text" id="admis_no" required placeholder="Unique number" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><p class="text-[10px] text-slate-400 mt-0.5">Auto: next number (editable)</p></div>
             <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Class <span class="text-rose-500">*</span></label>
               <input type="text" id="class" list="classList" required placeholder="Select or type" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><datalist id="classList"></datalist></div>
             <div class="col-span-2 sm:col-span-4"><label class="block text-xs font-semibold text-slate-600 mb-1">Student name <span class="text-rose-500">*</span></label>
