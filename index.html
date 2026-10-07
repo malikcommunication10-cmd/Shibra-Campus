@@ -58,7 +58,7 @@ async function initDashboard() {
     try {
         const [sR, fR, aR, bR, pR] = await Promise.all([
             sbFetchAll('students', 'select=admis_no,status,class'),
-            sbFetchAll('fees', 'select=voucher_id,class,period,payable,discount'),
+            sbFetchAll('fees', 'select=voucher_id,class,period,type,payable,discount'),
             sbFetchAll('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date'),
             sbFetchAll('books', 'select=*'),
             sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Promise')
@@ -79,9 +79,10 @@ async function initDashboard() {
             if (d.slice(0, 7) === ym) month$ += amt;
         });
         let pending = 0, unpaid = 0; const byClass = {};
-        fees.forEach(f => {
+        const pa = splitVoucherPaid(fees, f => (parseFloat(f.payable) || 0) - (parseFloat(f.discount) || 0), f => paidBy[String(f.voucher_id || '').trim()] || 0, f => f.type, f => f.voucher_id);
+        fees.forEach((f, i) => {
             const r = rank(f.period); if (r !== null && r > cur) return;      // later months are not dues yet
-            const v = String(f.voucher_id || '').trim(), bal = (parseFloat(f.payable) || 0) - (parseFloat(f.discount) || 0) - (paidBy[v] || 0);
+            const bal = (parseFloat(f.payable) || 0) - (parseFloat(f.discount) || 0) - pa[i];
             if (bal > 0) { pending += bal; unpaid++; const c = String(f.class || '-').trim() || '-'; byClass[c] = (byClass[c] || 0) + bal; }
         });
         const cards = [
