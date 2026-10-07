@@ -151,3 +151,24 @@ function parsePromises(rows) {
     Object.keys(out).forEach(k => { if (!out[k].d) delete out[k]; });
     return out;
 }
+
+// ============================================================================
+//  One voucher can hold several fee rows (the admission voucher: registration + admission + annual fund + tuition).
+//  The payments of a voucher are shared by its rows and clear them in this order.
+// ============================================================================
+const FEE_ORDER = ['arrears', 'registration fee', 'admission fee', 'annual fund', 'tuition fee'];
+const feeRank = t => { const i = FEE_ORDER.indexOf(String(t || '').trim().toLowerCase()); return i < 0 ? 9 : i; };
+// returns the paid amount of every row (same order as rows); paidOf(row) is the TOTAL paid of the row's voucher
+function splitVoucherPaid(rows, netOf, paidOf, typeOf, vidOf) {
+    const groups = {};
+    rows.forEach((r, i) => { const v = String(vidOf(r) || '').trim(); (groups[v] = groups[v] || []).push(i); });
+    const out = new Array(rows.length).fill(0);
+    Object.keys(groups).forEach(v => {
+        const idx = groups[v], total = paidOf(rows[idx[0]]) || 0;
+        if (idx.length === 1) { out[idx[0]] = total; return; }
+        let left = total;
+        const ord = idx.slice().sort((a, b) => feeRank(typeOf(rows[a])) - feeRank(typeOf(rows[b])) || a - b);
+        ord.forEach((i, k) => { const use = k === ord.length - 1 ? left : Math.max(0, Math.min(left, netOf(rows[i]))); out[i] = Math.round(use * 100) / 100; left -= use; });
+    });
+    return out;
+}
