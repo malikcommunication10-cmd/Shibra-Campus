@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fee Vouchers - Concept School Shibra Campus</title>
-<link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
+<script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -115,6 +116,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button onclick="generateVouchers()" class="btn b-pri">Generate vouchers</button>
           <button onclick="generateVouchers(true)" class="btn b-ok">Create / Update selected</button>
+          <button onclick="generateAnnualFund()" class="btn b-gh sm:col-span-2">🎁 Create annual fund vouchers (from Bulk Updation)</button>
         </div>
       </div>
     </section>
@@ -326,7 +328,7 @@ async function initFeePage(){
           status:(paid>=net&&(net>0||disc>0))?'Paid':(paid>0?'Partial':'Unpaid'),
           paymentDates:acc.dates.size?[...acc.dates].join(', '):'-'};
       });
-      populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
+      regroupFees();populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
     }else{allFeesCache=[];$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No fee vouchers found.</td></tr>`}
   }catch(e){console.error(e);$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`}
   hideLoading();
@@ -387,6 +389,58 @@ function renderStudentSummary(){
     <td data-l="Total balance" class="font-extrabold ${o.bal>0?'text-rose-600':o.bal<0?'text-indigo-600':'text-slate-500'}">${o.bal<0?'Adv '+fmt(-o.bal):'PKR '+fmt(o.bal)}</td></tr>`}).join('')
     +(list.length?`<tr class="bg-slate-100 font-bold"><td colspan="3" class="nl text-right">Total (${list.length} students, up to ${esc(lbl)}):</td><td data-l="Previous">PKR ${fmt(T.prev)}</td><td data-l="Payable">PKR ${fmt(T.pay)}</td><td data-l="Paid">PKR ${fmt(T.paid)}</td><td data-l="Balance" class="text-rose-600">PKR ${fmt(T.bal)}</td></tr>`:`<tr><td colspan="7" class="nl p-6 text-center text-slate-400">No students found.</td></tr>`);
 }
+function parsePeriod(x) {
+  const t = String(x || '').trim().toLowerCase(); if(!t) return null;
+  let m = null, y = (t.match(/(20\d\d)/) || [])[1] || '2026';
+  const names = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  for(let i = 0; i < 12; i++) if(t.includes(names[i])) { m = i; break; }
+  if(m === null) { const n = t.match(/^(\d{1,2})[\/\-.](20\d\d)$/) || t.match(/^(20\d\d)[\/\-.](\d{1,2})$/); if(n) { const a = +n[1], b = +n[2]; m = (a > 31 ? b : a) - 1; y = String(a > 31 ? a : b); } }
+  if(m === null || m < 0 || m > 11 || y !== '2026') return null;
+  return MONTHS[m];
+}
+const periodNum = x => monthOrder[parsePeriod(x)] || 0;
+
+async function generateAnnualFund() {
+  if(!allStudentsCache.length) { showAlert("No students found in students directory!"); return; }
+  if(vidMode() === 'manual' && !parseStart()) { showAlert("Please enter a starting voucher number, e.g. V-586545."); return; }
+  const selPeriod = $('voucherPeriod').value === 'ALL_YEAR' ? null : $('voucherPeriod').value;
+  const used = new Set(); allFeesCache.forEach(f => { const n = vNum(f.voucher_id); if(n) used.add(n); });
+  const nextId = makeVidGenerator(used);
+  const keys = new Set(); allFeesCache.forEach(f => keys.add(`${normAdm(f.admis_no)}_${(f.period || '').trim()}_${(f.type || '').trim().toLowerCase()}`));
+  const out = [], skip = { exists: 0, noStudent: 0, notEligible: 0, noPeriod: 0, notAnnual: 0 }, byMonth = {}; let usedSel = 0;
+  Object.values(incrementsCacheMap).forEach(inc => {
+    if(!(parseFloat(inc.annual_fund) > 0)) return;
+    if(!/annual/i.test(inc.fee_type || '')) { skip.notAnnual++; return; }
+    let period = parsePeriod(inc.effective_period);
+    if(!period && selPeriod) { period = selPeriod; usedSel++; }
+    if(!period) { skip.noPeriod++; return; }
+    const st = allStudentsCache.find(x => normAdm(x.admis_no) === normAdm(inc.admis_no));
+    if(!st) { skip.noStudent++; return; }
+    if(eligibility(st, period) !== 'ok') { skip.notEligible++; return; }
+    const key = `${normAdm(st.admis_no)}_${period}_annual fund`;
+    if(keys.has(key)) { skip.exists++; return; }
+    keys.add(key);
+    out.push({ sr_no: st.sr_no || '', voucher_id: nextId(), admis_no: st.admis_no || '', student_name: st.student_name || '', type: 'annual fund', period, payable: parseFloat(inc.annual_fund), class: st.class || '', status: 'Unpaid', date: today(), remarks: inc.remarks || '', [FEES_SIBLINGS_COL]: getStudentSiblings(st), [FEES_ARREARS_COL]: null });
+    byMonth[period] = (byMonth[period] || 0) + 1;
+  });
+  const sk = `\n\nSkipped: ${skip.exists} already have it, ${skip.notEligible} not eligible (joined later / left), ${skip.noStudent} student not found, ${skip.noPeriod} no effective month, ${skip.notAnnual} fee type is not "annual fund".`;
+  if(!out.length) { showAlert("No annual fund vouchers to create." + sk + (usedSel ? '' : '\n\nTip: in Bulk Updation the Effective period must be a month like "October 2026".')); return; }
+  showConfirm(`${out.length} annual fund voucher(s) will be created:\n` + Object.entries(byMonth).map(([m, n]) => `${m}: ${n}`).join(', ') + (usedSel ? `\n(${usedSel} had no effective month, so ${selPeriod} is used)` : '') + sk + `\n\nProceed?`, async () => {
+    showLoading("Creating annual fund vouchers...");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/fees`, { method: 'POST', headers: HJ, body: JSON.stringify(out) });
+      hideLoading();
+      if(res.ok) { showAlert("Annual fund vouchers created!"); initFeePage(); } else showAlert("Failed: " + await res.text());
+    } catch(e) { hideLoading(); console.error(e); showAlert("Error connecting to database."); }
+  });
+}
+function regroupFees(){
+  // several rows can share one voucher (admission voucher): split the voucher's payments over its rows
+  const pa=splitVoucherPaid(allFeesCache,r=>r.net,r=>r.totalPaid,r=>r.type,r=>r.voucher_id),cnt={};
+  allFeesCache.forEach(r=>{const v=(r.voucher_id||'').trim();cnt[v]=(cnt[v]||0)+1});
+  allFeesCache.forEach((r,i)=>{const v=(r.voucher_id||'').trim();r._gn=cnt[v];
+    if(cnt[v]>1){r.totalPaid=pa[i];r.balance=r.net-pa[i];r.status=(pa[i]>=r.net&&(r.net>0||r.discount>0))?'Paid':(pa[i]>0?'Partial':'Unpaid')}});
+}
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
   $('fromMonth').value=1;$('toMonth').value=ci;if(!silent)filterVouchers();
@@ -417,11 +471,11 @@ function renderFeesTable(data){
     html+=`<tr class="${a?'bg-rose-50/60':'hover:bg-slate-50'} ${r._out?'opacity-50':''}">
     <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(vId)}" ${lock?'disabled':''}></td>
     <td data-l="Sr">${a?'<span class="text-rose-400">↳</span>':++sr}</td>
-    <td data-l="Voucher" class="font-mono text-indigo-900">${esc(vId)||'-'}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</td>
+    <td data-l="Voucher" class="font-mono text-indigo-900">${esc(vId)||'-'}${r._gn>1?` <span class="badge bg-indigo-100 text-indigo-700" title="Combined voucher: ${r._gn} items">🧩 ${r._gn}</span>`:''}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</td>
     <td data-l="Admis No" class="font-mono">${esc(r.admis_no)||'-'}</td>
     <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(r.student_name||'')}'))" class="text-indigo-600 underline">${esc(r.student_name)||'-'}</a></td>
     <td data-l="Siblings">${esc(r[FEES_SIBLINGS_COL])||'-'}</td>
-    <td data-l="Type" class="${a?'text-rose-700 font-bold':''}">${a?'Arrears 2025':esc(r.type||'Tuition Fee')}</td>
+    <td data-l="Type" class="${a?'text-rose-700 font-bold':''}">${a?'Arrears':esc(r.type||'Tuition Fee')}</td>
     <td data-l="Period" class="text-indigo-600 font-medium">${esc(r.period)||'-'}</td>
     <td data-l="Payable" class="font-bold">PKR ${fmt(r.payable)}${r.discount>0?`<div class="text-[10px] text-indigo-600 font-semibold" title="${esc(r.remarks)}">Discount -${fmt(r.discount)}</div>`:''}</td>
     <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(r.totalPaid)}</td>
@@ -523,18 +577,21 @@ function openStudentLedger(name){
   const nm=(name||'').trim().toLowerCase();
   const list=allFeesCache.filter(r=>(r.student_name||'').trim().toLowerCase()===nm);
   list.sort((a,b)=>((monthOrder[(a.period||'').trim()]||99)-(monthOrder[(b.period||'').trim()]||99))||(isArr(b)-isArr(a)));
-  let tp=0,td=0,tb=0,cls='',html='';
-  list.forEach(v=>{
+  const L=[],seenG={};
+ list.forEach(v=>{const k=(v.voucher_id||'').trim();if(v._gn>1){const g=seenG[k];if(g){g.net+=v.net;g.payable=(parseFloat(g.payable)||0)+(parseFloat(v.payable)||0);g.discount=(g.discount||0)+(v.discount||0);g.totalPaid+=parseFloat(v.totalPaid)||0;g.balance+=parseFloat(v.balance)||0;g._items.push(v)}else{const m={...v,_items:[v],type:'admission voucher'};seenG[k]=m;L.push(m)}}else L.push(v)});
+ let tp=0,td=0,tb=0,cls='',html='';
+ L.forEach(v=>{
     tp+=v.net??(parseFloat(v.payable)||0);td+=parseFloat(v.totalPaid)||0;tb+=parseFloat(v.balance)||0;if(!cls)cls=v.class||'-';
     const pay=v.net??(parseFloat(v.payable)||0);let run=pay;
-    const note=(isArr(v)?' <span class="text-rose-600 font-semibold">(Previous year arrears 2025)</span>':'')+(v.discount>0?` <span class="text-indigo-600 font-semibold">(Discount PKR ${fmt(v.discount)}: ${esc(v.remarks)})</span>`:'');
+    const tcs=t=>String(t||'').replace(/\b\w/g,c=>c.toUpperCase());
+ const note=(isArr(v)?' <span class="text-rose-600 font-semibold">(Arrears)</span>':'')+(v._items?` <span class="text-indigo-700 font-semibold">(${v._items.map(x=>tcs(x.type)+' '+fmt(x.net)).join(' + ')})</span>`:'')+(v.discount>0?` <span class="text-indigo-600 font-semibold">(Discount PKR ${fmt(v.discount)}: ${esc(v.remarks)})</span>`:'');
     const txns=[...(accountsDataMap[(v.voucher_id||'').trim()]?.transactions||[])].sort((a,b)=>new Date(a.date)-new Date(b.date));
     const cells=(d,desc,paid,bal)=>`<tr class="border-b"><td class="p-2 font-mono">${esc(d)}</td><td class="p-2 font-mono text-indigo-900">${esc(v.voucher_id)||'-'}</td><td class="p-2 text-indigo-600">${esc(v.period)||'-'}</td><td class="p-2 text-slate-600">${desc}${note}</td><td class="p-2 font-bold">PKR ${fmt(pay)}</td><td class="p-2 font-bold text-emerald-600">PKR ${fmt(paid)}</td><td class="p-2 font-bold">PKR ${fmt(bal)}</td></tr>`;
     if(txns.length)txns.forEach(t=>{const a=parseFloat(t.amount_in)||0;run-=a;html+=cells(t.date||'-',esc(t.description||t.remarks||'-'),a,run)});
     else html+=cells('-','Unpaid voucher',0,run);
   });
   $('ledgerTableBody').innerHTML=html;
-  const ref=list[0]||{};
+  const ref=L[0]||{};
   $('ledgerStudentInfo').innerText=`Student: ${name} | Class: ${cls}${ref.admis_no?' | Admis No: '+ref.admis_no:''}${ref[FEES_SIBLINGS_COL]?' | Siblings: '+ref[FEES_SIBLINGS_COL]:''}`;
   $('ledgerTotalPayable').innerText=`PKR ${fmt(tp)}`;$('ledgerTotalPaid').innerText=`PKR ${fmt(td)}`;$('ledgerTotalBalance').innerText=`PKR ${fmt(tb)}`;
   $('ledgerModal').classList.add('open');
@@ -545,8 +602,9 @@ const closeLedgerModal=()=>$('ledgerModal').classList.remove('open');
 function openPayModal(vId){
   const row=allFeesCache.find(r=>(r.voucher_id||'').trim()===vId);if(!row)return;
   $('payVoucherId').value=row.voucher_id||'';$('payStudentName').value=row.student_name||'';
-  $('payFromAccount').value=`${row.type||'Tuition Fee'} (${row.period||''}) - ${row.student_name||''}`;
-  const pay=row.net??(parseFloat(row.payable)||0),rem=pay-(parseFloat(row.totalPaid)||0);
+  const grp=allFeesCache.filter(r=>(r.voucher_id||'').trim()===vId),tc=t=>String(t||'').replace(/\b\w/g,c=>c.toUpperCase());
+ $('payFromAccount').value=grp.length>1?`Admission voucher (${grp.map(r=>tc(r.type)).join(' + ')}) - ${row.student_name||''}`:`${row.type||'Tuition Fee'} (${row.period||''}) - ${row.student_name||''}`;
+ const pay=grp.reduce((s,r)=>s+(r.net??(parseFloat(r.payable)||0)),0),rem=pay-grp.reduce((s,r)=>s+(parseFloat(r.totalPaid)||0),0);
   $('payPayable').value=pay;$('payAmountIn').value=rem>0?rem:pay;$('payRemarks').value=row.remarks||'';
   $('payModal').classList.add('open');
 }
@@ -596,7 +654,7 @@ function generateVouchers(withUpdate){
         ev=(+lm[1])*12+(+lm[2])-(+lm[3]>15?0:1);
       }
       if(pv<sv||(ev!==null&&pv>ev))return;
-      const inc=incrementsCacheMap[adm],cm=monthOrder[period]||0,em=inc?(monthOrder[(inc.effective_period||'').trim()]||0):0;
+      const inc=incrementsCacheMap[adm],cm=monthOrder[period]||0,em=inc?periodNum(inc.effective_period):0;
       let tp=parseFloat(st.monthly_tution_fee)||0,rm='';
       if(inc){
         if(em>0&&cm>=em){if(parseFloat(inc.new_fee)>0)tp=parseFloat(inc.new_fee)}
@@ -724,7 +782,7 @@ function eligibility(st,period){
 function expectedTuition(st,period){
   const inc=incrementsCacheMap[(st.admis_no||'').trim().toLowerCase()],cm=monthOrder[period]||0;
   let t=parseFloat(st.monthly_tution_fee)||0;
-  if(inc){const em=monthOrder[(inc.effective_period||'').trim()]||0;
+  if(inc){const em=periodNum(inc.effective_period);
     if(em>0&&cm>=em){if(parseFloat(inc.new_fee)>0)t=parseFloat(inc.new_fee)}else t=parseFloat(inc.old_fee)||t}
   return t;
 }
