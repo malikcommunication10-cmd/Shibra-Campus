@@ -38,9 +38,11 @@
                     <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-3 gap-3">
                         <h3 class="text-base font-semibold text-indigo-700">Registered Students Record</h3>
                         <div class="flex items-center gap-2">
-                            <select id="classFilter" onchange="filterStudents()" class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700">
+                            <input id="studentSearch" type="search" oninput="filterStudents()" placeholder="Search name, adm no, class, phone..." class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none w-52 focus:w-64 transition-all">
+                        <select id="classFilter" onchange="filterStudents()" class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700">
                                 <option value="ALL">🔍 All Classes</option>
                             </select>
+                        <select id="statusFilter" onchange="filterStudents()" class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700"><option value="ALL">All status</option><option value="ACTIVE">Active</option><option value="LEFT">Left / Graduated</option></select>
                             <button onclick="initPage()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
                         </div>
                     </div>
@@ -52,18 +54,23 @@
                                     <th class="p-2.5">Student Name</th>
                                     <th class="p-2.5">Class</th>
                                     <th class="p-2.5">Father Contact</th>
-                                    <th class="p-2.5">Tuition Fee (Payable)</th>
+                                    <th class="p-2.5">Tuition</th>
+                            <th class="p-2.5">Registration</th>
+                            <th class="p-2.5">Admission</th>
+                            <th class="p-2.5">Annual fund</th>
+                            <th class="p-2.5">Arrears</th>
                                     <th class="p-2.5">Status</th>
                                     <th class="p-2.5 text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="studentTableBody">
-                                <tr><td colspan="7" class="p-4 text-center text-slate-400">Loading records...</td></tr>
+                                <tr><td colspan="11" class="p-4 text-center text-slate-400">Loading records...</td></tr>
                             </tbody>
+                    <tfoot id="studentTableFoot" class="sticky bottom-0 bg-slate-100 border-t font-bold text-slate-800"></tfoot>
                         </table>
                     </div>
                     <div class="mt-4 pt-3 border-t flex justify-between items-center bg-indigo-50/50 px-4 py-2.5 rounded-lg">
-                        <span class="text-xs font-bold text-indigo-950">Total Monthly Tuition Fee (Filtered):</span>
+                        <span class="text-xs font-bold text-indigo-950">Total of all fees (Filtered):</span>
                         <span id="totalTuitionFee" class="text-sm font-extrabold text-indigo-700">PKR 0</span>
                     </div>
                 </section>
@@ -118,7 +125,7 @@
         async function fetchStudents() {
             let config = getSupabaseConfig();
             let tbody = document.getElementById('studentTableBody');
-            tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
 
             try {
                 let response = await sbFetchAll('students', 'select=*');
@@ -130,7 +137,7 @@
                     filterStudents();
                 } else {
                     allStudentsCache = [];
-                    tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">No student records found.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="11" class="p-4 text-center text-slate-400">No student records found.</td></tr>`;
                     document.getElementById('totalTuitionFee').innerText = "PKR 0";
                 }
             } catch (error) {
@@ -154,55 +161,54 @@
         }
 
         function filterStudents() {
-            let selectedClass = document.getElementById('classFilter').value;
-            let targetData = selectedClass === 'ALL' ? [...allStudentsCache] : allStudentsCache.filter(row => (row.class || '').trim() === selectedClass);
-            targetData.sort((a, b) => (parseFloat(a.sr_no) || 0) - (parseFloat(b.sr_no) || 0));
-            renderTable(targetData);
+            const cls = document.getElementById('classFilter').value, stf = document.getElementById('statusFilter').value;
+            const toks = (document.getElementById('studentSearch').value || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+            const t = allStudentsCache.filter(row => {
+                if(cls !== 'ALL' && (row.class || '').trim() !== cls) return false;
+                const st = String(row.status || 'Active').trim().toLowerCase(), active = st === 'active' || st === '';
+                if(stf === 'ACTIVE' && !active) return false;
+                if(stf === 'LEFT' && active) return false;
+                if(toks.length) { const hay = [row.student_name, row.admis_no, row.class, row.contact_no_father, row.contact_no_mother, row.siblings, row.sr_no].map(x => String(x ?? '').toLowerCase()).join(' | '); if(!toks.every(k => hay.includes(k))) return false; }
+                return true;
+            });
+            t.sort((a, b) => (parseFloat(a.sr_no) || 0) - (parseFloat(b.sr_no) || 0));
+            renderTable(t);
         }
 
+        function feeOf(row, names) { for(const n of names) { const v = parseFloat(row[n]); if(!isNaN(v)) return v; } return 0; }
         function renderTable(data) {
-            let tbody = document.getElementById('studentTableBody');
-            tbody.innerHTML = '';
-            let totalFee = 0;
-
-            data.forEach((row, index) => {
-                let sequentialSr = index + 1;
-                let adm = row.admis_no || '';
-                let name = row.student_name || '-';
-                let cls = row.class || '-';
-                let fContact = row.contact_no_father || '-';
-                let tFee = parseFloat(row.monthly_tution_pay) || parseFloat(row.monthly_tution_fee) || 0;
-                let st = row.status || 'Active';
-                totalFee += tFee;
-
-                let statusBadge = st === 'Active' 
-                    ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Active</span>` 
+            const tbody = document.getElementById('studentTableBody'), tf = document.getElementById('studentTableFoot');
+            const T = { tu: 0, re: 0, ad: 0, an: 0, ar: 0 };
+            const money = v => v ? `<td class="p-2.5 text-slate-700">${v.toLocaleString()}</td>` : '<td class="p-2.5 text-slate-300">-</td>';
+            tbody.innerHTML = data.length ? data.map((row, index) => {
+                const adm = row.admis_no || '', name = row.student_name || '-', cls = row.class || '-', fContact = row.contact_no_father || '-', st = row.status || 'Active';
+                const tu = feeOf(row, ['monthly_tution_pay', 'monthly_tution_fee']), re = feeOf(row, ['regritation_fee', 'registration_fee', 'reg_fee']), ad = feeOf(row, ['admission_fee']), an = feeOf(row, ['annual_fund']), ar = feeOf(row, ['arrears2025']);
+                T.tu += tu; T.re += re; T.ad += ad; T.an += an; T.ar += ar;
+                const statusBadge = st === 'Active'
+                    ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Active</span>`
                     : `<span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">${esc(st)}</span>`;
-
-                let tr = document.createElement('tr');
-                tr.className = "border-b hover:bg-slate-50 transition";
-                tr.innerHTML = `
-                    <td class="p-2.5 font-medium">${sequentialSr} / ${esc(adm) || '-'}</td>
+                return `<tr class="border-b hover:bg-slate-50 transition">
+                    <td class="p-2.5 font-medium">${index + 1} / ${esc(adm) || '-'}</td>
                     <td class="p-2.5 font-semibold text-indigo-900">${esc(name)}${row.siblings ? `<div class="text-[11px] font-normal text-slate-500">Family: ${esc(row.siblings)}</div>` : ''}</td>
                     <td class="p-2.5 text-slate-600">${esc(cls)}</td>
                     <td class="p-2.5 text-slate-600">${esc(fContact)}</td>
-                    <td class="p-2.5 font-bold text-indigo-600">PKR ${tFee}</td>
+                    <td class="p-2.5 font-bold text-indigo-600">${tu.toLocaleString()}</td>
+                    ${money(re)}${money(ad)}${money(an)}${ar ? `<td class="p-2.5 font-semibold text-rose-600">${ar.toLocaleString()}</td>` : '<td class="p-2.5 text-slate-300">-</td>'}
                     <td class="p-2.5">${statusBadge}${row.left_date ? `<div class="text-[11px] text-slate-500">Left: ${esc(row.left_date)}</div>` : ''}</td>
                     <td class="p-2.5 text-center space-x-1">
                         <button onclick="editStudentByAdm(this.dataset.a)" data-a="${esc(adm)}" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium transition" title="Edit">✏️</button>
                         <button onclick="deleteStudent(this.dataset.a)" data-a="${esc(adm)}" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded font-medium transition" title="Delete">🗑️</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-            document.getElementById('totalTuitionFee').innerText = `PKR ${totalFee.toLocaleString()}`;
+                    </td></tr>`;
+            }).join('') : '<tr><td colspan="11" class="p-6 text-center text-slate-400">No students found.</td></tr>';
+            tf.innerHTML = data.length ? `<tr><td colspan="4" class="p-2.5 text-right">Total (${data.length} students)</td><td class="p-2.5 text-indigo-700">${T.tu.toLocaleString()}</td><td class="p-2.5">${T.re.toLocaleString()}</td><td class="p-2.5">${T.ad.toLocaleString()}</td><td class="p-2.5">${T.an.toLocaleString()}</td><td class="p-2.5 text-rose-600">${T.ar.toLocaleString()}</td><td colspan="2"></td></tr>` : '';
+            document.getElementById('totalTuitionFee').innerText = `PKR ${(T.tu + T.re + T.ad + T.an + T.ar).toLocaleString()}`;
         }
 
         // ====================================================================================
         // UNPAID FEE VOUCHERS CREATED TOGETHER WITH A NEW STUDENT
         // ====================================================================================
         const VM = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-        const OT = [['regCk', 'regritation_fee', 'regritation_disc', 'registration fee', 'Registration fee'], ['admCk', 'admission_fee', 'admission_disc', 'admission fee', 'Admission fee'], ['annCk', 'annual_fund', 'annual_fund_disc', 'annual fund', 'Annual fund'], ['arrCk', 'arrears2025', null, 'arrears', 'Arrears 2025']];
+        const OT = [['regCk', 'regritation_fee', 'regritation_disc', 'registration fee', 'Registration fee'], ['admCk', 'admission_fee', 'admission_disc', 'admission fee', 'Admission fee'], ['annCk', 'annual_fund', 'annual_fund_disc', 'annual fund', 'Annual fund']];
         let vmSel = Array(12).fill(false), otOn = {};
         const gv = id => document.getElementById(id);
         const numOf = id => parseFloat((gv(id) || {}).value) || 0;
@@ -220,8 +226,8 @@
             gv('vouchBody').classList.toggle('hidden', !gv('vouchOn').checked);
             gv('monthChips').innerHTML = VM.map((m, i) => { const ok = monthOk(i); return `<label class="flex items-center justify-center gap-1.5 text-xs font-semibold border rounded-lg px-2 py-1.5 ${ok ? 'bg-white cursor-pointer hover:border-indigo-300 has-[:checked]:bg-indigo-100 has-[:checked]:border-indigo-400 has-[:checked]:text-indigo-800' : 'opacity-40 bg-slate-50'}"><input type="checkbox" ${vmSel[i] && ok ? 'checked' : ''} ${ok ? '' : 'disabled'} onchange="vmSel[${i}] = this.checked; refreshVouch()">${m.slice(0, 3)}</label>`; }).join('');
             gv('oneTime').innerHTML = OT.map(o => { const amt = numOf(o[1]), on = otOn[o[0]] !== undefined ? otOn[o[0]] : amt > 0; return `<label class="flex items-center gap-2 text-xs border rounded-lg px-3 py-2 bg-white cursor-pointer has-[:checked]:bg-emerald-50 has-[:checked]:border-emerald-400"><input type="checkbox" id="${o[0]}" ${on ? 'checked' : ''} onchange="otOn['${o[0]}'] = this.checked; refreshVouch()"> ${o[4]} <b>${amt.toLocaleString()}</b></label>`; }).join('');
-            const plan = vouchPlan();
-            gv('vouchSummary').innerText = dojVal() === null ? 'Select the date of joining (DOJ) first.' : (plan.length ? `${plan.length} unpaid voucher(s), total PKR ${plan.reduce((s, r) => s + r.payable - r.discount, 0).toLocaleString()} after discount.` : 'No voucher selected.');
+            const plan = vouchPlan(), grp = vouchGroups(plan);
+            gv('vouchSummary').innerText = dojVal() === null ? 'Select the date of joining (DOJ) first.' : (plan.length ? `${plan.length} fee item(s) in ${grp.length} voucher(s)` + (grp.length && grp[0].length > 1 ? ` (one admission voucher with ${grp[0].length} items)` : '') + `, total PKR ${plan.reduce((s, r) => s + r.payable - r.discount, 0).toLocaleString()} after discount.` : 'No voucher selected.');
         }
         function initVouchSection() {
             gv('vouchSection').classList.remove('hidden'); gv('vouchOn').checked = true; otOn = {};
@@ -229,6 +235,14 @@
             resetMonthDefaults();
         }
         // the list of vouchers to create from the current form values
+        // the one-time fees + the joining-month tuition share ONE voucher number; every other month gets its own voucher
+        function vouchGroups(plan) {
+            const tuition = plan.filter(v => v.type === 'tuition fee'), one = plan.filter(v => v.type !== 'tuition fee'), first = tuition.shift(), groups = [];
+            const adm = [...one, ...(first ? [first] : [])];
+            if(adm.length) groups.push(adm);
+            tuition.forEach(t => groups.push([t]));
+            return groups;
+        }
         function vouchPlan() {
             if(!gv('vouchOn').checked || dojVal() === null) return [];
             const plan = [], tPay = numOf('monthly_tution_fee'), tDisc = Math.min(numOf('monthly_tution_disc'), tPay), one = VM[+gv('oneMonth').value] + ' 2026';
@@ -251,17 +265,22 @@
                 const m = String(r.voucher_id || '').match(/^V-(\d+)/i); if(m) { used.add(+m[1]); if(+m[1] > max) max = +m[1]; }
                 keys.add(`${String(r.admis_no || '').trim().toLowerCase()}_${String(r.period || '').trim()}_${String(r.type || '').trim().toLowerCase()}`);
             });
-            const adm = String(p.admis_no || '').trim().toLowerCase(), today = new Date().toISOString().split('T')[0]; let n = max, dup = 0; const rows = [];
-            plan.forEach(v => {
-                if(keys.has(`${adm}_${v.period}_${v.type}`)) { dup++; return; }
+            const adm = String(p.admis_no || '').trim().toLowerCase(), today = new Date().toISOString().split('T')[0], tc = t => String(t).replace(/\b\w/g, c => c.toUpperCase());
+            let n = max, dup = 0; const rows = [], made = [];
+            vouchGroups(plan).forEach(g => {
+                const items = g.filter(v => { if(keys.has(`${adm}_${v.period}_${v.type}`)) { dup++; return false; } return true; });
+                if(!items.length) return;
                 do { n++; } while(used.has(n)); used.add(n);
-                rows.push({ sr_no: p.sr_no || '', voucher_id: 'V-' + n, admis_no: p.admis_no, student_name: p.student_name, type: v.type, period: v.period, payable: v.payable, discount: v.discount || 0, class: p.class, status: 'Unpaid', date: today, remarks: v.remarks, siblings: p.siblings, arrears2025: v.arrears || null });
+                const vid = 'V-' + n;                                   // all items of a group are saved as separate rows with the SAME voucher number
+                items.forEach(v => rows.push({ sr_no: p.sr_no || '', voucher_id: vid, admis_no: p.admis_no, student_name: p.student_name, type: v.type, period: v.period, payable: v.payable, discount: v.discount || 0, class: p.class, status: 'Unpaid', date: today, remarks: v.remarks, siblings: p.siblings, arrears2025: v.arrears || null }));
+                made.push({ vid, items });
             });
             if(!rows.length) return `\n\nNo new vouchers: ${dup} already exist.`;
             const c = getSupabaseConfig();
             const r = await fetch(`${c.url}/rest/v1/fees`, { method: 'POST', headers: { "apikey": c.key, "Authorization": `Bearer ${c.key}`, "Content-Type": "application/json", "Prefer": "return=minimal" }, body: JSON.stringify(rows) });
             if(!r.ok) throw new Error(await r.text());
-            return `\n\n${rows.length} unpaid fee voucher(s) created (${rows[0].voucher_id} to ${rows[rows.length - 1].voucher_id}), total PKR ${rows.reduce((s, x) => s + x.payable - x.discount, 0).toLocaleString()}.` + (dup ? ` ${dup} already existed.` : '');
+            const total = rows.reduce((s, x) => s + x.payable - x.discount, 0), first = made[0];
+            return `\n\n${made.length} voucher(s) created, total PKR ${total.toLocaleString()}.` + (first.items.length > 1 ? `\nAdmission voucher ${first.vid}: ${first.items.map(v => tc(v.type) + (v.type === 'tuition fee' ? ' (' + v.period.split(' ')[0] + ')' : '')).join(' + ')}.` : `\nVoucher ${first.vid}.`) + (made.length > 1 ? `\nMonthly vouchers: ${made.slice(1).map(m => m.vid).join(', ')}.` : '') + (dup ? `\n${dup} item(s) already existed.` : '');
         }
         window.addEventListener('load', () => {
             ['doj', 'left_date', 'status'].forEach(id => gv(id).addEventListener('change', resetMonthDefaults));
@@ -285,8 +304,13 @@
             if(!sr.dataset.touched) sr.value = nextNum(rows.map(r => r.sr_no));
             if(!ad.dataset.touched) ad.value = nextNum(rows.map(r => r.admis_no));
         }
+        function setNewMode(isNew) {
+            // a new admission has no leaving date, no old arrears and is always Active: grey those boxes out
+            ['left_date', 'arrears2025', 'status'].forEach(id => { const el = document.getElementById(id), box = el.parentElement; el.disabled = isNew; box.classList.toggle('opacity-40', isNew); box.title = isNew ? 'Not needed for a new admission' : ''; });
+            if(isNew) { document.getElementById('status').value = 'Active'; document.getElementById('left_date').value = ''; document.getElementById('arrears2025').value = ''; }
+        }
         async function addStudentClick() {
-            resetForm(); openStudentModal();
+            resetForm(); openStudentModal(); setNewMode(true);
             ['sr_no', 'admis_no'].forEach(id => { const el = document.getElementById(id); delete el.dataset.touched; el.oninput = () => { el.dataset.touched = '1'; }; });
             fillNextNumbers(allStudentsCache);                       // instantly from the loaded list
             try { const r = await sbFetchAll('students', 'select=sr_no,admis_no'); const rows = r.ok ? await r.json() : null; if(Array.isArray(rows) && rows.length) fillNextNumbers(rows); } catch (e) { /* keep the cached values */ }
@@ -364,7 +388,7 @@
 function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
         function editStudentByAdm(a) { const r = allStudentsCache.find(x => String(x.admis_no || '') === String(a)); if(r) editStudent(r); }
         function editStudent(row) {
-            openStudentModal();
+            openStudentModal(); setNewMode(false);
             document.getElementById('editOriginalAdm').value = row.admis_no || '';
             document.getElementById('sr_no').value = row.sr_no || '';
             document.getElementById('admis_no').value = row.admis_no || '';
@@ -418,6 +442,7 @@ function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
 
     </script>
 <!-- ADD / EDIT STUDENT (modal) -->
+<style>#studentForm input:disabled, #studentForm select:disabled { background: #f1f5f9; cursor: not-allowed; }</style>
 <div id="studentModal" class="fixed inset-0 z-50 hidden flex items-start sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4">
   <div class="bg-white w-full sm:max-w-3xl h-full sm:h-auto sm:max-h-[94vh] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
     <div class="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3 bg-slate-50">
@@ -492,8 +517,8 @@ function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;',
               </tbody>
             </table>
           </div>
-          <div class="mt-3 sm:w-1/2"><label class="block text-xs font-semibold text-slate-600 mb-1">Arrears of last year (2025)</label>
-            <input type="number" min="0" id="arrears2025" placeholder="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><p class="text-[10px] text-slate-400 mt-0.5">Billed as a separate voucher in January 2026</p></div>
+          <div class="mt-3 sm:w-1/2"><label class="block text-xs font-semibold text-slate-600 mb-1">Arrears</label>
+            <input type="number" min="0" id="arrears2025" placeholder="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none"><p class="text-[10px] text-slate-400 mt-0.5">Previous dues carried forward</p></div>
         </section>
 
         <!-- 4. VOUCHERS (new students only) -->
