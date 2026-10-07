@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Follow-up Calls</title>
-    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
     <style>
@@ -437,6 +438,10 @@ async function initFollowups() {
             let payable = (parseFloat(r.payable) || 0) - disc, paid = accountsMap[vId] || 0;
             return { ...r, _discount: disc, _payable: payable, _paid: paid, _balance: payable - paid };
         });
+        {   // an admission voucher holds several fee rows: split the voucher's payments over them
+            const pa = splitVoucherPaid(allFees, r => r._payable, r => r._paid, r => r.type, r => r.voucher_id);
+            allFees.forEach((r, i) => { r._paid = pa[i]; r._balance = r._payable - pa[i]; });
+        }
 
         await loadLogs(false);
         populateClassFilter();
@@ -473,7 +478,10 @@ function copySetupSql() {
 //  STUDENT LEDGER (opens when a student name is clicked)
 // ====================================================================================
 function openLedger(key) {
-    let vs = allFees.filter(f => childKey(f.admis_no, f.student_name) === key && (!isFutureV(f) || f._paid > 0))
+    let vs0 = allFees.filter(f => childKey(f.admis_no, f.student_name) === key && (!isFutureV(f) || f._paid > 0)), vs = [], seenG = {};
+    vs0.forEach(f => { const k = String(f.voucher_id || '').trim(), n = vs0.filter(x => String(x.voucher_id || '').trim() === k).length;
+        if(n > 1) { const m = seenG[k]; if(m) { m._payable += f._payable; m._paid += f._paid; m._balance += f._balance; m._discount += f._discount; m._items.push(f); } else { const c = { ...f, _items: [f], type: 'admission voucher' }; seenG[k] = c; vs.push(c); } } else vs.push(f); });
+    vs
         .sort((a, b) => periodRank(a.period) - periodRank(b.period) || (isArrearsType(b.type) - isArrearsType(a.type)));
     let st = allStudents.find(s => childKey(s.admis_no, s.student_name) === key) || vs[0] || {};
     let tp = 0, td = 0, tb = 0, html = '';
@@ -481,7 +489,7 @@ function openLedger(key) {
     vs.forEach(v => {
         tp += v._payable; td += v._paid; tb += v._balance;
         let run = v._payable;
-        let note = (isArrearsType(v.type) ? ' <span class="text-rose-600 font-semibold">(Previous year arrears 2025)</span>' : '')
+        let note = (isArrearsType(v.type) ? ' <span class="text-rose-600 font-semibold">(Arrears)</span>' : '') + (v._items ? ` <span class="text-indigo-700 font-semibold">(${v._items.map(x => String(x.type || '').replace(/\b\w/g, c => c.toUpperCase()) + ' ' + fmt(x._payable)).join(' + ')})</span>` : '')
             + (v._discount > 0 ? ` <span class="text-indigo-600 font-semibold">(Discount PKR ${fmt(v._discount)})</span>` : '');
         let txns = [...(txMap[String(v.voucher_id || '').trim().split('-').slice(0, 2).join('-')] || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
         const row = (d, desc, paid, bal) => `<tr class="border-b">
@@ -723,7 +731,7 @@ function detailsHtml(f) {
         let chips = pend.length ? pend.map(v => {
             let ar = isArrearsType(v.type);
             let ann = /annual/i.test(v.type || '');
-            return `<span class="inline-block mr-1 mb-1 px-2 py-0.5 rounded-md text-[11px] border ${ar ? 'bg-rose-50 border-rose-200 text-rose-700 font-semibold' : (ann ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-700')}">${ar ? 'Arrears 2025' : esc(shortPeriod(v.period)) + (ann ? ' (Annual)' : '')}: ${fmt(v.balance)}</span>`;
+            return `<span class="inline-block mr-1 mb-1 px-2 py-0.5 rounded-md text-[11px] border ${ar ? 'bg-rose-50 border-rose-200 text-rose-700 font-semibold' : (ann ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-white border-slate-200 text-slate-700')}">${ar ? 'Arrears' : esc(shortPeriod(v.period)) + (ann ? ' (Annual)' : '')}: ${fmt(v.balance)}</span>`;
         }).join('') : '<span class="text-emerald-600 text-xs">No dues</span>';
         let advTxt = k.net < 0 ? `<span class="text-indigo-600 font-bold">Adv ${fmt(Math.abs(k.net))}</span>` : (k.net > 0 ? `<span class="text-rose-600 font-bold">${fmt(k.net)}</span>` : '<span class="text-emerald-600">0</span>');
         let kc = k.contacts.length ? k.contacts.map(c => `${esc(c.number)}`).join(', ') : '-';
