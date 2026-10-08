@@ -140,6 +140,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
           <select id="filterPeriod" onchange="filterVouchers()" class="inp"><option value="ALL">All periods</option></select>
           <select id="filterStatus" onchange="filterVouchers()" class="inp">
             <option value="ALL">All status</option><option>Unpaid</option><option>Partial</option><option>Paid</option></select>
+          <select id="filterItem" onchange="filterVouchers()" class="inp"><option value="ALL">All fee items</option></select>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
           <div><label class="lbl">From month</label><select id="fromMonth" class="inp" onchange="filterVouchers()"></select></div>
@@ -341,7 +342,7 @@ async function initFeePage(){
           status:(paid>=net&&(net>0||disc>0))?'Paid':(paid>0?'Partial':'Unpaid'),
           paymentDates:acc.dates.size?[...acc.dates].join(', '):'-'};
       });
-      regroupFees();populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
+      regroupFees();populateItemFilter();populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
     }else{allFeesCache=[];$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No fee vouchers found.</td></tr>`}
   }catch(e){console.error(e);$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`}
   hideLoading();
@@ -366,7 +367,9 @@ function filterVouchers(){
   if(!q)t=t.filter(inR);
   t.forEach(r=>{r._out=!inR(r)});
   if(q)t=t.filter(r=>(r.voucher_id||'').toLowerCase().includes(q)||(r.student_name||'').toLowerCase().includes(q)||(r.admis_no||'').toLowerCase().includes(q));
-  if(s!=='ALL'){const ok=new Set(buildGroups(t).filter(g=>g.status===s).map(g=>g.vid));t=t.filter(r=>ok.has((r.voucher_id||'').trim()))}
+  const itf=$('filterItem').value;
+ if(itf!=='ALL'){const okv=new Set(t.filter(r=>(r.type||'').trim().toLowerCase()===itf).map(r=>(r.voucher_id||'').trim()));t=t.filter(r=>okv.has((r.voucher_id||'').trim()))}
+ if(s!=='ALL'){const ok=new Set(buildGroups(t).filter(g=>g.status===s).map(g=>g.vid));t=t.filter(r=>ok.has((r.voucher_id||'').trim()))}
  filtered=t;renderFeesTable(t);renderStudentSummary();
 }
 let viewMode='vouchers';
@@ -457,8 +460,14 @@ function regroupFees(){
   allFeesCache.forEach((r,i)=>{const v=(r.voucher_id||'').trim();r._gn=cnt[v];
     if(cnt[v]>1){r.totalPaid=pa[i];r.balance=r.net-pa[i];r.status=(pa[i]>=r.net&&(r.net>0||r.discount>0))?'Paid':(pa[i]>0?'Partial':'Unpaid')}});
 }
-const feeErr=t=>/fees_pkey|23505/.test(String(t))?'The fees table still uses voucher_id as its primary key, so one voucher cannot hold several fee rows. Run the SQL from the chat (move the primary key to the seq column), then try again.\n\n'+String(t).slice(0,160):String(t);
+const feeErr=t=>/fees_pkey|unique_fee_voucher|\(voucher_id\)/.test(String(t))?'The fees table still forces every voucher number to be unique (a constraint on voucher_id), so one voucher cannot hold several fee rows. Run the SQL from the chat that removes it, then try again.\n\n'+String(t).slice(0,160):String(t);
 const rowFilter=v=>`voucher_id=eq.${encodeURIComponent((v.voucher_id||'').trim())}&type=eq.${encodeURIComponent((v.type||'').trim())}&period=eq.${encodeURIComponent((v.period||'').trim())}`;
+function populateItemFilter(){
+  const set=new Set();allFeesCache.forEach(r=>{const t=(r.type||'').trim().toLowerCase();if(t)set.add(t)});
+  const sel=$('filterItem'),cur=sel.value;
+  sel.innerHTML='<option value="ALL">All fee items</option>'+[...set].sort((a,b)=>feeRank(a)-feeRank(b)||a.localeCompare(b)).map(t=>`<option value="${esc(t)}">${t==='arrears'?'Arrears':tcase(t)}</option>`).join('');
+  if(set.has(cur))sel.value=cur;
+}
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
   $('fromMonth').value=1;$('toMonth').value=ci;if(!silent)filterVouchers();
@@ -495,7 +504,7 @@ function renderFeesTable(rowsIn){
     const bc=g.balance<0?'text-indigo-600 font-extrabold':g.balance>0?'text-rose-600 font-bold':'text-slate-500';
     const bt=g.balance<0?`Adv ${fmt(-g.balance)}`:`PKR ${fmt(g.balance)}`;
     const onlyArr=g.rows.every(isArr);
-    const chips=g.rows.map(r=>`<span class="inline-block mr-1 mb-0.5 px-1.5 py-0.5 rounded border text-[10px] ${isArr(r)?'bg-rose-50 border-rose-200 text-rose-700':'bg-slate-50 border-slate-200 text-slate-700'}">${esc(itemName(r))} <b>${fmt(r.net??r.payable)}</b></span>`).join('');
+    const chips=g.rows.map(r=>`<span class="inline-block mr-1 mb-1 px-2 py-0.5 rounded-md border text-[11px] ${isArr(r)?'bg-rose-50 border-rose-200 text-rose-700':(/annual/i.test(r.type||'')?'bg-amber-50 border-amber-300 text-amber-800':'bg-slate-50 border-slate-200 text-slate-700')}">${esc(itemName(r))} <b>${fmt(r.net??r.payable)}</b></span>`).join('');
     html+=`<tr class="${onlyArr?'bg-rose-50/60':'hover:bg-slate-50'} ${g._out?'opacity-50':''}">
  <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(g.vid)}"></td>
  <td data-l="Sr">${i+1}</td>
