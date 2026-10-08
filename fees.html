@@ -446,7 +446,7 @@ async function generateAnnualFund() {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/fees`, { method: 'POST', headers: HJ, body: JSON.stringify(out) });
       hideLoading();
-      if(res.ok) { showAlert("Annual fund vouchers created!"); initFeePage(); } else showAlert("Failed: " + await res.text());
+      if(res.ok) { showAlert("Annual fund vouchers created!"); initFeePage(); } else showAlert(feeErr("Failed: " + await res.text()));
     } catch(e) { hideLoading(); console.error(e); showAlert("Error connecting to database."); }
   });
 }
@@ -457,6 +457,7 @@ function regroupFees(){
   allFeesCache.forEach((r,i)=>{const v=(r.voucher_id||'').trim();r._gn=cnt[v];
     if(cnt[v]>1){r.totalPaid=pa[i];r.balance=r.net-pa[i];r.status=(pa[i]>=r.net&&(r.net>0||r.discount>0))?'Paid':(pa[i]>0?'Partial':'Unpaid')}});
 }
+const feeErr=t=>/fees_pkey|23505/.test(String(t))?'The fees table still uses voucher_id as its primary key, so one voucher cannot hold several fee rows. Run the SQL from the chat (move the primary key to the seq column), then try again.\n\n'+String(t).slice(0,160):String(t);
 const rowFilter=v=>`voucher_id=eq.${encodeURIComponent((v.voucher_id||'').trim())}&type=eq.${encodeURIComponent((v.type||'').trim())}&period=eq.${encodeURIComponent((v.period||'').trim())}`;
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
@@ -554,7 +555,7 @@ async function saveAddItem(){
       const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(row)});
       hideLoading();
       if(res.ok){$('addItemModal').classList.remove('open');showAlert(`"${tcase(type)}" PKR ${fmt(amt-disc)} added to voucher ${vid}.`);initFeePage()}
-      else showAlert("Failed to add: "+await res.text());
+      else showAlert(feeErr("Failed to add: "+await res.text()));
     }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
   };
   if(rows.every(r=>r.status==='Paid')&&rows.length)showConfirm(`Voucher ${vid} is fully paid. Adding this item makes it partly unpaid again. Continue?`,go);else go();
@@ -753,7 +754,7 @@ function generateVouchers(withUpdate){
   showConfirm(`${out.length} new fee item(s) in ${new Set(out.map(o=>o.voucher_id)).size} voucher(s) will be created`+(withUpdate===true?` and ${upd.length} unpaid voucher(s) updated`:'')+(out.length?`.\nNumbers: ${out[0].voucher_id} to ${out[out.length-1].voucher_id}`:'.')+blockMsg+`\n\nProceed?`,async()=>{
     showLoading("Saving vouchers...");
     try{
-      if(out.length){const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(out)});if(!res.ok){hideLoading();showAlert("Failed to generate: "+await res.text());return}}
+      if(out.length){const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(out)});if(!res.ok){hideLoading();showAlert(feeErr("Failed to generate: "+await res.text()));return}}
       for(let k=0;k<upd.length;k+=10)await Promise.all(upd.slice(k,k+10).map(it=>fetch(`${SUPABASE_URL}/rest/v1/fees?${rowFilter(it.v)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({payable:it.exp,original_payable:it.v.original_payable??it.old,remarks:`${it.v.remarks?it.v.remarks+' | ':''}Updated: ${it.old} to ${it.exp}`})}).then(r=>{if(!r.ok)throw new Error('update failed')})));
       hideLoading();selStu.clear();toggleGen();showAlert("Done: "+out.length+" created"+(upd.length?`, ${upd.length} updated`:'')+".");initFeePage();
     }catch(e){hideLoading();console.error(e);showAlert("Error while saving: "+e.message)}
