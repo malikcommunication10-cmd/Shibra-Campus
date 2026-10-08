@@ -130,6 +130,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
             <button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
             <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
             <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
+            <button onclick="downloadVouchersCsv()" class="btn b-gh">⬇️ CSV</button>
             <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
             <button onclick="initFeePage()" class="btn b-gh">🔄 Refresh</button>
           </div>
@@ -151,7 +152,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
         <table class="rt w-full border-collapse">
           <thead class="bg-slate-50 sticky top-0"><tr>
             <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
-            <th>Sr</th><th>Voucher ID</th><th>Admis No</th><th>Student</th><th>Siblings</th><th>Type</th><th>Period</th>
+            <th>Sr</th><th>Voucher ID</th><th>Admis No</th><th>Student</th><th>Siblings</th><th>Items</th><th>Period</th>
             <th>Payable</th><th>Paid</th><th>Balance</th><th>Class</th><th>Status</th><th>Date(s)</th><th>Action</th></tr></thead>
           <tbody id="feesTableBody"><tr><td colspan="15" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
         </table>
@@ -225,10 +226,22 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeModal('syncModal')" class="btn b-gh">Close</button><button onclick="applySync()" class="btn b-pri">Apply selected</button></div>
 </div></div>
 
+<div id="addItemModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
+ <h3 class="font-bold text-indigo-800 border-b pb-2">➕ Add a fee to this voucher</h3>
+ <div class="grid grid-cols-2 gap-2"><div><label class="lbl">Voucher ID</label><input id="aiVid" readonly class="inp font-mono"></div><div><label class="lbl">Student / month</label><input id="aiStudent" readonly class="inp"></div></div>
+ <p id="aiExisting" class="text-xs text-slate-500"></p>
+ <div><label class="lbl">Fee name</label><input id="aiType" list="aiTypes" placeholder="e.g. annual fund" class="inp"><datalist id="aiTypes"><option value="annual fund"><option value="registration fee"><option value="admission fee"><option value="exam fee"><option value="late fee"><option value="lamination"><option value="stationery"><option value="other"></datalist></div>
+ <div class="grid grid-cols-2 gap-2"><div><label class="lbl">Amount (PKR)</label><input id="aiAmt" type="number" min="1" class="inp font-bold"></div><div><label class="lbl">Discount (optional)</label><input id="aiDisc" type="number" min="0" class="inp text-indigo-700"></div></div>
+ <div><label class="lbl">Remarks (required if discount)</label><input id="aiRemarks" class="inp"></div>
+ <p class="text-xs text-slate-500">It is saved as its own row, but under the same voucher number.</p>
+ <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="document.getElementById('addItemModal').classList.remove('open')" class="btn b-gh">Cancel</button><button onclick="saveAddItem()" class="btn b-pri">Add to voucher</button></div>
+</div></div>
+
 <div id="discountModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
   <h3 class="font-bold text-indigo-800 border-b pb-2">% Voucher discount</h3>
-  <div class="grid grid-cols-2 gap-2">
-    <div><label class="lbl">Voucher ID</label><input id="dcVid" readonly class="inp font-mono"></div>
+  <div id="dcItemWrap" class="hidden"><label class="lbl">Fee item</label><select id="dcItem" onchange="dcPick()" class="inp"></select></div>
+ <div class="grid grid-cols-2 gap-2">
+ <div><label class="lbl">Voucher ID</label><input id="dcVid" readonly class="inp font-mono"></div>
     <div><label class="lbl">Student</label><input id="dcStudent" readonly class="inp"></div></div>
   <div class="grid grid-cols-2 gap-2">
     <div><label class="lbl">Payable</label><input id="dcPayable" readonly class="inp font-bold"></div>
@@ -347,13 +360,14 @@ function filterVouchers(){
   const p=$('filterPeriod').value,s=$('filterStatus').value,q=$('searchInput').value.trim().toLowerCase();
   let t=allFeesCache;
   if(p!=='ALL')t=t.filter(r=>(r.period||'').trim()===p);
-  if(s!=='ALL')t=t.filter(r=>r.status===s);
+  
   const mf=+$('fromMonth').value||1,mt=+$('toMonth').value||12;
   const inR=r=>{const m=monthOrder[(r.period||'').trim()];return!m||(m>=mf&&m<=mt)};
   if(!q)t=t.filter(inR);
   t.forEach(r=>{r._out=!inR(r)});
   if(q)t=t.filter(r=>(r.voucher_id||'').toLowerCase().includes(q)||(r.student_name||'').toLowerCase().includes(q)||(r.admis_no||'').toLowerCase().includes(q));
-  filtered=t;renderFeesTable(t);renderStudentSummary();
+  if(s!=='ALL'){const ok=new Set(buildGroups(t).filter(g=>g.status===s).map(g=>g.vid));t=t.filter(r=>ok.has((r.voucher_id||'').trim()))}
+ filtered=t;renderFeesTable(t);renderStudentSummary();
 }
 let viewMode='vouchers';
 function toggleView(){
@@ -406,6 +420,8 @@ async function generateAnnualFund() {
   const selPeriod = $('voucherPeriod').value === 'ALL_YEAR' ? null : $('voucherPeriod').value;
   const used = new Set(); allFeesCache.forEach(f => { const n = vNum(f.voucher_id); if(n) used.add(n); });
   const nextId = makeVidGenerator(used);
+  const vmap = new Map(); allFeesCache.forEach(f => { const k = `${normAdm(f.admis_no)}_${(f.period || '').trim()}`; if(!vmap.has(k)) vmap.set(k, (f.voucher_id || '').trim()); });
+  const vidFor = (st, period) => { const k = `${normAdm(st.admis_no)}_${period}`; let v = vmap.get(k); if(!v) { v = nextId(); vmap.set(k, v); } return v; };
   const keys = new Set(); allFeesCache.forEach(f => keys.add(`${normAdm(f.admis_no)}_${(f.period || '').trim()}_${(f.type || '').trim().toLowerCase()}`));
   const out = [], skip = { exists: 0, noStudent: 0, notEligible: 0, noPeriod: 0, notAnnual: 0 }, byMonth = {}; let usedSel = 0;
   Object.values(incrementsCacheMap).forEach(inc => {
@@ -420,12 +436,12 @@ async function generateAnnualFund() {
     const key = `${normAdm(st.admis_no)}_${period}_annual fund`;
     if(keys.has(key)) { skip.exists++; return; }
     keys.add(key);
-    out.push({ sr_no: st.sr_no || '', voucher_id: nextId(), admis_no: st.admis_no || '', student_name: st.student_name || '', type: 'annual fund', period, payable: parseFloat(inc.annual_fund), class: st.class || '', status: 'Unpaid', date: today(), remarks: inc.remarks || '', [FEES_SIBLINGS_COL]: getStudentSiblings(st), [FEES_ARREARS_COL]: null });
+    out.push({ sr_no: st.sr_no || '', voucher_id: vidFor(st, period), admis_no: st.admis_no || '', student_name: st.student_name || '', type: 'annual fund', period, payable: parseFloat(inc.annual_fund), class: st.class || '', status: 'Unpaid', date: today(), remarks: inc.remarks || '', [FEES_SIBLINGS_COL]: getStudentSiblings(st), [FEES_ARREARS_COL]: null });
     byMonth[period] = (byMonth[period] || 0) + 1;
   });
   const sk = `\n\nSkipped: ${skip.exists} already have it, ${skip.notEligible} not eligible (joined later / left), ${skip.noStudent} student not found, ${skip.noPeriod} no effective month, ${skip.notAnnual} fee type is not "annual fund".`;
   if(!out.length) { showAlert("No annual fund vouchers to create." + sk + (usedSel ? '' : '\n\nTip: in Bulk Updation the Effective period must be a month like "October 2026".')); return; }
-  showConfirm(`${out.length} annual fund voucher(s) will be created:\n` + Object.entries(byMonth).map(([m, n]) => `${m}: ${n}`).join(', ') + (usedSel ? `\n(${usedSel} had no effective month, so ${selPeriod} is used)` : '') + sk + `\n\nProceed?`, async () => {
+  showConfirm(`${out.length} annual fund item(s) will be added (to the student's voucher of that month, or a new voucher if there is none):\n` + Object.entries(byMonth).map(([m, n]) => `${m}: ${n}`).join(', ') + (usedSel ? `\n(${usedSel} had no effective month, so ${selPeriod} is used)` : '') + sk + `\n\nProceed?`, async () => {
     showLoading("Creating annual fund vouchers...");
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/fees`, { method: 'POST', headers: HJ, body: JSON.stringify(out) });
@@ -436,11 +452,12 @@ async function generateAnnualFund() {
 }
 function regroupFees(){
   // several rows can share one voucher (admission voucher): split the voucher's payments over its rows
-  const pa=splitVoucherPaid(allFeesCache,r=>r.net,r=>r.totalPaid,r=>r.type,r=>r.voucher_id),cnt={};
+  const pa=splitVoucherPaid(allFeesCache,r=>r.net,r=>r.totalPaid,r=>r.type,r=>r.voucher_id,rowOrder),cnt={};
   allFeesCache.forEach(r=>{const v=(r.voucher_id||'').trim();cnt[v]=(cnt[v]||0)+1});
   allFeesCache.forEach((r,i)=>{const v=(r.voucher_id||'').trim();r._gn=cnt[v];
     if(cnt[v]>1){r.totalPaid=pa[i];r.balance=r.net-pa[i];r.status=(pa[i]>=r.net&&(r.net>0||r.discount>0))?'Paid':(pa[i]>0?'Partial':'Unpaid')}});
 }
+const rowFilter=v=>`voucher_id=eq.${encodeURIComponent((v.voucher_id||'').trim())}&type=eq.${encodeURIComponent((v.type||'').trim())}&period=eq.${encodeURIComponent((v.period||'').trim())}`;
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
   $('fromMonth').value=1;$('toMonth').value=ci;if(!silent)filterVouchers();
@@ -448,48 +465,99 @@ function resetRange(silent){
 const isLocked=id=>{const a=accountsDataMap[(id||'').trim()];return!!(a&&a.transactions.length)};
 function toggleSelectAll(m){document.querySelectorAll('.row-checkbox').forEach(cb=>{if(!cb.disabled)cb.checked=m.checked})}
 
-function groupArrears(data){
-  const key=r=>`${(r.admis_no||r.student_name||'').trim().toLowerCase()}__${(r.period||'').trim()}`;
-  const am={};data.forEach(r=>{if(isArr(r))(am[key(r)]??=[]).push(r)});
-  const out=[],placed=new Set();
-  data.forEach(r=>{if(isArr(r))return;out.push(r);const k=key(r);if(am[k]&&!placed.has(k)){out.push(...am[k]);placed.add(k)}});
-  data.forEach(r=>{if(isArr(r)&&!placed.has(key(r)))out.push(r)});
-  return out;
+let currentGroups=[];
+const tcase=t=>String(t||'').replace(/\b\w/g,c=>c.toUpperCase());
+const itemName=r=>isArr(r)?'Arrears':tcase(r.type||'tuition fee');
+// one line per VOUCHER: all fee rows that share a voucher number are shown together as items
+function buildGroups(rows){
+  const m=new Map();
+  rows.forEach(r=>{const v=(r.voucher_id||'').trim();let g=m.get(v);if(!g){g={vid:v,rows:[],_out:!!r._out};m.set(v,g)}g.rows.push(r)});
+  return [...m.values()].map(g=>{
+    const R=g.rows,f=R[0];
+    g.net=R.reduce((s,r)=>s+(r.net??(parseFloat(r.payable)||0)),0);g.payable=R.reduce((s,r)=>s+(parseFloat(r.payable)||0),0);
+    g.discount=R.reduce((s,r)=>s+(r.discount||0),0);g.paid=R.reduce((s,r)=>s+(parseFloat(r.totalPaid)||0),0);g.balance=g.net-g.paid;
+    g.status=(g.paid>=g.net&&(g.net>0||g.discount>0))?'Paid':(g.paid>0?'Partial':'Unpaid');
+    g.student=f.student_name;g.adm=f.admis_no;g.cls=f.class;g.period=f.period;g.sib=f[FEES_SIBLINGS_COL];g.dates=f.paymentDates;
+    return g;
+  });
 }
-
-function renderFeesTable(data){
+function renderFeesTable(rowsIn){
+  const groups=buildGroups(rowsIn);currentGroups=groups;
   const tb=$('feesTableBody'),tf=$('feesTableFooter');$('selectAllCheckbox').checked=false;
-  if(!data.length){tb.innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
-    ['stCount','stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');return}
-  let sp=0,sd=0,sb=0,sr=0;const rows=groupArrears(data);let html='';
-  rows.forEach(r=>{
-    if(!r._out){sp+=r.net??(parseFloat(r.payable)||0);sd+=parseFloat(r.totalPaid)||0;sb+=parseFloat(r.balance)||0}
-    const a=isArr(r),vId=(r.voucher_id||'').trim(),lock=isLocked(vId);
-    const badge=r.status==='Paid'?'bg-emerald-50 text-emerald-700':r.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
-    const bc=r.balance<0?'text-indigo-600 font-extrabold':r.balance>0?'text-rose-600 font-bold':'text-slate-500';
-    const bt=r.balance<0?`Adv ${fmt(-r.balance)}`:`PKR ${fmt(r.balance)}`;
-    html+=`<tr class="${a?'bg-rose-50/60':'hover:bg-slate-50'} ${r._out?'opacity-50':''}">
-    <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(vId)}" ${lock?'disabled':''}></td>
-    <td data-l="Sr">${a?'<span class="text-rose-400">↳</span>':++sr}</td>
-    <td data-l="Voucher" class="font-mono text-indigo-900">${esc(vId)||'-'}${r._gn>1?` <span class="badge bg-indigo-100 text-indigo-700" title="Combined voucher: ${r._gn} items">🧩 ${r._gn}</span>`:''}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</td>
-    <td data-l="Admis No" class="font-mono">${esc(r.admis_no)||'-'}</td>
-    <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(r.student_name||'')}'))" class="text-indigo-600 underline">${esc(r.student_name)||'-'}</a></td>
-    <td data-l="Siblings">${esc(r[FEES_SIBLINGS_COL])||'-'}</td>
-    <td data-l="Type" class="${a?'text-rose-700 font-bold':''}">${a?'Arrears':esc(r.type||'Tuition Fee')}</td>
-    <td data-l="Period" class="text-indigo-600 font-medium">${esc(r.period)||'-'}</td>
-    <td data-l="Payable" class="font-bold">PKR ${fmt(r.payable)}${r.discount>0?`<div class="text-[10px] text-indigo-600 font-semibold" title="${esc(r.remarks)}">Discount -${fmt(r.discount)}</div>`:''}</td>
-    <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(r.totalPaid)}</td>
-    <td data-l="Balance" class="${bc}">${bt}</td>
-    <td data-l="Class">${esc(r.class)||'-'}</td>
-    <td data-l="Status"><span class="badge ${badge}">${r.status}</span></td>
-    <td data-l="Date(s)" class="font-mono text-indigo-700">${esc(r.paymentDates)}</td>
-    <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(vId)}')" class="btn b-ok flex-1" style="padding:.35rem .6rem">💳 Pay</button><button onclick="openDiscount('${esc(vId)}')" class="btn b-gh flex-1" style="padding:.35rem .6rem">% Disc</button></div></td></tr>`;
+  if(!groups.length){tb.innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
+   ['stCount','stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');return}
+  let sp=0,sd=0,sb=0,html='';
+  groups.forEach((g,i)=>{
+    if(!g._out){sp+=g.net;sd+=g.paid;sb+=g.balance}
+    const lock=isLocked(g.vid);
+    const badge=g.status==='Paid'?'bg-emerald-50 text-emerald-700':g.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
+    const bc=g.balance<0?'text-indigo-600 font-extrabold':g.balance>0?'text-rose-600 font-bold':'text-slate-500';
+    const bt=g.balance<0?`Adv ${fmt(-g.balance)}`:`PKR ${fmt(g.balance)}`;
+    const onlyArr=g.rows.every(isArr);
+    const chips=g.rows.map(r=>`<span class="inline-block mr-1 mb-0.5 px-1.5 py-0.5 rounded border text-[10px] ${isArr(r)?'bg-rose-50 border-rose-200 text-rose-700':'bg-slate-50 border-slate-200 text-slate-700'}">${esc(itemName(r))} <b>${fmt(r.net??r.payable)}</b></span>`).join('');
+    html+=`<tr class="${onlyArr?'bg-rose-50/60':'hover:bg-slate-50'} ${g._out?'opacity-50':''}">
+ <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(g.vid)}"></td>
+ <td data-l="Sr">${i+1}</td>
+ <td data-l="Voucher" class="font-mono text-indigo-900">${esc(g.vid)||'-'}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</td>
+ <td data-l="Admis No" class="font-mono">${esc(g.adm)||'-'}</td>
+ <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(g.student||'')}'))" class="text-indigo-600 underline">${esc(g.student)||'-'}</a></td>
+ <td data-l="Siblings">${esc(g.sib)||'-'}</td>
+ <td data-l="Items" class="min-w-[160px]">${chips}</td>
+ <td data-l="Period" class="text-indigo-600 font-medium">${esc(g.period)||'-'}</td>
+ <td data-l="Payable" class="font-bold">PKR ${fmt(g.payable)}${g.discount>0?`<div class="text-[10px] text-indigo-600 font-semibold">Discount -${fmt(g.discount)}</div>`:''}</td>
+ <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(g.paid)}</td>
+ <td data-l="Balance" class="${bc}">${bt}</td>
+ <td data-l="Class">${esc(g.cls)||'-'}</td>
+ <td data-l="Status"><span class="badge ${badge}">${g.status}</span></td>
+ <td data-l="Date(s)" class="font-mono text-indigo-700">${esc(g.dates)}</td>
+ <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok flex-1" style="padding:.35rem .5rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem" title="Add another fee to this voucher">➕ Item</button></div></td></tr>`;
   });
   tb.innerHTML=html;
-  $('stCount').innerText=rows.filter(r=>!r._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
-  tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}${rows.some(r=>r._out)?' <span class="font-normal text-slate-400">(grey rows are outside the selected months, not counted)</span>':''}</div>
-  <div class="flex gap-2"><button onclick="openBulkPayModal()" class="btn b-pri flex-1 md:flex-none">⚡ Bulk pay</button>
-  <button onclick="sendWhatsAppReminders()" class="btn b-ok flex-1 md:flex-none">WhatsApp reminders</button></div>`;
+  $('stCount').innerText=groups.filter(g=>!g._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
+  tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}${groups.some(g=>g._out)?' <span class="font-normal text-slate-400">(grey rows are outside the selected months, not counted)</span>':''}</div>
+ <div class="flex gap-2"><button onclick="openBulkPayModal()" class="btn b-pri flex-1 md:flex-none">⚡ Bulk pay</button>
+ <button onclick="sendWhatsAppReminders()" class="btn b-ok flex-1 md:flex-none">WhatsApp reminders</button></div>`;
+}
+
+/* ---------- CSV of the selected vouchers (or of everything in the list when nothing is ticked) ---------- */
+function downloadVouchersCsv(){
+  const sel=new Set([...document.querySelectorAll('.row-checkbox:checked')].map(c=>c.dataset.voucher));
+  const list=sel.size?currentGroups.filter(g=>sel.has(g.vid)):currentGroups;
+  if(!list.length){showAlert("There are no vouchers to download.");return}
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const head=['Voucher ID','Admis No','Student','Class','Period','Items','Payable','Discount','Net payable','Paid','Balance','Status','Payment date(s)'];
+  const rows=list.map(g=>[g.vid,g.adm,g.student,g.cls,g.period,g.rows.map(r=>`${itemName(r)} ${r.net??r.payable}`).join(' | '),g.payable,g.discount,g.net,g.paid,g.balance,g.status,g.dates==='-'?'':g.dates]);
+  const csv='\uFEFF'+[head,...rows].map(r=>r.map(q).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=`fee-vouchers-${today()}${sel.size?'-selected':''}.csv`;document.body.appendChild(a);a.click();a.remove();
+}
+
+/* ---------- Add another fee item to an existing voucher ---------- */
+function openAddItem(vid){
+  const rows=allFeesCache.filter(r=>(r.voucher_id||'').trim()===vid);if(!rows.length)return;
+  const f=rows[0];
+  $('aiVid').value=vid;$('aiStudent').value=`${f.student_name||''} - ${f.period||''}`;$('aiType').value='';$('aiAmt').value='';$('aiDisc').value='';$('aiRemarks').value='';
+  $('aiExisting').innerText='Already in this voucher: '+rows.map(r=>`${itemName(r)} ${fmt(r.net??r.payable)}`).join(', ');
+  $('addItemModal').classList.add('open');setTimeout(()=>$('aiType').focus(),60);
+}
+async function saveAddItem(){
+  const vid=$('aiVid').value,rows=allFeesCache.filter(r=>(r.voucher_id||'').trim()===vid),f=rows[0];if(!f)return;
+  const type=$('aiType').value.trim().toLowerCase().replace(/\s+/g,' '),amt=parseFloat($('aiAmt').value)||0,disc=Math.min(parseFloat($('aiDisc').value)||0,amt),rm=$('aiRemarks').value.trim();
+  if(!type){showAlert("Please choose or type the fee name.");return}
+  if(amt<=0){showAlert("Please enter an amount greater than 0.");return}
+  if(rows.some(r=>(r.type||'').trim().toLowerCase()===type)){showAlert(`This voucher already has "${type}". Edit its discount, or use a different name.`);return}
+  if(disc>0&&!rm){showAlert("Remarks are required when a discount is given.");return}
+  const row={sr_no:f.sr_no||'',voucher_id:vid,admis_no:f.admis_no||'',student_name:f.student_name||'',type,period:f.period,payable:amt,discount:disc,class:f.class||'',status:'Unpaid',date:today(),remarks:disc>0?`Discount ${disc}: ${rm}`:rm,[FEES_SIBLINGS_COL]:f[FEES_SIBLINGS_COL]??null,[FEES_ARREARS_COL]:null};
+  const go=async()=>{
+    showLoading("Adding item...");
+    try{
+      const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(row)});
+      hideLoading();
+      if(res.ok){$('addItemModal').classList.remove('open');showAlert(`"${tcase(type)}" PKR ${fmt(amt-disc)} added to voucher ${vid}.`);initFeePage()}
+      else showAlert("Failed to add: "+await res.text());
+    }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
+  };
+  if(rows.every(r=>r.status==='Paid')&&rows.length)showConfirm(`Voucher ${vid} is fully paid. Adding this item makes it partly unpaid again. Continue?`,go);else go();
 }
 
 /* ---------- Bulk pay ---------- */
@@ -632,11 +700,13 @@ function generateVouchers(withUpdate){
   const keys=new Set();
   allFeesCache.forEach(f=>{const a=(f.admis_no||'').trim().toLowerCase(),n=(f.student_name||'').trim().toLowerCase(),p=(f.period||'').trim(),t=(f.type||'').trim().toLowerCase();
     if(a)keys.add(`${a}_${p}_${t}`);if(n)keys.add(`${n}_${p}_${t}`)});
-  const out=[];
-  const add=(st,adm,sn,period,type,payable,remarks,arrVal)=>{
+  const vmap=new Map();allFeesCache.forEach(f=>{const k=`${normAdm(f.admis_no)}_${(f.period||'').trim()}`;if(!vmap.has(k))vmap.set(k,(f.voucher_id||'').trim())});
+ const vidFor=(st,period)=>{const k=`${normAdm(st.admis_no)}_${period}`;let v=vmap.get(k);if(!v){v=nextId();vmap.set(k,v)}return v};
+ const out=[];
+ const add=(st,adm,sn,period,type,payable,remarks,arrVal)=>{
     const k1=`${adm}_${period}_${type}`,k2=`${sn}_${period}_${type}`;
     if(keys.has(k1)||keys.has(k2))return;
-    out.push({sr_no:st.sr_no||'',voucher_id:nextId(),admis_no:st.admis_no||'',student_name:st.student_name||'',type,period,payable,class:st.class||'',status:'Unpaid',date:today(),remarks,[FEES_SIBLINGS_COL]:getStudentSiblings(st),[FEES_ARREARS_COL]:arrVal});
+    out.push({sr_no:st.sr_no||'',voucher_id:vidFor(st,period),admis_no:st.admis_no||'',student_name:st.student_name||'',type,period,payable,class:st.class||'',status:'Unpaid',date:today(),remarks,[FEES_SIBLINGS_COL]:getStudentSiblings(st),[FEES_ARREARS_COL]:arrVal});
     keys.add(k1);keys.add(k2);
   };
 
@@ -680,11 +750,11 @@ function generateVouchers(withUpdate){
   }));
   const blockMsg=blocked.length?`\n\nERROR - paid vouchers not updated (delete the payment from Accounts first, then update):\n`+blocked.slice(0,8).join('\n')+(blocked.length>8?`\n...and ${blocked.length-8} more`:''):'';
   if(!out.length&&!upd.length){showAlert((blocked.length?"Nothing could be updated.":"Nothing to create or update: vouchers already exist and match the current fees.")+blockMsg);return}
-  showConfirm(`${out.length} new voucher(s) will be created`+(withUpdate===true?` and ${upd.length} unpaid voucher(s) updated`:'')+(out.length?`.\nNumbers: ${out[0].voucher_id} to ${out[out.length-1].voucher_id}`:'.')+blockMsg+`\n\nProceed?`,async()=>{
+  showConfirm(`${out.length} new fee item(s) in ${new Set(out.map(o=>o.voucher_id)).size} voucher(s) will be created`+(withUpdate===true?` and ${upd.length} unpaid voucher(s) updated`:'')+(out.length?`.\nNumbers: ${out[0].voucher_id} to ${out[out.length-1].voucher_id}`:'.')+blockMsg+`\n\nProceed?`,async()=>{
     showLoading("Saving vouchers...");
     try{
       if(out.length){const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(out)});if(!res.ok){hideLoading();showAlert("Failed to generate: "+await res.text());return}}
-      for(let k=0;k<upd.length;k+=10)await Promise.all(upd.slice(k,k+10).map(it=>fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent((it.v.voucher_id||'').trim())}`,{method:'PATCH',headers:HJ,body:JSON.stringify({payable:it.exp,original_payable:it.v.original_payable??it.old,remarks:`${it.v.remarks?it.v.remarks+' | ':''}Updated: ${it.old} to ${it.exp}`})}).then(r=>{if(!r.ok)throw new Error('update failed')})));
+      for(let k=0;k<upd.length;k+=10)await Promise.all(upd.slice(k,k+10).map(it=>fetch(`${SUPABASE_URL}/rest/v1/fees?${rowFilter(it.v)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({payable:it.exp,original_payable:it.v.original_payable??it.old,remarks:`${it.v.remarks?it.v.remarks+' | ':''}Updated: ${it.old} to ${it.exp}`})}).then(r=>{if(!r.ok)throw new Error('update failed')})));
       hideLoading();selStu.clear();toggleGen();showAlert("Done: "+out.length+" created"+(upd.length?`, ${upd.length} updated`:'')+".");initFeePage();
     }catch(e){hideLoading();console.error(e);showAlert("Error while saving: "+e.message)}
   });
@@ -812,7 +882,7 @@ function applySync(){
   showConfirm(`Update ${upd.length} voucher(s) and delete ${del.length} voucher(s)?`,async()=>{
     showLoading("Applying sync...");
     try{
-      for(let i=0;i<upd.length;i+=10)await Promise.all(upd.slice(i,i+10).map(it=>fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent((it.v.voucher_id||'').trim())}`,{method:'PATCH',headers:HJ,body:JSON.stringify({payable:it.exp,original_payable:it.v.original_payable??it.old,remarks:`${it.v.remarks?it.v.remarks+' | ':''}Sync: ${it.old} to ${it.exp}`})}).then(r=>{if(!r.ok)throw new Error('update failed')})));
+      for(let i=0;i<upd.length;i+=10)await Promise.all(upd.slice(i,i+10).map(it=>fetch(`${SUPABASE_URL}/rest/v1/fees?${rowFilter(it.v)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({payable:it.exp,original_payable:it.v.original_payable??it.old,remarks:`${it.v.remarks?it.v.remarks+' | ':''}Sync: ${it.old} to ${it.exp}`})}).then(r=>{if(!r.ok)throw new Error('update failed')})));
       if(del.length){const r=await fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=in.(${del.map(i=>`"${(i.v.voucher_id||'').trim()}"`).join(',')})`,{method:'DELETE',headers:{...H,Prefer:"return=minimal"}});if(!r.ok)throw new Error('delete failed')}
       hideLoading();closeModal('syncModal');showAlert("Sync applied successfully!");initFeePage();
     }catch(e){hideLoading();console.error(e);showAlert("Sync failed part-way: "+e.message+". Refresh and run Sync again to see what is left.")}
@@ -847,24 +917,28 @@ function pickStu(mode){
 }
 
 function openDiscount(vId){
-  const r=allFeesCache.find(x=>(x.voucher_id||'').trim()===vId);if(!r)return;
-  $('dcVid').value=r.voucher_id;$('dcStudent').value=r.student_name||'';$('dcPayable').value=parseFloat(r.payable)||0;
-  $('dcAmt').value=r.discount||'';
-  const d=(r.remarks||'').split(' | ').find(x=>x.startsWith('Discount '));
-  $('dcRemarks').value=d?d.replace(/^Discount [^:]*: /,''):'';
-  $('discountModal').classList.add('open');
+ const rows=allFeesCache.filter(x=>(x.voucher_id||'').trim()===vId);if(!rows.length)return;
+ $('dcVid').value=vId;$('dcStudent').value=rows[0].student_name||'';
+ $('dcItem').innerHTML=rows.map((r,i)=>`<option value="${i}">${esc(itemName(r))} - PKR ${fmt(r.payable)}</option>`).join('');
+ $('dcItemWrap').classList.toggle('hidden',rows.length<2);dcPick();
+ $('discountModal').classList.add('open');
+}
+function dcPick(){
+ const rows=allFeesCache.filter(x=>(x.voucher_id||'').trim()===$('dcVid').value),r=rows[+$('dcItem').value||0];if(!r)return;
+ $('dcPayable').value=parseFloat(r.payable)||0;$('dcAmt').value=r.discount||'';
+ const d=(r.remarks||'').split(' | ').find(x=>x.startsWith('Discount '));$('dcRemarks').value=d?d.replace(/^Discount [^:]*: /,''):'';
 }
 const closeDiscount=()=>$('discountModal').classList.remove('open');
 async function saveDiscount(){
   const vid=$('dcVid').value,amt=parseFloat($('dcAmt').value)||0,rs=$('dcRemarks').value.trim(),pay=parseFloat($('dcPayable').value)||0;
   if(amt<0||amt>pay){showAlert("Discount must be between 0 and the payable amount.");return}
   if(amt>0&&!rs){showAlert("Remarks are required for a discount.");return}
-  const r=allFeesCache.find(x=>(x.voucher_id||'').trim()===vid)||{};
-  const parts=(r.remarks||'').split(' | ').filter(x=>x&&!x.startsWith('Discount '));
+  const r=allFeesCache.filter(x=>(x.voucher_id||'').trim()===vid)[+$('dcItem').value||0]||{};
+ const parts=(r.remarks||'').split(' | ').filter(x=>x&&!x.startsWith('Discount '));
   if(amt>0)parts.push(`Discount ${amt}: ${rs}`);
   showLoading("Saving discount...");
   try{
-    const res=await fetch(`${SUPABASE_URL}/rest/v1/fees?voucher_id=eq.${encodeURIComponent(vid)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({discount:amt,remarks:parts.join(' | ')})});
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/fees?${rowFilter(r)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({discount:amt,remarks:parts.join(' | ')})});
     hideLoading();
     if(res.ok){closeDiscount();showAlert("Discount saved.");initFeePage()}
     else showAlert("Failed to save: "+await res.text());
