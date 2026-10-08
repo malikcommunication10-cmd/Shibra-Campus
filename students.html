@@ -235,13 +235,11 @@
             resetMonthDefaults();
         }
         // the list of vouchers to create from the current form values
-        // the one-time fees + the joining-month tuition share ONE voucher number; every other month gets its own voucher
+        // every month has ONE voucher number: the items of the same month (tuition, registration, admission, annual fund...) share it
         function vouchGroups(plan) {
-            const tuition = plan.filter(v => v.type === 'tuition fee'), one = plan.filter(v => v.type !== 'tuition fee'), first = tuition.shift(), groups = [];
-            const adm = [...one, ...(first ? [first] : [])];
-            if(adm.length) groups.push(adm);
-            tuition.forEach(t => groups.push([t]));
-            return groups;
+            const m = {};
+            plan.forEach(v => { (m[v.period] = m[v.period] || []).push(v); });
+            return Object.keys(m).sort((x, y) => VM.indexOf(x.split(' ')[0]) - VM.indexOf(y.split(' ')[0])).map(k => m[k]);
         }
         function vouchPlan() {
             if(!gv('vouchOn').checked || dojVal() === null) return [];
