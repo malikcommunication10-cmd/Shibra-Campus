@@ -368,7 +368,7 @@
                     });
                     if(res.ok) {
                     let msg = "Student Saved Successfully!";
-                    try { msg += await createStudentVouchers(vouchP); } catch(e) { console.error(e); msg += "\n\nBut the fee vouchers could NOT be created (" + e.message + "). Create them from Fee Vouchers -> Generate."; }
+                    try { msg += await createStudentVouchers(vouchP); } catch(e) { console.error(e); msg += "\n\nBut the fee vouchers could NOT be created (" + (/fees_pkey|23505/.test(e.message) ? "the fees table still has voucher_id as its primary key: run the SQL from the chat to move it to the seq column" : e.message) + "). Create them from Fee Vouchers -> Generate."; }
                     alert(msg + (dropped.length ? "\n\nNote: the students table has no column for " + dropped.join(", ") + " (these amounts were used for the vouchers only)." : ""));
                 }
             }
