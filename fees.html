@@ -78,6 +78,8 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
       <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Pending</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div></div>
     </div>
 
+    <div id="afBanner" class="hidden no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3"></div>
+
     <!-- Generate -->
     <section class="bg-white rounded-xl border overflow-hidden no-print">
       <button onclick="toggleGen()" class="w-full px-4 py-3 flex justify-between items-center text-sm font-semibold text-indigo-800 bg-indigo-50/60">
@@ -342,7 +344,7 @@ async function initFeePage(){
           status:(paid>=net&&(net>0||disc>0))?'Paid':(paid>0?'Partial':'Unpaid'),
           paymentDates:acc.dates.size?[...acc.dates].join(', '):'-'};
       });
-      regroupFees();populateItemFilter();populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
+      regroupFees();populateItemFilter();renderAfBanner();populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
     }else{allFeesCache=[];$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No fee vouchers found.</td></tr>`}
   }catch(e){console.error(e);$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`}
   hideLoading();
@@ -417,18 +419,17 @@ function parsePeriod(x) {
 }
 const periodNum = x => monthOrder[parsePeriod(x)] || 0;
 
-async function generateAnnualFund() {
-  if(!allStudentsCache.length) { showAlert("No students found in students directory!"); return; }
-  if(vidMode() === 'manual' && !parseStart()) { showAlert("Please enter a starting voucher number, e.g. V-586545."); return; }
+function planAnnualFund(withIds) {
   const selPeriod = $('voucherPeriod').value === 'ALL_YEAR' ? null : $('voucherPeriod').value;
   const used = new Set(); allFeesCache.forEach(f => { const n = vNum(f.voucher_id); if(n) used.add(n); });
-  const nextId = makeVidGenerator(used);
+  const nextId = withIds ? makeVidGenerator(used) : (() => 'V-0');
   const vmap = new Map(); allFeesCache.forEach(f => { const k = `${normAdm(f.admis_no)}_${(f.period || '').trim()}`; if(!vmap.has(k)) vmap.set(k, (f.voucher_id || '').trim()); });
   const vidFor = (st, period) => { const k = `${normAdm(st.admis_no)}_${period}`; let v = vmap.get(k); if(!v) { v = nextId(); vmap.set(k, v); } return v; };
   const keys = new Set(); allFeesCache.forEach(f => keys.add(`${normAdm(f.admis_no)}_${(f.period || '').trim()}_${(f.type || '').trim().toLowerCase()}`));
-  const out = [], skip = { exists: 0, noStudent: 0, notEligible: 0, noPeriod: 0, notAnnual: 0 }, byMonth = {}; let usedSel = 0;
+  const out = [], skip = { exists: 0, noStudent: 0, notEligible: 0, noPeriod: 0, notAnnual: 0 }, byMonth = {}; let usedSel = 0, rules = 0;
   Object.values(incrementsCacheMap).forEach(inc => {
     if(!(parseFloat(inc.annual_fund) > 0)) return;
+    rules++;
     if(!/annual/i.test(inc.fee_type || '')) { skip.notAnnual++; return; }
     let period = parsePeriod(inc.effective_period);
     if(!period && selPeriod) { period = selPeriod; usedSel++; }
@@ -442,6 +443,22 @@ async function generateAnnualFund() {
     out.push({ sr_no: st.sr_no || '', voucher_id: vidFor(st, period), admis_no: st.admis_no || '', student_name: st.student_name || '', type: 'annual fund', period, payable: parseFloat(inc.annual_fund), class: st.class || '', status: 'Unpaid', date: today(), remarks: inc.remarks || '', [FEES_SIBLINGS_COL]: getStudentSiblings(st), [FEES_ARREARS_COL]: null });
     byMonth[period] = (byMonth[period] || 0) + 1;
   });
+  return { out, skip, byMonth, usedSel, selPeriod, rules };
+}
+// a banner on top of the list tells when annual fund set in Bulk Updation is not in the vouchers yet
+function renderAfBanner() {
+  const b = $('afBanner'); if(!b) return;
+  let P; try { P = planAnnualFund(false); } catch (e) { b.classList.add('hidden'); return; }
+  const months = Object.entries(P.byMonth).sort((x, y) => (monthOrder[x[0]] || 99) - (monthOrder[y[0]] || 99)).map(([m, n]) => `${m}: ${n}`).join(', ');
+  const sk = P.skip, why = [sk.notEligible && `${sk.notEligible} not eligible (joined later / left)`, sk.noStudent && `${sk.noStudent} student not found`, sk.noPeriod && `${sk.noPeriod} without an effective month`, sk.notAnnual && `${sk.notAnnual} whose fee type is not "annual fund"`].filter(Boolean).join(', ');
+  if(P.out.length) { b.innerHTML = `<span>🎁 <b>${P.out.length}</b> annual fund item(s) set in Bulk Updation are not in the vouchers yet (${esc(months)}).${why ? ' Skipped: ' + esc(why) + '.' : ''}</span><button onclick="generateAnnualFund()" class="btn b-pri">Create them now</button>`; b.classList.remove('hidden'); }
+  else if(why) { b.innerHTML = `<span>🎁 Annual fund in Bulk Updation: ${P.rules} row(s), ${sk.exists} already in vouchers. Skipped: ${esc(why)}.</span>`; b.classList.remove('hidden'); }
+  else b.classList.add('hidden');
+}
+async function generateAnnualFund() {
+  if(!allStudentsCache.length) { showAlert("No students found in students directory!"); return; }
+  if(vidMode() === 'manual' && !parseStart()) { showAlert("Please enter a starting voucher number, e.g. V-586545."); return; }
+  const { out, skip, byMonth, usedSel, selPeriod } = planAnnualFund(true);
   const sk = `\n\nSkipped: ${skip.exists} already have it, ${skip.notEligible} not eligible (joined later / left), ${skip.noStudent} student not found, ${skip.noPeriod} no effective month, ${skip.notAnnual} fee type is not "annual fund".`;
   if(!out.length) { showAlert("No annual fund vouchers to create." + sk + (usedSel ? '' : '\n\nTip: in Bulk Updation the Effective period must be a month like "October 2026".')); return; }
   showConfirm(`${out.length} annual fund item(s) will be added (to the student's voucher of that month, or a new voucher if there is none):\n` + Object.entries(byMonth).map(([m, n]) => `${m}: ${n}`).join(', ') + (usedSel ? `\n(${usedSel} had no effective month, so ${selPeriod} is used)` : '') + sk + `\n\nProceed?`, async () => {
