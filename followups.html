@@ -439,7 +439,7 @@ async function initFollowups() {
             return { ...r, _discount: disc, _payable: payable, _paid: paid, _balance: payable - paid };
         });
         {   // an admission voucher holds several fee rows: split the voucher's payments over them
-            const pa = splitVoucherPaid(allFees, r => r._payable, r => r._paid, r => r.type, r => r.voucher_id);
+            const pa = splitVoucherPaid(allFees, r => r._payable, r => r._paid, r => r.type, r => r.voucher_id, rowOrder);
             allFees.forEach((r, i) => { r._paid = pa[i]; r._balance = r._payable - pa[i]; });
         }
 
