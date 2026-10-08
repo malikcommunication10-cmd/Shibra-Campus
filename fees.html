@@ -129,6 +129,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
           <div class="flex gap-2 flex-wrap justify-end">
             <button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
             <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
+            <button onclick="exportFilteredCSV()" class="btn b-ok">📤 Export CSV</button>
             <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
             <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
             <button onclick="initFeePage()" class="btn b-gh">🔄 Refresh</button>
@@ -435,7 +436,6 @@ async function generateAnnualFund() {
   });
 }
 function regroupFees(){
-  // several rows can share one voucher (admission voucher): split the voucher's payments over its rows
   const pa=splitVoucherPaid(allFeesCache,r=>r.net,r=>r.totalPaid,r=>r.type,r=>r.voucher_id),cnt={};
   allFeesCache.forEach(r=>{const v=(r.voucher_id||'').trim();cnt[v]=(cnt[v]||0)+1});
   allFeesCache.forEach((r,i)=>{const v=(r.voucher_id||'').trim();r._gn=cnt[v];
@@ -529,7 +529,7 @@ async function postAccounts(payload,okMsg,loadMsg){
 }
 
 function submitBulkFifoPayment(){
-  const recv=parseFloat($('bulkReceivedAmount').value)||0,date=$('bulkPayDate').value;
+  const recv=parseFloat($('bulkReceivedAmount').value)\vert{}\vert{}0,date=$('bulkPayDate').value;
   const remarks=$('bulkPayRemarks').value.trim()||"Bulk payment via FIFO";
   if(recv<=0){showAlert("Please enter a valid amount greater than 0.");return}
   showConfirm(`PKR ${recv} will be distributed via FIFO. Any extra is saved as advance on the latest voucher. Proceed?`,async()=>{
@@ -589,29 +589,28 @@ function openStudentLedger(name){
     const cells=(d,desc,paid,bal)=>`<tr class="border-b"><td class="p-2 font-mono">${esc(d)}</td><td class="p-2 font-mono text-indigo-900">${esc(v.voucher_id)||'-'}</td><td class="p-2 text-indigo-600">${esc(v.period)||'-'}</td><td class="p-2 text-slate-600">${desc}${note}</td><td class="p-2 font-bold">PKR ${fmt(pay)}</td><td class="p-2 font-bold text-emerald-600">PKR ${fmt(paid)}</td><td class="p-2 font-bold">PKR ${fmt(bal)}</td></tr>`;
     if(txns.length)txns.forEach(t=>{const a=parseFloat(t.amount_in)||0;run-=a;html+=cells(t.date||'-',esc(t.description||t.remarks||'-'),a,run)});
     else html+=cells('-','Unpaid voucher',0,run);
-  });
-  $('ledgerTableBody').innerHTML=html;
-  const ref=L[0]||{};
-  $('ledgerStudentInfo').innerText=`Student: ${name} | Class: ${cls}${ref.admis_no?' | Admis No: '+ref.admis_no:''}${ref[FEES_SIBLINGS_COL]?' | Siblings: '+ref[FEES_SIBLINGS_COL]:''}`;
-  $('ledgerTotalPayable').innerText=`PKR ${fmt(tp)}`;$('ledgerTotalPaid').innerText=`PKR ${fmt(td)}`;$('ledgerTotalBalance').innerText=`PKR ${fmt(tb)}`;
-  $('ledgerModal').classList.add('open');
+ });
+ $('ledgerTableBody').innerHTML=html;
+ const ref=L[0]||{};
+ $('ledgerStudentInfo').innerText=`Student: ${name} | Class: ${cls}${ref.admis_no?' | Admis No: '+ref.admis_no:''}${ref[FEES_SIBLINGS_COL]?' | Siblings: '+ref[FEES_SIBLINGS_COL]:''}`;
+ $('ledgerTotalPayable').innerText=`PKR ${fmt(tp)}`;$('ledgerTotalPaid').innerText=`PKR ${fmt(td)}`;$('ledgerTotalBalance').innerText=`PKR ${fmt(tb)}`;
+ $('ledgerModal').classList.add('open');
 }
 const closeLedgerModal=()=>$('ledgerModal').classList.remove('open');
 
 /* ---------- Single payment ---------- */
 function openPayModal(vId){
   const row=allFeesCache.find(r=>(r.voucher_id||'').trim()===vId);if(!row)return;
-  $('payVoucherId').value=row.voucher_id||'';$('payStudentName').value=row.student_name||'';
+  $('payVoucherId').value=row.voucher_id\vert{}\vert{}'';$('payStudentName').value=row.student_name||'';
   const grp=allFeesCache.filter(r=>(r.voucher_id||'').trim()===vId),tc=t=>String(t||'').replace(/\b\w/g,c=>c.toUpperCase());
  $('payFromAccount').value=grp.length>1?`Admission voucher (${grp.map(r=>tc(r.type)).join(' + ')}) - ${row.student_name||''}`:`${row.type||'Tuition Fee'} (${row.period||''}) - ${row.student_name||''}`;
  const pay=grp.reduce((s,r)=>s+(r.net??(parseFloat(r.payable)||0)),0),rem=pay-grp.reduce((s,r)=>s+(parseFloat(r.totalPaid)||0),0);
-  $('payPayable').value=pay;$('payAmountIn').value=rem>0?rem:pay;$('payRemarks').value=row.remarks||'';
-  $('payModal').classList.add('open');
+  $('payPayable').value=pay;$('payAmountIn').value=rem>0?rem:pay;$('payRemarks').value=row.remarks\vert{}\vert{}'';$('payModal').classList.add('open');
 }
 const closePayModal=()=>$('payModal').classList.remove('open');
 async function submitPayment(e){
   e.preventDefault();const rm=$('payRemarks').value.trim();
-  const ok=await postAccounts({voucher_id:$('payVoucherId').value.trim()+'-'+Date.now(),from_account:$('payFromAccount').value,to_account:$('payToAccount').value,description:rm,amount_in:parseFloat($('payAmountIn').value)||0,amount_out:0,date:$('payDate').value,remarks:rm},"Payment receipt saved successfully!","Saving receipt...");
+  const ok=await postAccounts({voucher_id:$('payVoucherId').value.trim()+'-'+Date.now(),from_account:$('payFromAccount').value,to_account:$('payToAccount').value,description:rm,amount_in:parseFloat($('payAmountIn').value)\vert{}\vert{}0,amount_out:0,date:$('payDate').value,remarks:rm},"Payment receipt saved successfully!","Saving receipt...");
   if(ok){closePayModal();initFeePage()}
 }
 
@@ -750,7 +749,7 @@ function buildImportPlan(raw){
   importPlan={entries};
   const cnt={};rows.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
   const bg=st=>st==='OK'?'text-emerald-700':st.startsWith('Dup')?'text-amber-700':'text-rose-600';
-  $('importPreview').innerHTML=`<div class="rounded-lg bg-slate-50 border p-2 mb-2 font-semibold">${rows.length} payments read | ${Object.entries(cnt).map(([k,v])=>`${k}: ${v}`).join(' | ')}${bad?` | ${bad} invalid rows ignored`:''} | ${entries.length} entries will be saved<div class="font-normal text-slate-600 mt-1">${monthLine}</div></div>
+  $('importPreview').innerHTML=`<div class="rounded-lg bg-slate-50 border p-2 mb-2 font-semibold">${rows.length} payments read | ${Object.entries(cnt).map(([k,v])=>`${k}:${v}`).join(' | ')}${bad?` | ${bad} invalid rows ignored`:''} | ${entries.length} entries will be saved<div class="font-normal text-slate-600 mt-1">${monthLine}</div></div>
   <div class="overflow-x-auto max-h-72 border rounded-lg"><table class="w-full text-left"><thead class="bg-slate-100 sticky top-0"><tr><th class="p-1.5">Adm</th><th class="p-1.5">Name</th><th class="p-1.5">Date</th><th class="p-1.5">Amount</th><th class="p-1.5">Result</th><th class="p-1.5">Allocation / notes</th></tr></thead><tbody>${rows.slice(0,400).map(r=>`<tr class="border-t"><td class="p-1.5 font-mono">${esc(r.p.adm)}</td><td class="p-1.5">${esc(r.p.name)}</td><td class="p-1.5 font-mono">${r.p.date}</td><td class="p-1.5 font-bold">${fmt(r.p.amt)}</td><td class="p-1.5 font-semibold ${bg(r.status)}">${r.status}</td><td class="p-1.5">${esc(r.alloc.join(', '))}${r.flags.length?` <span class="text-amber-700">${esc(r.flags.join('; '))}</span>`:''}</td></tr>`).join('')}</tbody></table></div>${rows.length>400?'<p class="mt-1 text-slate-500">Showing the first 400 rows; all will be processed.</p>':''}`;
   $('importConfirm').classList.toggle('hidden',!entries.length);
 }
@@ -834,8 +833,7 @@ function renderPicker(){
   const box=$('stuPanel'),list=classStudents();
   if(!list.length){box.classList.add('hidden');return}
   box.classList.remove('hidden');
-  const per=$('voucherPeriod').value,q=$('stuSearch').value.trim().toLowerCase();
-  $('stuList').innerHTML=list.filter(s=>!q||(s.student_name||'').toLowerCase().includes(q)||String(s.admis_no||'').toLowerCase().includes(q))
+  const per=$('voucherPeriod').value,q=$('stuSearch').value.trim().toLowerCase();$('stuList').innerHTML=list.filter(s=>!q||(s.student_name||'').toLowerCase().includes(q)||String(s.admis_no||'').toLowerCase().includes(q))
     .map(s=>{const st=stuState(s,per);return`<label class="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"><input type="checkbox" data-k="${esc(skey(s))}" ${selStu.has(skey(s))?'checked':''} onchange="togStu(this)"><span class="font-semibold flex-1">${esc(s.student_name)}</span><span class="font-mono text-slate-400">${esc(s.admis_no)}</span><span class="badge ${st.c}">${st.t}</span></label>`}).join('')||'<div class="p-3 text-xs text-slate-400">No students match.</div>';
   $('stuCount').innerText=`${selStu.size} selected / ${list.length}`;
 }
@@ -848,7 +846,7 @@ function pickStu(mode){
 
 function openDiscount(vId){
   const r=allFeesCache.find(x=>(x.voucher_id||'').trim()===vId);if(!r)return;
-  $('dcVid').value=r.voucher_id;$('dcStudent').value=r.student_name||'';$('dcPayable').value=parseFloat(r.payable)||0;
+  $('dcVid').value=r.voucher_id;$('dcStudent').value=r.student_name\vert{}\vert{}'';$('dcPayable').value=parseFloat(r.payable)||0;
   $('dcAmt').value=r.discount||'';
   const d=(r.remarks||'').split(' | ').find(x=>x.startsWith('Discount '));
   $('dcRemarks').value=d?d.replace(/^Discount [^:]*: /,''):'';
@@ -870,6 +868,48 @@ async function saveDiscount(){
     else showAlert("Failed to save: "+await res.text());
   }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
 }
+
+// Export CSV Function Added Here
+function exportFilteredCSV() {
+  const dataToExport = filtered && filtered.length ? filtered : allFeesCache;
+  if (!dataToExport || !dataToExport.length) {
+    showAlert("No data available to export.");
+    return;
+  }
+
+  const headers = ["Sr", "Voucher ID", "Admission No", "Student Name", "Siblings", "Type", "Period", "Payable", "Discount", "Paid", "Balance", "Class", "Status", "Payment Date(s)"];
+  let csvContent = headers.join(",") + "\n";
+
+  dataToExport.forEach((r, index) => {
+    const row = [
+      index + 1,
+      `"${(r.voucher_id || '').replace(/"/g, '""')}"`,
+      `"${(r.admis_no || '').replace(/"/g, '""')}"`,
+      `"${(r.student_name || '').replace(/"/g, '""')}"`,
+      `"${(r[FEES_SIBLINGS_COL] || '').replace(/"/g, '""')}"`,
+      `"${(r.type || 'Tuition Fee').replace(/"/g, '""')}"`,
+      `"${(r.period || '').replace(/"/g, '""')}"`,
+      r.payable || 0,
+      r.discount || 0,
+      r.totalPaid || 0,
+      r.balance || 0,
+      `"${(r.class || '').replace(/"/g, '""')}"`,
+      `"${(r.status || '').replace(/"/g, '""')}"`,
+      `"${(r.paymentDates || '').replace(/"/g, '""')}"`
+    ];
+    csvContent += row.join(",") + "\n";
+  });
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `Fee_Vouchers_Export_${today()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.open').forEach(m=>m.classList.remove('open'))});
 </script>
 </body>
