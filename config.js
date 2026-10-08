@@ -9,26 +9,31 @@ function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 // (Content-Range), then ALL remaining pages are fetched in parallel. Behaves like a fetch Response.
 async function sbFetchAll(table, query) {
     query = query || 'select=*';
-    const c = getSupabaseConfig(), ordKey = 'sb_ord_' + table;
-    let ord = !/(^|&)order=/.test(query);
-    try { if (sessionStorage.getItem(ordKey) === '0') ord = false; } catch (e) {}
+    const c = getSupabaseConfig(), ordKey = 'sb_ord2_' + table;
     const hdr = (f, t, count) => Object.assign({ apikey: c.key, Authorization: `Bearer ${c.key}`, Range: `${f}-${t}`, 'Range-Unit': 'items' }, count ? { Prefer: 'count=exact' } : {});
-    const get = (f, t, o, count) => fetch(`${c.url}/rest/v1/${table}?${query}${o ? '&order=id.asc' : ''}`, { headers: hdr(f, t, count) });
+    const get = (f, t, col, count) => fetch(`${c.url}/rest/v1/${table}?${query}${col ? '&order=' + col + '.asc' : ''}`, { headers: hdr(f, t, count) });
     const fail = r => ({ ok: false, status: r.status, json: async () => r.json().catch(() => ({})), text: async () => r.text().catch(() => '') });
-    let r = await get(0, 999, ord, true);
-    if (!r.ok && ord) { ord = false; try { sessionStorage.setItem(ordKey, '0'); } catch (e) {} r = await get(0, 999, false, true); }
+    // stable paging needs a sort column: use the first of id / seq / created_at that the table has (remembered per tab)
+    let col = null, r = null;
+    if (!/(^|&)order=/.test(query)) {
+        let cached = null; try { cached = sessionStorage.getItem(ordKey); } catch (e) {}
+        const cands = cached === '-' ? [] : (cached ? [cached] : ['id', 'seq', 'created_at']);
+        for (const cc of cands) { const x = await get(0, 999, cc, true); if (x.ok) { col = cc; r = x; break; } }
+        try { sessionStorage.setItem(ordKey, col || '-'); } catch (e) {}
+    }
+    if (!r) r = await get(0, 999, null, true);
     if (!r.ok) return fail(r);
     let rows = await r.json();
     if (!Array.isArray(rows)) return { ok: false, status: 200, json: async () => rows, text: async () => '' };
     const cr = r.headers.get('content-range') || '', total = cr.includes('/') ? parseInt(cr.split('/')[1], 10) : NaN, size = rows.length;
     if (size && !isNaN(total) && total > size) {
         const jobs = [];
-        for (let f = size; f < total; f += size) jobs.push(get(f, f + size - 1, ord, false).then(x => x.ok ? x.json() : Promise.reject(x)));
+        for (let f = size; f < total; f += size) jobs.push(get(f, f + size - 1, col, false).then(x => x.ok ? x.json() : Promise.reject(x)));
         try { (await Promise.all(jobs)).forEach(a => { rows = rows.concat(a); }); }
         catch (x) { return fail(x && x.status ? x : { status: 500, json: async () => ({}), text: async () => '' }); }
     } else if (size && isNaN(total)) {                       // header not available: fall back to sequential paging
         for (let f = size; ; f += size) {
-            const x = await get(f, f + size - 1, ord, false);
+            const x = await get(f, f + size - 1, col, false);
             if (!x.ok) break;
             const a = await x.json(); if (!Array.isArray(a) || !a.length) break;
             rows = rows.concat(a);
