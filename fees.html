@@ -273,25 +273,11 @@ function toggleGen(){$('genBox').classList.toggle('hidden');$('genArrow').innerT
 function getStudentArrears(st){for(const c of STUDENT_ARREARS_COLS){if(st[c]!=null&&String(st[c]).trim()!=='')return String(st[c]).trim()}return null}
 function getStudentSiblings(st){const v=st[STUDENT_SIBLINGS_COL];return(v==null||String(v).trim()==='')?null:String(v).trim()}
 
-/* ---------- Helper for fetching all records from Supabase ---------- */
-async function sbFetchAll(table, queryParams) {
-  let allData = [];
-  let rangeSize = 1000;
-  let from = 0;
-  let to = rangeSize - 1;
-  while (true) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${queryParams}`, {
-      headers: { ...H, Range: `${from}-${to}` }
-    });
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    if (!data || data.length === 0) break;
-    allData = allData.concat(data);
-    if (data.length < rangeSize) break;
-    from += rangeSize;
-    to += rangeSize;
-  }
-  return { json: async () => allData };
+/* ---------- Direct Safe Fetch All ---------- */
+async function fetchAll(table) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*`, { headers: H });
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
 }
 
 /* ---------- Voucher numbering ---------- */
@@ -320,7 +306,6 @@ function makeVidGenerator(used){
 }
 
 /* ---------- Load ---------- */
-async function fetchAll(t) { const r = await sbFetchAll(t, 'select=*'); return await r.json(); }
 async function initFeePage(){
   $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
   if(!$('voucherPeriod').options.length){
@@ -330,8 +315,7 @@ async function initFeePage(){
   }
   showLoading("Loading data...");
   try{
-    const g=fetchAll;
-    const [students,increments,accounts,fees]=await Promise.all(['students','increments','accounts','fees'].map(g));
+    const [students,increments,accounts,fees]=await Promise.all(['students','increments','accounts','fees'].map(fetchAll));
     if(Array.isArray(students)){allStudentsCache=students;populateClassDropdown(students)}
     incrementsCacheMap={};
     if(Array.isArray(increments))increments.forEach(i=>{const a=(i.admis_no||'').trim().toLowerCase();if(a)incrementsCacheMap[a]=i});
@@ -457,10 +441,15 @@ async function generateAnnualFund() {
   });
 }
 function regroupFees(){
-  const pa=splitVoucherPaid(allFeesCache,r=>r.net,r=>r.totalPaid,r=>r.type,r=>r.voucher_id),cnt={};
+  const pa={},cnt={};
   allFeesCache.forEach(r=>{const v=(r.voucher_id||'').trim();cnt[v]=(cnt[v]||0)+1});
   allFeesCache.forEach((r,i)=>{const v=(r.voucher_id||'').trim();r._gn=cnt[v];
-    if(cnt[v]>1){r.totalPaid=pa[i];r.balance=r.net-pa[i];r.status=(pa[i]>=r.net&&(r.net>0||r.discount>0))?'Paid':(pa[i]>0?'Partial':'Unpaid')}});
+    if(cnt[v]>1){
+      const acc=accountsDataMap[v]||{totalPaid:0};
+      r.totalPaid=acc.totalPaid;r.balance=r.net-acc.totalPaid;
+      r.status=(acc.totalPaid>=r.net&&(r.net>0||r.discount>0))?'Paid':(acc.totalPaid>0?'Partial':'Unpaid');
+    }
+  });
 }
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
