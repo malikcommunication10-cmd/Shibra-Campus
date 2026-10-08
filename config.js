@@ -158,8 +158,11 @@ function parsePromises(rows) {
 // ============================================================================
 const FEE_ORDER = ['arrears', 'registration fee', 'admission fee', 'annual fund', 'tuition fee'];
 const feeRank = t => { const i = FEE_ORDER.indexOf(String(t || '').trim().toLowerCase()); return i < 0 ? 9 : i; };
-// returns the paid amount of every row (same order as rows); paidOf(row) is the TOTAL paid of the row's voucher
-function splitVoucherPaid(rows, netOf, paidOf, typeOf, vidOf) {
+// when the rows were created (columns tried in this order: seq, created_at, id); rows without any keep the loaded order
+const rowOrder = r => { if (r.seq != null && isFinite(Number(r.seq))) return Number(r.seq); if (r.created_at) { const t = Date.parse(r.created_at); if (!isNaN(t)) return t; } const n = Number(r.id); return isFinite(n) && r.id !== '' && r.id != null ? n : 0; };
+// returns the paid amount of every row (same order as rows); paidOf(row) is the TOTAL paid of the row's voucher.
+// The payments of a voucher clear its rows OLDEST FIRST (orderOf), e.g. January tuition before an annual fund added later.
+function splitVoucherPaid(rows, netOf, paidOf, typeOf, vidOf, orderOf) {
     const groups = {};
     rows.forEach((r, i) => { const v = String(vidOf(r) || '').trim(); (groups[v] = groups[v] || []).push(i); });
     const out = new Array(rows.length).fill(0);
@@ -167,7 +170,8 @@ function splitVoucherPaid(rows, netOf, paidOf, typeOf, vidOf) {
         const idx = groups[v], total = paidOf(rows[idx[0]]) || 0;
         if (idx.length === 1) { out[idx[0]] = total; return; }
         let left = total;
-        const ord = idx.slice().sort((a, b) => feeRank(typeOf(rows[a])) - feeRank(typeOf(rows[b])) || a - b);
+        const key = i => orderOf ? orderOf(rows[i]) : feeRank(typeOf(rows[i]));
+        const ord = idx.slice().sort((a, b) => key(a) - key(b) || a - b);
         ord.forEach((i, k) => { const use = k === ord.length - 1 ? left : Math.max(0, Math.min(left, netOf(rows[i]))); out[i] = Math.round(use * 100) / 100; left -= use; });
     });
     return out;
