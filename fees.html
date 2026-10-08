@@ -273,6 +273,27 @@ function toggleGen(){$('genBox').classList.toggle('hidden');$('genArrow').innerT
 function getStudentArrears(st){for(const c of STUDENT_ARREARS_COLS){if(st[c]!=null&&String(st[c]).trim()!=='')return String(st[c]).trim()}return null}
 function getStudentSiblings(st){const v=st[STUDENT_SIBLINGS_COL];return(v==null||String(v).trim()==='')?null:String(v).trim()}
 
+/* ---------- Helper for fetching all records from Supabase ---------- */
+async function sbFetchAll(table, queryParams) {
+  let allData = [];
+  let rangeSize = 1000;
+  let from = 0;
+  let to = rangeSize - 1;
+  while (true) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${queryParams}`, {
+      headers: { ...H, Range: `${from}-${to}` }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data);
+    if (data.length < rangeSize) break;
+    from += rangeSize;
+    to += rangeSize;
+  }
+  return { json: async () => allData };
+}
+
 /* ---------- Voucher numbering ---------- */
 const vNum=id=>{const m=String(id||'').match(/^V-(\d+)/i);return m?parseInt(m[1],10):null};
 const startVal=st=>{const m=String(st.doj||'').match(/^(\d{4})-(\d{2})/);return m?(+m[1])*12+(+m[2]):null};
@@ -869,7 +890,7 @@ async function saveDiscount(){
   }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
 }
 
-// Export CSV Function Added Here
+// Export CSV Function
 function exportFilteredCSV() {
   const dataToExport = filtered && filtered.length ? filtered : allFeesCache;
   if (!dataToExport || !dataToExport.length) {
