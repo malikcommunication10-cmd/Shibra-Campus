@@ -79,15 +79,18 @@ async function initDashboard() {
             if (d.slice(0, 7) === ym) month$ += amt;
         });
         let pending = 0, unpaid = 0; const byClass = {};
-        const pa = splitVoucherPaid(fees, f => (parseFloat(f.payable) || 0) - (parseFloat(f.discount) || 0), f => paidBy[String(f.voucher_id || '').trim()] || 0, f => f.type, f => f.voucher_id, rowOrder);
-        fees.forEach((f, i) => {
+        const agg = {};          // per student: all charges up to this month minus ALL payments (any voucher)
+        fees.forEach(f => {
+            const k = String(f.admis_no || f.student_name || '').trim().toLowerCase(), v = String(f.voucher_id || '').trim();
+            const x = agg[k] || (agg[k] = { charge: 0, paid: 0, seen: new Set(), cls: String(f.class || '-').trim() || '-' });
+            if (!x.seen.has(v)) { x.seen.add(v); x.paid += paidBy[v] || 0; }
             const r = rank(f.period); if (r !== null && r > cur) return;      // later months are not dues yet
-            const bal = (parseFloat(f.payable) || 0) - (parseFloat(f.discount) || 0) - pa[i];
-            if (bal > 0) { pending += bal; unpaid++; const c = String(f.class || '-').trim() || '-'; byClass[c] = (byClass[c] || 0) + bal; }
+            x.charge += (parseFloat(f.payable) || 0) - (parseFloat(f.discount) || 0);
         });
+        Object.values(agg).forEach(x => { const bal = x.charge - x.paid; if (bal > 0.004) { pending += bal; unpaid++; byClass[x.cls] = (byClass[x.cls] || 0) + bal; } });
         const cards = [
             ['Active students', fmt(active), 'text-indigo-900', `${students.length - active} left / inactive`],
-            ['Pending dues', 'PKR ' + fmt(pending), 'text-rose-600', `${fmt(unpaid)} unpaid vouchers`],
+            ['Pending dues', 'PKR ' + fmt(pending), 'text-rose-600', `${fmt(unpaid)} students with dues`],
             ['Collected today', 'PKR ' + fmt(today$), 'text-emerald-600', 'fee receipts'],
             ['Collected this month', 'PKR ' + fmt(month$), 'text-emerald-700', 'fee receipts']
         ];
