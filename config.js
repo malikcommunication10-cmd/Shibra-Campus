@@ -50,7 +50,8 @@ const SETTING_DEFAULTS = {
     'Income Head': ['Admission / Registration Fee', 'Annual Fund', 'Book Store Sale', 'Uniform / Stationery Sale', 'Transport Fee', 'Donation', 'Other Income'],
     'Expense Head': ['Salaries', 'Utility Bills', 'Rent', 'Stationery', 'Repair & Maintenance', 'Fuel / Transport', 'Events / Functions', 'Books Purchase', 'Printing', 'Internet / Phone', 'Refreshments', 'Misc Expense'],
     'Book Vendor': [],
-    'Book Category': ['Books', 'Notebooks', 'Study Planner', 'Lamination Paper']
+    'Book Category': ['Books', 'Notebooks', 'Study Planner', 'Lamination Paper'],
+    'Payment Account': []
 };
 let _settingLists = null;
 async function loadSettingLists() {
@@ -63,7 +64,7 @@ async function loadSettingLists() {
         if (Array.isArray(rows)) {
             const by = {};
             const canon = k => String(k || '').toLowerCase().replace(/[^a-z]/g, '').replace(/s$/, '');
-            const ALIAS = { 'Book Vendor': ['bookvendor', 'vendor', 'booksupplier', 'supplier'], 'Income Head': ['incomehead', 'income'], 'Expense Head': ['expensehead', 'expense'], 'Designation': ['designation'], 'Class': ['class'], 'Section': ['section'], 'Book Category': ['bookcategory', 'category'] };
+            const ALIAS = { 'Book Vendor': ['bookvendor', 'vendor', 'booksupplier', 'supplier'], 'Income Head': ['incomehead', 'income'], 'Expense Head': ['expensehead', 'expense'], 'Designation': ['designation'], 'Class': ['class'], 'Section': ['section'], 'Book Category': ['bookcategory', 'category'], 'Payment Account': ['paymentaccount', 'paymentmode', 'paymentaccounts'] };
             const keyOf = raw => { const cn = canon(raw); for (const d of Object.keys(ALIAS)) if (ALIAS[d].includes(cn) || canon(d) === cn) return d; return String(raw || '').trim(); };
             rows.forEach(x => { const k = keyOf(x.setting_key), v = String(x.setting_value ?? '').trim(); if (k && v !== '') (by[k] = by[k] || []).push(v); });
             Object.keys(SETTING_DEFAULTS).forEach(k => { if (by[k] && by[k].length) out[k] = by[k]; });
@@ -180,4 +181,34 @@ function splitVoucherPaid(rows, netOf, paidOf, typeOf, vidOf, orderOf) {
         ord.forEach((i, k) => { const use = k === ord.length - 1 ? left : Math.max(0, Math.min(left, netOf(rows[i]))); out[i] = Math.round(use * 100) / 100; left -= use; });
     });
     return out;
+}
+
+// ============================================================================
+//  Payment accounts (Settings -> "Payment accounts"): Cash is always there; banks and wallets are added in Settings,
+//  e.g. "ABL 0021252355" or "Online / JazzCash". The chosen text is what gets saved in Accounts.
+// ============================================================================
+function payBaseKey(t) {
+    const s = String(t || '').trim().toLowerCase();
+    if (s === 'cash' || s === 'cash in hand') return 'cash';
+    if (s === 'bank') return 'bank';
+    if (/^online(\s*\/\s*jazz\s*cash)?$/.test(s)) return 'online';
+    return null;
+}
+const payEsc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+function payAccountList(items) {
+    const out = [{ value: 'cash', label: '💵 Cash in Hand' }], seen = new Set(['cash']);
+    const src = (items && items.length) ? items : ['Bank', 'Online / JazzCash'];      // nothing in Settings yet: the old Cash / Bank / Online
+    src.forEach(raw => {
+        const t = String(raw || '').trim(); if (!t) return;
+        const b = payBaseKey(t), value = b || t, k = value.toLowerCase();
+        if (seen.has(k)) return; seen.add(k);
+        out.push({ value, label: b === 'bank' ? '🏦 Bank' : b === 'online' ? '📱 Online / JazzCash' : (/online|jazz|easy|raast|wallet/i.test(t) ? '📱 ' : '🏦 ') + t });
+    });
+    return out;
+}
+const payOptionsHtml = (list, sel) => list.map(o => `<option value="${payEsc(o.value)}"${o.value === sel ? ' selected' : ''}>${payEsc(o.label)}</option>`).join('');
+async function fillPaySelects(ids) {          // fills the <select>s and keeps whatever is already chosen
+    const L = await loadSettingLists(), list = payAccountList(L['Payment Account']);
+    ids.forEach(id => { const el = document.getElementById(id); if (!el) return; const cur = el.value; el.innerHTML = payOptionsHtml(list); if (cur && [...el.options].some(o => o.value === cur)) el.value = cur; });
+    return list;
 }
