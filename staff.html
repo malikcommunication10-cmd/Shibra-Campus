@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Staff & Payroll</title>
-    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
     <style>
@@ -442,6 +443,7 @@ function normPay(r) {
 
 async function initStaff() {
     try { DESIGNATIONS = (await loadSettingLists())['Designation']; } catch (e) {}
+    fillPaySelects(['payWallet']).catch(() => {});
     showLoading('Loading staff & payroll...');
     let c = getSupabaseConfig();
     try {
