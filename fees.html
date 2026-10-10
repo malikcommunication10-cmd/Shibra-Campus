@@ -189,6 +189,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
   <h3 class="font-bold text-indigo-800 border-b pb-2">⚡ Bulk pay (FIFO)</h3>
   <div><label class="lbl">Total filtered unpaid dues</label><input id="bulkTotalDues" readonly class="inp font-bold text-rose-600"></div>
   <div><label class="lbl">Received amount</label><input type="number" id="bulkReceivedAmount" class="inp font-bold text-emerald-600"></div>
+  <div><label class="lbl">Deposit to</label><select id="bulkAccount" class="inp"><option value="cash">Cash</option></select></div>
   <div><label class="lbl">Payment date</label><input type="date" id="bulkPayDate" class="inp"></div>
   <div><label class="lbl">Remarks</label><input id="bulkPayRemarks" placeholder="Bulk payment via FIFO" class="inp"></div>
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeBulkPayModal()" class="btn b-gh">Cancel</button><button onclick="submitBulkFifoPayment()" class="btn b-ok">Save & distribute</button></div>
@@ -203,7 +204,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
       <div><label class="lbl">Student</label><input id="payStudentName" readonly class="inp font-semibold"></div></div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
       <div><label class="lbl">From account (fee type)</label><input id="payFromAccount" readonly class="inp"></div>
-      <div><label class="lbl">Deposit to</label><select id="payToAccount" class="inp"><option value="cash">Cash</option><option value="bank">Bank</option></select></div></div>
+      <div><label class="lbl">Deposit to</label><select id="payToAccount" class="inp"><option value="cash">Cash</option></select></div></div>
     <div class="grid grid-cols-3 gap-2">
       <div><label class="lbl">Payable</label><input type="number" id="payPayable" readonly class="inp font-bold"></div>
       <div><label class="lbl">Amount</label><input type="number" id="payAmountIn" required class="inp font-bold text-emerald-600"></div>
@@ -317,6 +318,7 @@ function makeVidGenerator(used){
 /* ---------- Load ---------- */
 async function fetchAll(t) { const r = await sbFetchAll(t, 'select=*'); return await r.json(); }
 async function initFeePage(){
+  fillPaySelects(['payToAccount','bulkAccount']).then(l=>{payChoices=l}).catch(()=>{});
   $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
   if(!$('voucherPeriod').options.length){
     $('voucherPeriod').innerHTML=MONTHS.map(m=>`<option>${m}</option>`).join('')+`<option value="ALL_YEAR">🚀 Generate all (Jan to Dec 2026)</option>`;
@@ -487,6 +489,8 @@ function populateItemFilter(){
   sel.innerHTML='<option value="ALL">All fee items</option>'+[...set].sort((a,b)=>feeRank(a)-feeRank(b)||a.localeCompare(b)).map(t=>`<option value="${esc(t)}">${t==='arrears'?'Arrears':tcase(t)}</option>`).join('');
   if(set.has(cur))sel.value=cur;
 }
+let payChoices=[{value:'cash',label:'Cash'}];
+const matchPay=t=>{const s=String(t||'').trim().toLowerCase();if(!s)return 'cash';const c=payChoices.find(o=>o.value.toLowerCase()===s||o.label.toLowerCase().replace(/^[^a-z0-9]+/,'')===s);return c?c.value:s};
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
   $('fromMonth').value=1;$('toMonth').value=ci;if(!silent)filterVouchers();
@@ -635,7 +639,7 @@ function submitBulkFifoPayment(){
     const sorted=[...filtered].sort((a,b)=>ord(a,b,1)||(isArr(b)-isArr(a)));
     const newest=[...filtered].sort((a,b)=>ord(b,a,-1)||(isArr(a)-isArr(b)))[0];
     const label=v=>`${v.type||'Tuition Fee'} (${v.period||''}) - ${v.student_name||''}`;
-    const mk=(v,sfx,amt,rm)=>({voucher_id:`${(v.voucher_id||'').trim()}-${sfx}`,from_account:label(v),to_account:'cash',description:rm,amount_in:amt,amount_out:0,date,remarks:rm});
+    const mk=(v,sfx,amt,rm)=>({voucher_id:`${(v.voucher_id||'').trim()}-${sfx}`,from_account:label(v),to_account:$('bulkAccount').value||'cash',description:rm,amount_in:amt,amount_out:0,date,remarks:rm});
     const nonce=Date.now(),pl=[];let rem=recv;
     for(const v of sorted){
       if(rem<=0)break;const bal=parseFloat(v.balance)||0;let amt=0;
@@ -830,7 +834,7 @@ function buildImportPlan(raw){
   raw.forEach((r,i)=>{
     const adm=String(g(r,'voucher_id')).trim(),amt=parseFloat(String(g(r,'amount_in')).replace(/,/g,''))||0,date=toISO(g(r,'date'),fix);
     if(!adm||amt<=0||!date){if(adm||amt)bad++;return}
-    pays.push({adm,key:normAdm(adm),name:String(g(r,'from_account')).trim(),to:String(g(r,'to_account')).trim().toLowerCase()||'cash',amt,date,cls:String(g(r,'remarks')).trim()});
+    pays.push({adm,key:normAdm(adm),name:String(g(r,'from_account')).trim(),to:matchPay(String(g(r,'to_account')).trim()),amt,date,cls:String(g(r,'remarks')).trim()});
   });
   const ex={};
   accountsRaw.forEach(a=>{const m=(a.description||'').match(/^Imported from Excel \(Adm (.+)\)$/);if(m){const k=normAdm(m[1])+'|'+String(a.date).slice(0,10);ex[k]=(ex[k]||0)+(parseFloat(a.amount_in)||0)}});
