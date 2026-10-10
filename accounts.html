@@ -86,12 +86,7 @@
                     <div><label class="block text-[11px] font-medium text-slate-500 mb-1">To</label><input id="gTo" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
                     <div>
                         <label class="block text-[11px] font-medium text-slate-500 mb-1">Account</label>
-                        <select id="gWallet" onchange="renderAll()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
-                            <option value="ALL">All accounts</option>
-                            <option value="cash">💵 Cash in Hand</option>
-                            <option value="bank">🏦 Bank</option>
-                            <option value="online">📱 Online / JazzCash</option>
-                        </select>
+                        <select id="gWallet" onchange="renderAll()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All accounts</option></select>
                     </div>
                     <button onclick="initAccounts()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
                 </div>
@@ -285,19 +280,11 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div id="emWalletWrap">
                         <label id="emWalletLabel" class="block text-xs font-medium text-slate-700 mb-1">Account</label>
-                        <select id="emWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none">
-                            <option value="cash">💵 Cash in Hand</option>
-                            <option value="bank">🏦 Bank</option>
-                            <option value="online">📱 Online / JazzCash</option>
-                        </select>
+                        <select id="emWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
                     </div>
                     <div id="emWallet2Wrap" class="hidden">
                         <label class="block text-xs font-medium text-slate-700 mb-1">To account</label>
-                        <select id="emWallet2" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none">
-                            <option value="bank">🏦 Bank</option>
-                            <option value="cash">💵 Cash in Hand</option>
-                            <option value="online">📱 Online / JazzCash</option>
-                        </select>
+                        <select id="emWallet2" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
                     </div>
                 </div>
                 <div id="emTitleWrap">
@@ -397,10 +384,28 @@ function numToWords(n) {
 //  LOAD + NORMALIZE
 // ====================================================================================
 function normWallet(v) {
-    let s = String(v || '').toLowerCase();
-    if(/bank/.test(s)) return 'bank';
-    if(/online|jazz|easy|wallet|raast/.test(s)) return 'online';
+    const raw = String(v || '').trim(), low = raw.toLowerCase();
+    for(const k of Object.keys(WALLETS)) { if(k.toLowerCase() === low || String(WALLETS[k].label).toLowerCase() === low) return k; }   // a payment account chosen from Settings
+    if(/bank/.test(low)) return 'bank';
+    if(/online|jazz|easy|wallet|raast/.test(low)) return 'online';
     return 'cash';
+}
+let WALLET_CHOICES = ['cash', 'bank', 'online'];
+function setupWallets(items) {
+    const list = payAccountList(items); WALLET_CHOICES = list.map(o => o.value);
+    list.forEach(o => { if(WALLETS[o.value]) return; const m = o.label.match(/^(\S+)\s+(.*)$/) || [null, '🏦', o.label];
+        WALLETS[o.value] = { label: m[2], icon: m[1], cls: m[1] === '📱' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-indigo-700 bg-indigo-50 border-indigo-200' }; });
+    fillWalletSelects();
+}
+function fillWalletSelects() {
+    const opt = k => `<option value="${esc(k)}">${WALLETS[k].icon} ${esc(WALLETS[k].label)}</option>`;
+    const set = (id, keys, withAll) => { const el = $(id); if(!el) return; const cur = el.value; el.innerHTML = (withAll ? '<option value="ALL">All accounts</option>' : '') + keys.map(opt).join(''); if(cur && [...el.options].some(o => o.value === cur)) el.value = cur; };
+    set('gWallet', Object.keys(WALLETS), true); set('emWallet', WALLET_CHOICES); set('emWallet2', WALLET_CHOICES);
+}
+function setWalletValue(id, key) {
+    const el = $(id); if(!key || !WALLETS[key]) return;
+    if(![...el.options].some(o => o.value === key)) { const o = document.createElement('option'); o.value = key; o.textContent = WALLETS[key].icon + ' ' + WALLETS[key].label; el.appendChild(o); }
+    el.value = key;
 }
 
 function normalize(row, idx) {
@@ -460,7 +465,7 @@ function normalize(row, idx) {
 async function initAccounts() {
     _bd = null;
     showLoading('Loading accounts...');
-    try { const L = await loadSettingLists(); INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD); if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable'); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable'); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD); } catch (e) { console.error(e); }
+    try { const L = await loadSettingLists(); INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; setupWallets(L['Payment Account']); if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD); if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable'); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable'); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD); } catch (e) { console.error(e); }
     let c = getSupabaseConfig();
     try {
         let [aRes, fRes] = await Promise.all([
@@ -680,7 +685,7 @@ function feeList() {
 }
 function renderFeeTab() {
     let list = feeList(), total = list.reduce((s, e) => s + e.amount, 0);
-    let byW = { cash: 0, bank: 0, online: 0 }; list.forEach(e => byW[e.wallet] += e.amount);
+    let byW = {}; Object.keys(WALLETS).forEach(k => byW[k] = 0); list.forEach(e => byW[e.wallet] += e.amount);
     let students = new Set(list.map(e => (e.fee && e.fee.student) || e.id)).size;
     let cards = [
         { t: 'Total fee collection', v: 'PKR ' + fmt(total), c: 'text-emerald-600', s: `${list.length} receipts · ${students} students` },
@@ -875,7 +880,7 @@ async function renderDues() {
 function openEntry(kind) {
     editingId = null;
     $('emDate').value = todayStr(); $('emAmount').value = ''; $('emHead').value = ''; $('emTitle2').value = ''; $('emNotes').value = '';
-    $('emWallet').value = 'cash'; $('emWallet2').value = 'bank';
+    setWalletValue('emWallet', WALLET_CHOICES[0]); setWalletValue('emWallet2', WALLET_CHOICES[1] || WALLET_CHOICES[0]);
     $('emVoucherNo').innerText = 'Voucher no: auto';
     setEntryKind(kind);
     $('entryModal').classList.remove('hidden');
@@ -885,7 +890,7 @@ function editEntry(id) {
     editingId = id;
     $('emDate').value = e.date; $('emAmount').value = e.amount; $('emHead').value = (e.kind === 'receipt' || e.kind === 'payment') ? e.head : '';
     $('emTitle2').value = e.title || ''; $('emNotes').value = e.notes || '';
-    $('emWallet').value = e.wallet; $('emWallet2').value = e.wallet2 || 'bank';
+    setWalletValue('emWallet', e.wallet); setWalletValue('emWallet2', e.wallet2 || WALLET_CHOICES[1] || WALLET_CHOICES[0]);
     setEntryKind(e.kind);
     $('emVoucherNo').innerText = 'Voucher no: ' + id;
     $('entryModal').classList.remove('hidden');
