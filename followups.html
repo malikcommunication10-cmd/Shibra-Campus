@@ -96,6 +96,12 @@
                     <div class="flex flex-wrap gap-2 items-center">
                         <input id="fSearch" oninput="renderFamilies()" type="text" placeholder="Family code, student name, admission no, phone..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[220px]">
                         <select id="fClass" onchange="renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All Classes</option></select>
+                        <select id="fStud" onchange="renderSummary(); renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none" title="Show only families with students of this status">
+                            <option value="ALL">All students</option>
+                            <option value="active">Active students</option>
+                            <option value="left">Left students</option>
+                            <option value="other">Inactive / other</option>
+                        </select>
                         <select id="fStatus" onchange="renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
                             <option value="ALL">All Status</option>
                             <option value="calltoday">Call today (Today + Overdue)</option>
@@ -534,7 +540,7 @@ function buildFamilies() {
         let key = childKey(st.admis_no, st.student_name);
         let { contacts, parent } = extractContacts(st);
         addChild(key, {
-            adm: st.admis_no || '', name: st.student_name || '', cls: st.class || '',
+            adm: st.admis_no || '', name: st.student_name || '', cls: st.class || '', inStudents: true, status: st.status || '', leftDate: st.left_date || '',
             sibRaw: String(st[SIBLINGS_COL] ?? '').trim(), monthlyFee: parseFloat(st.monthly_tution_fee) || 0, contacts, parent
         });
     });
@@ -605,10 +611,19 @@ function refreshAll() {
 // ====================================================================================
 //  RENDER: SUMMARY + FILTERS
 // ====================================================================================
+// Active / Left / Inactive (any other status, or a student who is no longer in the students list)
+function kidKind(k) {
+    if(!k.inStudents) return 'other';
+    const st = String(k.status || '').trim().toLowerCase();
+    if(st === '' || st === 'active') return 'active';
+    return (st.includes('left') || k.leftDate) ? 'left' : 'other';
+}
+function famHasKid(f) { const m = $('fStud') ? $('fStud').value : 'ALL'; return m === 'ALL' || f.kids.some(k => kidKind(k) === m); }
 function renderSummary() {
-    let withDues = families.filter(f => f.pending > 0);
+    const FAM = families.filter(famHasKid);
+    let withDues = FAM.filter(f => f.pending > 0);
     let totalPending = withDues.reduce((s, f) => s + f.pending, 0);
-    let cnt = st => families.filter(f => f.status === st).length;
+    let cnt = st => FAM.filter(f => f.status === st).length;
     let cards = [
         { t: 'Families with dues', v: withDues.length, c: 'text-indigo-900' },
         { t: 'Total pending', v: 'PKR ' + fmt(totalPending), c: 'text-rose-600' },
@@ -639,6 +654,7 @@ function getFilteredFamilies() {
     let cls = $('fClass').value, st = $('fStatus').value, pendingOnly = $('fPendingOnly').checked, sort = $('fSort').value;
 
     let list = families.filter(f => {
+        if(!famHasKid(f)) return false;
         if(pendingOnly && f.pending <= 0 && f.status !== 'clear') return false;
         if(pendingOnly && f.pending <= 0) return false;
         if(cls !== 'ALL' && !f.kids.some(k => String(k.cls).trim() === cls)) return false;
@@ -681,7 +697,7 @@ function famCardHtml(f) {
 
     let kidsHtml = f.kids.map(k => {
         let kn = k.net > 0 ? `<span class="text-rose-600 font-semibold">${fmt(k.net)}</span>` : `<span class="text-emerald-600">clear</span>`;
-        return `<span class="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-900 border border-indigo-100 rounded-lg px-2 py-1 text-xs">${nameLink(k)}<span class="text-slate-500">${esc(k.cls)}</span>${kn}</span>`;
+        return `<span class="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-900 border border-indigo-100 rounded-lg px-2 py-1 text-xs">${nameLink(k)}<span class="text-slate-500">${esc(k.cls)}</span>${kidKind(k) === 'left' ? '<span class="text-[10px] px-1.5 rounded bg-rose-100 text-rose-700 font-semibold">Left</span>' : (kidKind(k) === 'other' ? '<span class="text-[10px] px-1.5 rounded bg-slate-200 text-slate-600 font-semibold">Inactive</span>' : '')}${kn}</span>`;
     }).join(' ');
 
     let promiseLine = '';
