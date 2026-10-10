@@ -420,7 +420,8 @@ function normTx(row, idx) {
 }
 
 async function initBooks() {
-    try { await Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]); } catch (e) {}
+    try { await Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]);
+    try { await fillPaySelects(['mWallet', 'ssWallet', 'sdWallet', 'impWallet']); } catch (e) {} } catch (e) {}
     showLoading('Loading book store...');
     let c = getSupabaseConfig();
     try {
