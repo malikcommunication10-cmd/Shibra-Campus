@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Concept School Shibra Campus</title>
+    <script>window.SB_NO_GUARD = true; window.__show = function () { document.documentElement.style.visibility = 'visible' }; document.documentElement.style.visibility = 'hidden'; setTimeout(window.__show, 4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <script src="config.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex items-center justify-center p-4 font-sans">
+    <div class="w-full max-w-sm">
+        <div class="text-center text-white mb-6">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-white/10 flex items-center justify-center text-3xl mb-3">🏫</div>
+            <h1 class="text-xl font-extrabold tracking-tight">Concept School</h1>
+            <p class="text-sm text-indigo-300">Shibra Campus - Management System</p>
+        </div>
+        <form id="loginForm" onsubmit="doLogin(event)" class="bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+            <div>
+                <h2 class="text-lg font-bold text-indigo-950">Sign in</h2>
+                <p class="text-xs text-slate-500">Use the email and password given by the administrator.</p>
+            </div>
+            <div>
+                <label for="email" class="block text-xs font-semibold text-slate-600 mb-1">Email</label>
+                <input id="email" type="email" required autocomplete="username" placeholder="name@example.com" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none">
+            </div>
+            <div>
+                <label for="password" class="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+                <div class="relative">
+                    <input id="password" type="password" required autocomplete="current-password" placeholder="Your password" class="w-full border border-slate-300 rounded-lg pl-3 pr-16 py-2.5 text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 outline-none">
+                    <button type="button" onclick="togglePw()" id="pwBtn" class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-indigo-600 px-2 py-1">Show</button>
+                </div>
+            </div>
+            <p id="err" class="hidden text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2"></p>
+            <button id="loginBtn" type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold rounded-lg py-2.5 text-sm shadow-sm transition">Sign in</button>
+            <p class="text-[11px] text-center text-slate-400">Forgot the password? Ask the administrator to reset it.</p>
+        </form>
+        <p class="text-center text-[11px] text-indigo-300/70 mt-4">&copy; 2026 Concept School Shibra Campus</p>
+    </div>
+<script>
+    if (sbSession() && sbLoadMeCache()) location.replace(sbFirstPage(sbLoadMeCache()) || 'index.html');
+    const $ = id => document.getElementById(id);
+    function togglePw() { const p = $('password'), show = p.type === 'password'; p.type = show ? 'text' : 'password'; $('pwBtn').innerText = show ? 'Hide' : 'Show'; }
+    function showErr(m) { $('err').innerText = m; $('err').classList.remove('hidden'); }
+    async function doLogin(e) {
+        e.preventDefault();
+        $('err').classList.add('hidden');
+        const btn = $('loginBtn'); btn.disabled = true; btn.innerText = 'Signing in...';
+        try {
+            const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: SB_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value }) });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.access_token) {
+                const m = String(j.msg || j.error_description || j.message || '').toLowerCase();
+                showErr(m.includes('invalid') ? 'The email or password is incorrect.' : (m.includes('confirm') ? 'This account is not confirmed yet. Ask the administrator.' : 'Could not sign in. Please try again.'));
+                btn.disabled = false; btn.innerText = 'Sign in'; return;
+            }
+            sbSaveSession(j);
+            const me = await sbFetchMe();
+            if (!me || me.error) { sbClearAuth(); showErr('The users table is not set up yet. Run supabase_roles.sql in Supabase, then try again.'); btn.disabled = false; btn.innerText = 'Sign in'; return; }
+            if (me.noaccess || me.active === false) { sbClearAuth(); showErr(me.noaccess ? 'Your account has no role yet. Please ask the administrator.' : 'This account is switched off. Please ask the administrator.'); btn.disabled = false; btn.innerText = 'Sign in'; return; }
+            sbSaveMe(me);
+            location.replace(sbFirstPage(me) || 'index.html');
+        } catch (err) { console.error(err); showErr('No connection. Check your internet and try again.'); btn.disabled = false; btn.innerText = 'Sign in'; }
+    }
+    $('email').focus();
+</script>
+</body>
+</html>
