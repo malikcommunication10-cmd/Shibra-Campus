@@ -40,6 +40,7 @@ window.fetch = async function (input, init) {
         if (!tok) throw new Error('An active session is required to access school records.');
         init = Object.assign({}, init);
         const h = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+        h.set('apikey', SB_KEY);
         h.set('Authorization', 'Bearer ' + tok);
         init.headers = h;
     }
