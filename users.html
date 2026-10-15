@@ -86,7 +86,7 @@ function toast(m, ok) { const d = document.createElement('div'); d.className = '
 function openModal(id) { $(id).classList.remove('hidden'); $(id).classList.add('flex'); }
 function closeModal(id) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
 let users = [], roles = [], closes = [], permTarget = null;
-const H = () => ({ 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+const H = () => ({ apikey: SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
 const roleOf = n => roles.find(r => r.name === n);
 const permsOf = u => u.perms || (roleOf(u.role) || {}).perms || { pages: {}, flags: [] };
 const adminCount = () => users.filter(u => u.active !== false && u.role === 'Admin' && !u.perms).length;
