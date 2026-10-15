@@ -41,10 +41,11 @@
                 <p id="warnLine" class="text-xs text-amber-700 mt-3"></p>
             </section>
         </div>
-        <footer class="text-center text-xs text-slate-400 pt-4">Concept School Shibra Campus &copy; 2026</footer>
+        <footer class="text-center text-xs text-slate-400 pt-4">Concept School Shibra Campus &copy; <span id="copyrightYear"></span></footer>
     </main>
 </div>
 <script>
+document.getElementById('copyrightYear').textContent = new Date().getFullYear();
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => (Number(n) || 0).toLocaleString('en-US');

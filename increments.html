@@ -68,18 +68,6 @@
                 <div>
                     <label class="block font-semibold text-slate-700 mb-1">Effective Period</label>
                     <select id="bulkIncPeriod" class="w-full border rounded-lg p-2.5 bg-slate-50 outline-none font-medium">
-                        <option value="March 2026">March 2026</option>
-                        <option value="January 2026">January 2026</option>
-                        <option value="February 2026">February 2026</option>
-                        <option value="April 2026">April 2026</option>
-                        <option value="May 2026">May 2026</option>
-                        <option value="June 2026">June 2026</option>
-                        <option value="July 2026">July 2026</option>
-                        <option value="August 2026">August 2026</option>
-                        <option value="September 2026">September 2026</option>
-                        <option value="October 2026">October 2026</option>
-                        <option value="November 2026">November 2026</option>
-                        <option value="December 2026">December 2026</option>
                     </select>
                 </div>
                 <div class="flex items-end">
@@ -141,7 +129,6 @@
   add column if not exists effective_period text,
   add column if not exists annual_fund numeric,
   add column if not exists remarks text;
-alter table public.increments disable row level security;
 notify pgrst, 'reload schema';`;
         let resultSql = '';
 
@@ -168,14 +155,31 @@ notify pgrst, 'reload schema';`;
         function closeResult() { document.getElementById('resultModal').style.display = 'none'; }
         function copyResultSql() { navigator.clipboard.writeText(resultSql).then(() => alert('SQL copied. Paste it in Supabase → SQL Editor and run it.')); }
 
+        let incrementSchoolYear = new Date().getFullYear();
+
+        function setIncrementPeriods(year) {
+            incrementSchoolYear = year;
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const select = document.getElementById('bulkIncPeriod');
+            select.innerHTML = months.map(month => `<option value="${month} ${year}">${month} ${year}</option>`).join('');
+            select.value = `March ${year}`;
+        }
+
         async function initPage() {
             let config = getSupabaseConfig();
             if(!config.url || !config.key) { }
             else {
                 showLoading("Loading Increments & Students Data...");
-                await fetchIncrementsCache();
-                await fetchStudents();
-                hideLoading();
+                try {
+                    setIncrementPeriods(await getSchoolYear());
+                    await fetchIncrementsCache();
+                    await fetchStudents();
+                } catch (e) {
+                    console.error("Could not initialize increments:", e);
+                    alert(e.message || 'Could not load increments data.');
+                } finally {
+                    hideLoading();
+                }
             }
         }
 
@@ -300,7 +304,7 @@ notify pgrst, 'reload schema';`;
                 let oldFee = existingInc ? (existingInc.old_fee || st.monthly_tution_fee || 0) : (st.monthly_tution_fee || 0);
                 let feeInc = existingInc ? (existingInc.fee_increament || '') : '';
                 let newFee = existingInc ? (existingInc.new_fee || (num(oldFee) + num(feeInc))) : '';
-                let effPeriod = existingInc ? (existingInc.effective_period || 'March 2026') : 'March 2026';
+                let effPeriod = existingInc ? (existingInc.effective_period || `March ${incrementSchoolYear}`) : `March ${incrementSchoolYear}`;
                 let annualFund = existingInc ? (existingInc.annual_fund || st.annual_fund || '') : (st.annual_fund || '');
                 let remarks = existingInc ? (existingInc.remarks || '') : '';
                 let fromStudent = !(existingInc && existingInc.annual_fund) && st.annual_fund;
@@ -465,7 +469,9 @@ notify pgrst, 'reload schema';`;
                 lines.push(`<b style="color:#be123c">${bad.length}</b> record(s) failed. Database message:`);
                 errs.forEach(e => lines.push(`<code style="display:block;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:6px 8px;font-size:12px;word-break:break-word">${esc(String(e).slice(0, 400))}</code>`));
                 if(errs.some(e => /column|schema cache|PGRST204|42703/i.test(e))) { lines.push('A column is missing in the <b>increments</b> table. Run this SQL once in Supabase → SQL Editor, then save again:'); sql = FIX_SQL; }
-                else if(errs.some(e => /row-level security|42501/i.test(e))) { lines.push('The table is blocking writes (row-level security). Run this SQL once, then save again:'); sql = FIX_SQL; }
+                else if(errs.some(e => /row-level security|42501/i.test(e))) {
+                    lines.push('The database rejected this change under Row Level Security. Ask an administrator to verify your Increments permissions and the policies in supabase_roles.sql. Do not disable RLS.');
+                }
             } else if(diff.length) sql = FIX_SQL;
             showResult(title, lines, sql);
         }

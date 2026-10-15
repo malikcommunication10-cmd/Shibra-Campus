@@ -34,13 +34,15 @@ async function sbFreshToken() {
     return _sbRefreshing;
 }
 window.fetch = async function (input, init) {
-    try {
-        const url = typeof input === 'string' ? input : ((input && input.url) || '');
-        if (url.startsWith(SB_URL + '/rest/v1')) {
-            const tok = await sbFreshToken();
-            if (tok) { init = Object.assign({}, init); const h = new Headers(init.headers || {}); h.set('Authorization', 'Bearer ' + tok); init.headers = h; }
-        }
-    } catch (e) {}
+    const url = typeof input === 'string' ? input : ((input && input.url) || '');
+    if (url.startsWith(SB_URL + '/rest/v1')) {
+        const tok = await sbFreshToken();
+        if (!tok) throw new Error('An active session is required to access school records.');
+        init = Object.assign({}, init);
+        const h = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+        h.set('Authorization', 'Bearer ' + tok);
+        init.headers = h;
+    }
     return _sbFetch(input, init);
 };
 
@@ -91,12 +93,18 @@ function denyDay(date, changing) {
 const PAGE_GUARDS = {
     students: { addStudentClick: 'a', saveStudent: () => (document.getElementById('editOriginalAdm') && document.getElementById('editOriginalAdm').value ? 'e' : 'a'), editStudentByAdm: 'e', editStudent: 'e', deleteStudent: 'd' },
     increments: { saveOrUpdateIncrement: 'e', saveByIdx: 'e', saveAllIncrementsBatch: 'e', applyBulkToCheckedRows: 'e', bulkDeleteSelected: 'd' },
-    fees: { generateVouchers: 'a', generateAnnualFund: 'a', openAddItem: 'a', saveAddItem: 'a', openBulkPayModal: 'a', submitBulkFifoPayment: 'a', openPayModal: 'a', submitPayment: 'a', deleteSelectedVouchers: 'd', openSync: 'e', applySync: 'e', openDiscount: 'e', saveDiscount: 'e', openImport: 'a', confirmImport: 'a', downloadVouchersCsv: '@export' },
+    fees: { generateVouchers: 'a', generateAnnualFund: 'a', openAddItem: 'a', saveAddItem: 'a', openBulkPayModal: 'a', submitBulkFifoPayment: 'a', openPayModal: 'a', submitPayment: 'a', deleteSelectedVouchers: 'd', openSync: 'e', applySync: 'e', openDiscount: 'e', saveDiscount: 'e', openImport: 'a', confirmImport: 'a', downloadVouchersCsv: '@export', downloadArrearsReconciliation: '@export' },
     followups: { saveCall: 'a', openCallModal: 'a', deleteLog: 'd', exportHistoryCsv: '@export' },
     books: { openTx: 'a', saveTx: 'a', deleteTx: 'd', openStudentSale: 'a', saveStudentSale: 'a', openImport: 'a', saveImp: 'a', openNewItem: 'a', saveNewItem: 'a', deleteMasterItem: 'd', openSettle: 'a', saveSettle: 'a', openPromise: 'a', savePromise: 'a', exportCsv: '@export', exportInventoryCsv: '@export', exportTxCsv: '@export' },
     accounts: { openEntry: 'a', startSettle: 'a', saveAgainstBills: 'a', saveEntry: () => (typeof editingId !== 'undefined' && editingId ? 'e' : 'a'), editEntry: 'e', quickEdit: 'e', saveQuickEdit: 'e', deleteEntry: 'd', exportCsv: '@export', exportDaybookCsv: '@export', exportFeeCsv: '@export' },
     staff: { openStaff: 'a', saveStaff: 'a', deleteStaff: 'd', generatePayroll: 'a', openAdjust: 'e', saveAdjust: 'e', openRules: 'e', saveRules: 'e', openPay: 'a', paySalary: 'a', confirmPay: 'a', undoPay: 'd', removePayrollRow: 'd', exportCsv: '@export', exportStaffCsv: '@export', exportPayrollCsv: '@export', exportHistoryCsv: '@export' },
-    settings: { addItem: 'a', addDefaults: 'a', addOther: 'a', deleteItem: 'd', deleteOther: 'd', openRename: 'e', saveRename: 'e', saveRules: 'e', saveLowStock: 'e', upsertSingle: 'e', downloadBackup: '@export' }
+    settings: { addItem: 'a', addDefaults: 'a', addOther: 'a', deleteItem: 'd', deleteOther: 'd', openRename: 'e', saveRename: 'e', saveRules: 'e', saveLowStock: 'e', saveSchoolYear: 'e', upsertSingle: 'e', downloadBackup: '@export' },
+    users: {
+        openUser: () => (document.getElementById('uEditing') && document.getElementById('uEditing').value ? 'e' : 'a'),
+        saveUser: () => (document.getElementById('uEditing') && document.getElementById('uEditing').value ? 'e' : 'a'),
+        deleteUser: 'd', openRoleNew: 'a', createRole: 'a', deleteRole: 'd', openPerms: 'e', savePerms: 'e',
+        resetUserPerms: 'e', closeDay: '@closeday', reopenDay: '@closeday'
+    }
 };
 function installGuards() {
     const page = currentPageKey(), map = PAGE_GUARDS[page]; if (!map || !ME) return;
@@ -179,7 +187,7 @@ async function sbFetchAll(table, query) {
     } else if (size && isNaN(total)) {                       // header not available: fall back to sequential paging
         for (let f = size; ; f += size) {
             const x = await get(f, f + size - 1, col, false);
-            if (!x.ok) break;
+            if (!x.ok) return fail(x);
             const a = await x.json(); if (!Array.isArray(a) || !a.length) break;
             rows = rows.concat(a);
         }
@@ -202,7 +210,7 @@ let _settingLists = null;
 async function loadSettingLists() {
     if (_settingLists) return _settingLists;
     try { const c = JSON.parse(sessionStorage.getItem('sb_settings_v2') || 'null'); if (c && Date.now() - c.t < 120000) { _settingLists = c.d; return c.d; } } catch (e) {}
-    const out = { rules: {} };
+    const out = { rules: { 'School Year': String(new Date().getFullYear()) } };
     Object.keys(SETTING_DEFAULTS).forEach(k => out[k] = [...SETTING_DEFAULTS[k]]);
     try {
         const rows = await (await sbFetchAll('settings', 'select=setting_key,setting_value')).json();
@@ -213,7 +221,7 @@ async function loadSettingLists() {
             const keyOf = raw => { const cn = canon(raw); for (const d of Object.keys(ALIAS)) if (ALIAS[d].includes(cn) || canon(d) === cn) return d; return String(raw || '').trim(); };
             rows.forEach(x => { const k = keyOf(x.setting_key), v = String(x.setting_value ?? '').trim(); if (k && v !== '') (by[k] = by[k] || []).push(v); });
             Object.keys(SETTING_DEFAULTS).forEach(k => { if (by[k] && by[k].length) out[k] = by[k]; });
-            ['Payroll Working Days', 'Payroll Free Leaves', 'Low Stock Limit'].forEach(k => { if (by[k]) out.rules[k] = by[k][0]; });
+            ['Payroll Working Days', 'Payroll Free Leaves', 'Low Stock Limit', 'School Year'].forEach(k => { if (by[k]) out.rules[k] = by[k][0]; });
         }
     } catch (e) { console.error('Settings lists', e); }
     // rules saved on the Settings page also drive the Staff / Book Store pages
@@ -225,6 +233,14 @@ async function loadSettingLists() {
     _settingLists = out;
     try { sessionStorage.setItem('sb_settings_v2', JSON.stringify({ t: Date.now(), d: out })); } catch (e) {}
     return out;
+}
+async function getSchoolYear() {
+    const lists = await loadSettingLists();
+    const year = Number(lists.rules['School Year']);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        throw new Error('School Year in System Settings must be a year from 2000 to 2100.');
+    }
+    return year;
 }
 
 // ============================================================================

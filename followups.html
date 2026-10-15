@@ -327,7 +327,17 @@ const SETUP_SQL = `create table if not exists public.call_logs (
   caller text
 );
 create index if not exists call_logs_family_idx on public.call_logs (family_key, call_date desc);
-alter table public.call_logs disable row level security;`;
+alter table public.call_logs enable row level security;
+drop policy if exists shibra_select on public.call_logs;
+drop policy if exists shibra_insert on public.call_logs;
+drop policy if exists shibra_update on public.call_logs;
+drop policy if exists shibra_delete on public.call_logs;
+create policy shibra_select on public.call_logs for select to authenticated using (public.app_has_page_permission('followups', 'v'));
+create policy shibra_insert on public.call_logs for insert to authenticated with check (public.app_has_page_permission('followups', 'a'));
+create policy shibra_update on public.call_logs for update to authenticated using (public.app_has_page_permission('followups', 'e')) with check (public.app_has_page_permission('followups', 'e'));
+create policy shibra_delete on public.call_logs for delete to authenticated using (public.app_has_page_permission('followups', 'd'));
+grant select, insert, update, delete on public.call_logs to authenticated;
+grant usage, select on sequence public.call_logs_id_seq to authenticated;`;
 
 const OUTCOMES = {
     promised:  { label: 'Spoke – promise taken',          cls: 'bg-blue-50 text-blue-700 border-blue-200' },
@@ -349,6 +359,7 @@ const STATUS = {
 };
 
 const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+let SCHOOL_YEAR = new Date().getFullYear();
 
 // ====================================================================================
 //  STATE
@@ -427,6 +438,7 @@ async function fetchAllRows(t) { const r = await sbFetchAll(t, 'select=*'); cons
 async function initFollowups() {
     showLoading('Loading data...');
     try {
+        SCHOOL_YEAR = await getSchoolYear();
         let [students, fees, accounts] = await Promise.all(['students', 'fees', 'accounts'].map(fetchAllRows));
         allStudents = students;
 
@@ -454,7 +466,7 @@ async function initFollowups() {
         refreshAll();
     } catch (e) {
         console.error(e);
-        showCustomAlert('Could not load data. Check your internet connection or API settings.');
+        showCustomAlert(`Could not load data: ${e.message || 'Check your internet connection or API settings.'}`);
     }
     hideLoading();
 }
@@ -483,7 +495,7 @@ function copySetupSql() {
 // ====================================================================================
 //  STUDENT LEDGER (opens when a student name is clicked)
 // ====================================================================================
-function periodStart(p) { const a = String(p || '').trim().toLowerCase().split(/\s+/), m = MONTHS.indexOf(a[0]); return `${parseInt(a[1]) || 2026}-${String((m < 0 ? 0 : m) + 1).padStart(2, '0')}-01`; }
+function periodStart(p) { const a = String(p || '').trim().toLowerCase().split(/\s+/), m = MONTHS.indexOf(a[0]); return `${parseInt(a[1]) || SCHOOL_YEAR}-${String((m < 0 ? 0 : m) + 1).padStart(2, '0')}-01`; }
 function openLedger(key) {
     // a real ledger: vouchers are CHARGES, payments are CREDITS on the day they were received, and the balance runs on
     const rows = allFees.filter(f => childKey(f.admis_no, f.student_name) === key && (!isFutureV(f) || f._paid > 0));

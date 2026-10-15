@@ -353,7 +353,17 @@ create table if not exists public.payroll (
   created_at timestamptz default now(),
   unique (staff_id, month)
 );
-alter table public.payroll disable row level security;`;
+alter table public.payroll enable row level security;
+drop policy if exists shibra_select on public.payroll;
+drop policy if exists shibra_insert on public.payroll;
+drop policy if exists shibra_update on public.payroll;
+drop policy if exists shibra_delete on public.payroll;
+create policy shibra_select on public.payroll for select to authenticated using (public.app_has_page_permission('staff', 'v'));
+create policy shibra_insert on public.payroll for insert to authenticated with check (public.app_has_page_permission('staff', 'a'));
+create policy shibra_update on public.payroll for update to authenticated using (public.app_has_page_permission('staff', 'e')) with check (public.app_has_page_permission('staff', 'e'));
+create policy shibra_delete on public.payroll for delete to authenticated using (public.app_has_page_permission('staff', 'd'));
+grant select, insert, update, delete on public.payroll to authenticated;
+grant usage, select on sequence public.payroll_id_seq to authenticated;`;
 
 // ====================================================================================
 //  STATE + HELPERS

@@ -100,6 +100,12 @@
                         <p class="text-[11px] text-slate-500 mt-3">A title is shown as “Low stock” when its stock is at or below this number.</p>
                         <button onclick="saveLowStock()" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">Save book store rule</button>
                     </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                        <h3 class="text-sm font-bold text-indigo-900">🗓️ Fee voucher year</h3>
+                        <p class="text-xs text-slate-500 mt-0.5 mb-4">Controls the year used when creating fee periods and new-student vouchers. Existing records are not changed.</p>
+                        <div><label for="schoolYear" class="block text-xs font-medium text-slate-700 mb-1">School year</label><input id="schoolYear" type="number" min="2000" max="2100" step="1" class="w-full sm:w-48 border rounded-lg p-2.5 text-sm outline-none"></div>
+                        <button onclick="saveSchoolYear()" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">Save school year</button>
+                    </div>
                 </div>
             </section>
 
@@ -163,7 +169,7 @@ const CATEGORIES = [
     { key: 'Payment Account', title: 'Payment accounts (banks / online)', icon: '🏦', used: 'Fee receipts, Payments, Accounts, Book Store, Payroll (Cash is always available)', add: 'Add an account, e.g. ABL 0021252355', defaults: ['Bank', 'Online / JazzCash'] },
     { key: 'Book Vendor', title: 'Book vendors / suppliers', icon: '📚', used: 'Book Store (purchases)', add: 'Add a vendor name', defaults: [], usage: 'vendor' }
 ];
-const RULE_KEYS = ['Payroll Working Days', 'Payroll Free Leaves', 'Low Stock Limit'];
+const RULE_KEYS = ['Payroll Working Days', 'Payroll Free Leaves', 'Low Stock Limit', 'School Year'];
 const HEALTH_TABLES = [
     { name: 'students',   label: 'Students',        hint: '' },
     { name: 'fees',       label: 'Fee vouchers',    hint: '' },
@@ -405,6 +411,7 @@ function renderRules() {
     $('ruleDays').value = single('Payroll Working Days') || 30;
     $('ruleFree').value = single('Payroll Free Leaves') || 1;
     $('ruleLow').value = single('Low Stock Limit') || 5;
+    $('schoolYear').value = single('School Year') || new Date().getFullYear();
 }
 async function saveRules() {
     let d = parseFloat($('ruleDays').value), f = parseFloat($('ruleFree').value);
@@ -420,6 +427,22 @@ async function saveLowStock() {
     showLoading('Saving...');
     try { await upsertSingle('Low Stock Limit', n); toast('Book store rule saved.'); }
     catch (e) { toast('Could not save: ' + e.message, false); }
+    hideLoading();
+}
+async function saveSchoolYear() {
+    const year = Number($('schoolYear').value);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        toast('Enter a valid school year between 2000 and 2100.', false);
+        return;
+    }
+    showLoading('Saving school year...');
+    try {
+        await upsertSingle('School Year', year);
+        try { sessionStorage.removeItem('sb_settings_v2'); } catch (e) {}
+        toast('School year saved. New fee vouchers will use ' + year + '.');
+    } catch (e) {
+        toast('Could not save school year: ' + e.message, false);
+    }
     hideLoading();
 }
 

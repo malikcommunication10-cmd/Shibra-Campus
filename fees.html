@@ -132,6 +132,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
             <button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
             <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
             <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
+            <button onclick="downloadArrearsReconciliation()" class="btn b-gh">🧾 2025 arrears check</button>
             <button onclick="downloadVouchersCsv()" class="btn b-gh">⬇️ CSV</button>
             <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
             <button onclick="initFeePage()" class="btn b-gh">🔄 Refresh</button>
@@ -218,7 +219,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
   <h3 class="font-bold text-indigo-800 border-b pb-2">📥 Import paid fees (Excel / CSV)</h3>
   <p class="text-xs text-slate-500">Columns: voucher_id (Admission No), from_account (name), to_account, amount_in, date, remarks (class). Each payment goes to the tuition voucher of the month of its received date, and that same date is saved in Accounts.</p>
   <input type="file" id="importFile" accept=".xlsx,.xls,.csv" class="inp">
-  <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="importFixYear" checked> Set the year of all dates to 2026</label>
+  <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="importFixYear" checked> Set the year of all dates to the configured school year</label>
   <button onclick="readImport()" class="btn b-gh w-full">Read file & preview</button>
   <div id="importPreview" class="text-xs"></div>
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeModal('importModal')" class="btn b-gh">Close</button><button id="importConfirm" onclick="confirmImport()" class="btn b-ok hidden">Confirm & import</button></div>
@@ -263,9 +264,19 @@ const HJ = {...H,"Content-Type":"application/json",Prefer:"return=minimal"};
 
 const FEES_ARREARS_COL='arrears2025', FEES_SIBLINGS_COL='siblings';
 const STUDENT_ARREARS_COLS=['arrears2025'], STUDENT_SIBLINGS_COL='siblings';
-const ARREARS_PERIOD='January 2026';
-const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"].map(m=>m+" 2026");
-const monthOrder={}; MONTHS.forEach((m,i)=>monthOrder[m]=i+1);
+const ARREARS_SOURCE_YEAR=2025;
+let SCHOOL_YEAR = new Date().getFullYear();
+let ARREARS_PERIOD = `January ${SCHOOL_YEAR}`;
+let MONTHS = [];
+let monthOrder = {};
+function setFeeSchoolYear(year) {
+  SCHOOL_YEAR = year;
+  ARREARS_PERIOD = `January ${year}`;
+  MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"].map(m=>`${m} ${year}`);
+  monthOrder = {};
+  MONTHS.forEach((m,i)=>monthOrder[m]=i+1);
+}
+setFeeSchoolYear(SCHOOL_YEAR);
 
 let accountsRaw=[],importPlan=null,syncItems=[],allFeesCache=[], allStudentsCache=[], incrementsCacheMap={}, accountsDataMap={}, filtered=[];
 
@@ -318,10 +329,11 @@ function makeVidGenerator(used){
 /* ---------- Load ---------- */
 async function fetchAll(t) { const r = await sbFetchAll(t, 'select=*'); return await r.json(); }
 async function initFeePage(){
+  setFeeSchoolYear(await getSchoolYear());
   fillPaySelects(['payToAccount','bulkAccount']).then(l=>{payChoices=l}).catch(()=>{});
   $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
   if(!$('voucherPeriod').options.length){
-    $('voucherPeriod').innerHTML=MONTHS.map(m=>`<option>${m}</option>`).join('')+`<option value="ALL_YEAR">🚀 Generate all (Jan to Dec 2026)</option>`;
+    $('voucherPeriod').innerHTML=MONTHS.map(m=>`<option>${m}</option>`).join('')+`<option value="ALL_YEAR">🚀 Generate all (Jan to Dec ${SCHOOL_YEAR})</option>`;
     const mo=MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
     $('fromMonth').innerHTML=mo;$('toMonth').innerHTML=mo;resetRange(true);
   }
@@ -414,11 +426,11 @@ o.bal+=net-paid;
 }
 function parsePeriod(x) {
   const t = String(x || '').trim().toLowerCase(); if(!t) return null;
-  let m = null, y = (t.match(/(20\d\d)/) || [])[1] || '2026';
+  let m = null, y = (t.match(/(20\d\d)/) || [])[1] || String(SCHOOL_YEAR);
   const names = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   for(let i = 0; i < 12; i++) if(t.includes(names[i])) { m = i; break; }
   if(m === null) { const n = t.match(/^(\d{1,2})[\/\-.](20\d\d)$/) || t.match(/^(20\d\d)[\/\-.](\d{1,2})$/); if(n) { const a = +n[1], b = +n[2]; m = (a > 31 ? b : a) - 1; y = String(a > 31 ? a : b); } }
-  if(m === null || m < 0 || m > 11 || y !== '2026') return null;
+  if(m === null || m < 0 || m > 11 || y !== String(SCHOOL_YEAR)) return null;
   return MONTHS[m];
 }
 const periodNum = x => monthOrder[parsePeriod(x)] || 0;
@@ -464,7 +476,7 @@ async function generateAnnualFund() {
   if(vidMode() === 'manual' && !parseStart()) { showAlert("Please enter a starting voucher number, e.g. V-586545."); return; }
   const { out, skip, byMonth, usedSel, selPeriod } = planAnnualFund(true);
   const sk = `\n\nSkipped: ${skip.exists} already have it, ${skip.notEligible} not eligible (joined later / left), ${skip.noStudent} student not found, ${skip.noPeriod} no effective month, ${skip.notAnnual} fee type is not "annual fund".`;
-  if(!out.length) { showAlert("No annual fund vouchers to create." + sk + (usedSel ? '' : '\n\nTip: in Bulk Updation the Effective period must be a month like "October 2026".')); return; }
+  if(!out.length) { showAlert("No annual fund vouchers to create." + sk + (usedSel ? '' : `\n\nTip: in Bulk Updation the Effective period must be a month like "October ${SCHOOL_YEAR}".`)); return; }
   showConfirm(`${out.length} annual fund item(s) will be added (to the student's voucher of that month, or a new voucher if there is none):\n` + Object.entries(byMonth).map(([m, n]) => `${m}: ${n}`).join(', ') + (usedSel ? `\n(${usedSel} had no effective month, so ${selPeriod} is used)` : '') + sk + `\n\nProceed?`, async () => {
     showLoading("Creating annual fund vouchers...");
     try {
@@ -492,7 +504,7 @@ function populateItemFilter(){
 let payChoices=[{value:'cash',label:'Cash'}];
 const matchPay=t=>{const s=String(t||'').trim().toLowerCase();if(!s)return 'cash';const c=payChoices.find(o=>o.value.toLowerCase()===s||o.label.toLowerCase().replace(/^[^a-z0-9]+/,'')===s);return c?c.value:s};
 function resetRange(silent){
-  const d=new Date(),ci=d.getFullYear()===2026?d.getMonth()+1:(d.getFullYear()>2026?12:1);
+  const d=new Date(),ci=d.getFullYear()===SCHOOL_YEAR?d.getMonth()+1:(d.getFullYear()>SCHOOL_YEAR?12:1);
   $('fromMonth').value=1;$('toMonth').value=ci;if(!silent)filterVouchers();
 }
 const isLocked=id=>{const a=accountsDataMap[(id||'').trim()];return!!(a&&a.transactions.length)};
@@ -563,6 +575,42 @@ function downloadVouchersCsv(){
   const csv='\uFEFF'+[head,...rows].map(r=>r.map(q).join(',')).join('\r\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download=`fee-vouchers-${today()}${sel.size?'-selected':''}.csv`;document.body.appendChild(a);a.click();a.remove();
+}
+
+function downloadArrearsReconciliation(){
+  const norm=s=>String(s||'').trim().toLowerCase(),byAdmission=new Map(),byName=new Map();
+  allFeesCache.filter(isArr).forEach(r=>{
+    const adm=norm(r.admis_no),name=norm(r.student_name),key=adm||name;
+    if(!key)return;
+    const map=adm?byAdmission:byName,rows=map.get(key)||[];
+    rows.push(r);map.set(key,rows);
+  });
+  const report=[],matchedRows=new Set();
+  allStudentsCache.forEach(st=>{
+    const adm=norm(st.admis_no),name=norm(st.student_name),source=parseFloat(String(st[STUDENT_ARREARS_COLS[0]]||'').replace(/,/g,''))||0;
+    const rows=(adm&&(byAdmission.get(adm)||byName.get(name)))||byName.get(name)||[];
+    rows.forEach(r=>matchedRows.add(r));
+    if(source<=0&&!rows.length)return;
+    const billed=rows.reduce((sum,r)=>sum+(Number(r.payable)||0),0);
+    const paid=rows.reduce((sum,r)=>sum+(Number(r.totalPaid)||0),0);
+    const balance=rows.reduce((sum,r)=>sum+(Number(r.balance)||0),0);
+    let status;
+    if(!rows.length)status='Source amount has no arrears voucher';
+    else if(source<=0)status='Arrears voucher exists but source amount is zero';
+    else if(Math.abs(source-billed)>0.01)status='Review: source and voucher amount differ';
+    else status='Voucher exists; check remaining balance';
+    report.push([st.admis_no||'',st.student_name||'',st.class||'',source,billed,paid,balance,rows.length,[...new Set(rows.map(r=>r.voucher_id).filter(Boolean))].join(' | '),status]);
+  });
+  allFeesCache.filter(isArr).forEach(r=>{
+    if(matchedRows.has(r))return;
+    report.push([r.admis_no||'',r.student_name||'',r.class||'',0,Number(r.payable)||0,Number(r.totalPaid)||0,Number(r.balance)||0,1,r.voucher_id||'','Arrears voucher has no matching student record']);
+  });
+  if(!report.length){showAlert('No 2025 arrears source amounts or arrears vouchers were found.');return}
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const head=['Admis No','Student','Class','2025 source arrears','Arrears voucher amount','Paid on arrears vouchers','Remaining arrears voucher balance','Arrears fee rows','Voucher IDs','Review status'];
+  const csv='\uFEFF'+[head,...report].map(r=>r.map(q).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=`arrears-reconciliation-${today()}.csv`;document.body.appendChild(a);a.click();a.remove();
 }
 
 /* ---------- Add another fee item to an existing voucher ---------- */
@@ -674,7 +722,7 @@ function deleteSelectedVouchers(){
 }
 
 /* ---------- Ledger ---------- */
-function periodStart(p){const d=parsePeriod(p),m=d?MONTHS.indexOf(d)+1:1;return `2026-${String(m).padStart(2,'0')}-01`}
+function periodStart(p){const d=parsePeriod(p),m=d?MONTHS.indexOf(d)+1:1;return `${SCHOOL_YEAR}-${String(m).padStart(2,'0')}-01`}
 function openStudentLedger(name,adm){
   // a real ledger: every voucher is a CHARGE, every payment is a CREDIT on the day it was received, and the balance runs on
   const nm=(name||'').trim().toLowerCase(),an=normAdm(adm||'');
@@ -739,22 +787,25 @@ function generateVouchers(withUpdate){
   if(vidMode()==='manual'&&!parseStart()){showAlert("Please enter a starting voucher number, e.g. V-586545.");return}
   const nextId=makeVidGenerator(used);
 
-  const keys=new Set();
+  const keys=new Set(),arrearsAdmis=new Set(),arrearsNames=new Set();
   allFeesCache.forEach(f=>{const a=(f.admis_no||'').trim().toLowerCase(),n=(f.student_name||'').trim().toLowerCase(),p=(f.period||'').trim(),t=(f.type||'').trim().toLowerCase();
-    if(a)keys.add(`${a}_${p}_${t}`);if(n)keys.add(`${n}_${p}_${t}`)});
+    if(a)keys.add(`${a}_${p}_${t}`);if(n)keys.add(`${n}_${p}_${t}`);
+    if(isArr(f)){if(a)arrearsAdmis.add(a);if(n)arrearsNames.add(n)}});
   const vmap=new Map();allFeesCache.forEach(f=>{const k=`${normAdm(f.admis_no)}_${(f.period||'').trim()}`;if(!vmap.has(k))vmap.set(k,(f.voucher_id||'').trim())});
  const vidFor=(st,period)=>{const k=`${normAdm(st.admis_no)}_${period}`;let v=vmap.get(k);if(!v){v=nextId();vmap.set(k,v)}return v};
- const out=[];
+ const out=[];let arrearsAlreadyBilledCount=0;
  const add=(st,adm,sn,period,type,payable,remarks,arrVal)=>{
     const k1=`${adm}_${period}_${type}`,k2=`${sn}_${period}_${type}`;
+    if(type==='arrears'&&(arrearsAdmis.has(adm)||arrearsNames.has(sn))){arrearsAlreadyBilledCount++;return}
     if(keys.has(k1)||keys.has(k2))return;
     out.push({sr_no:st.sr_no||'',voucher_id:vidFor(st,period),admis_no:st.admis_no||'',student_name:st.student_name||'',type,period,payable,class:st.class||'',status:'Unpaid',date:today(),remarks,[FEES_SIBLINGS_COL]:getStudentSiblings(st),[FEES_ARREARS_COL]:arrVal});
     keys.add(k1);keys.add(k2);
+    if(type==='arrears'){if(adm)arrearsAdmis.add(adm);if(sn)arrearsNames.add(sn)}
   };
 
   const miss={},nolf={};
   periods.forEach(period=>{
-    const pv=2026*12+(monthOrder[period]||0);
+    const pv=SCHOOL_YEAR*12+(monthOrder[period]||0);
     students.forEach(st=>{
       const adm=(st.admis_no||st.sr_no||'').trim().toLowerCase(),sn=(st.student_name||'').trim().toLowerCase();
       const key=st.admis_no||st.student_name,sv=startVal(st),stt=(st.status||'').trim().toLowerCase();
@@ -774,12 +825,13 @@ function generateVouchers(withUpdate){
         if(inc.remarks)rm=inc.remarks;
       }
       add(st,adm,sn,period,'tuition fee',tp,rm,null);
-      if(period===ARREARS_PERIOD){const a=parseFloat(getStudentArrears(st))||0;if(a>0)add(st,adm,sn,period,'arrears',a,'Previous year arrears (2025)',String(a))}
+      if(period===ARREARS_PERIOD){const a=parseFloat(getStudentArrears(st))||0;if(a>0)add(st,adm,sn,period,'arrears',a,`${ARREARS_SOURCE_YEAR} arrears (one-time carry-forward)`,String(a))}
       if(inc&&parseFloat(inc.annual_fund)>0&&(inc.fee_type||'').trim().toLowerCase()==='annual fund'&&em>0&&cm===em)
         add(st,adm,sn,period,'annual fund',parseFloat(inc.annual_fund),inc.remarks||'',null);
     });
   });
   showWarn(miss,nolf);
+  const arrearsSkipMsg=arrearsAlreadyBilledCount?`\n${arrearsAlreadyBilledCount} 2025 arrears item(s) skipped because an arrears voucher already exists. Check the original voucher for its remaining balance.`:'';
 
   const upd=[],blocked=[];
   if(withUpdate===true)periods.forEach(period=>students.forEach(st=>{
@@ -791,8 +843,8 @@ function generateVouchers(withUpdate){
     else upd.push({v,old,exp});
   }));
   const blockMsg=blocked.length?`\n\nERROR - paid vouchers not updated (delete the payment from Accounts first, then update):\n`+blocked.slice(0,8).join('\n')+(blocked.length>8?`\n...and ${blocked.length-8} more`:''):'';
-  if(!out.length&&!upd.length){showAlert((blocked.length?"Nothing could be updated.":"Nothing to create or update: vouchers already exist and match the current fees.")+blockMsg);return}
-  showConfirm(`${out.length} new fee item(s) in ${new Set(out.map(o=>o.voucher_id)).size} voucher(s) will be created`+(withUpdate===true?` and ${upd.length} unpaid voucher(s) updated`:'')+(out.length?`.\nNumbers: ${out[0].voucher_id} to ${out[out.length-1].voucher_id}`:'.')+blockMsg+`\n\nProceed?`,async()=>{
+  if(!out.length&&!upd.length){showAlert((blocked.length?"Nothing could be updated.":"Nothing to create or update: vouchers already exist and match the current fees.")+arrearsSkipMsg+blockMsg);return}
+  showConfirm(`${out.length} new fee item(s) in ${new Set(out.map(o=>o.voucher_id)).size} voucher(s) will be created`+(withUpdate===true?` and ${upd.length} unpaid voucher(s) updated`:'')+(out.length?`.\nNumbers: ${out[0].voucher_id} to ${out[out.length-1].voucher_id}`:'.')+arrearsSkipMsg+blockMsg+`\n\nProceed?`,async()=>{
     showLoading("Saving vouchers...");
     try{
       if(out.length){const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(out)});if(!res.ok){hideLoading();showAlert(feeErr("Failed to generate: "+await res.text()));return}}
@@ -815,7 +867,7 @@ function toISO(v,fix){
   else{const t=String(v??'').trim();
     if(m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))iso=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
     else if(m=t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/))iso=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
-  return iso&&fix?'2026'+iso.slice(4):iso;
+  return iso&&fix?String(SCHOOL_YEAR)+iso.slice(4):iso;
 }
 async function readImport(){
   const f=$('importFile').files[0];if(!f){showAlert("Choose an Excel or CSV file first.");return}
@@ -883,7 +935,7 @@ function confirmImport(){
 /* ---------- Sync ---------- */
 function eligibility(st,period){
   const sv=startVal(st);if(sv===null)return'nodoj';
-  const pv=2026*12+(monthOrder[period]||0),stt=(st.status||'').trim().toLowerCase();
+  const pv=SCHOOL_YEAR*12+(monthOrder[period]||0),stt=(st.status||'').trim().toLowerCase();
   if(pv<sv)return'out';
   if(stt!==''&&stt!=='active'){
     const lm=String(st.left_date||'').match(/^(\d{4})-(\d{2})-(\d{2})/);if(!lm)return'nolf';
