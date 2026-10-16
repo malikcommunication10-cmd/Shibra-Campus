@@ -46,6 +46,11 @@
                 <h2 class="font-bold text-indigo-900 p-4 border-b">Students by class</h2><div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Students</th></tr></thead><tbody id="classRows"></tbody></table></div>
             </article>
             <article class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <h2 class="font-bold text-indigo-900 p-4 border-b">Students by monthly tuition fee</h2>
+                <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Monthly tuition fee</th><th>Students</th></tr></thead><tbody id="tuitionRows"></tbody>
+                    <tfoot><tr class="font-bold bg-indigo-50"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
+            </article>
+            <article class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <h2 class="font-bold text-indigo-900 p-4 border-b">Fees by type (gross payable)</h2><div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Fee type</th><th>Fee rows</th><th>Payable</th><th>Discounts</th></tr></thead><tbody id="feeRows"></tbody></table></div>
             </article>
             <article class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -61,7 +66,7 @@
                 <h2 class="font-bold text-indigo-900">Books & increments</h2><div id="booksSummary" class="text-sm text-slate-600"></div><div id="incrementSummary" class="text-sm text-slate-600"></div>
             </article>
         </section>
-        <p class="text-[11px] text-slate-500">Generated from saved records. Student/staff counts are current snapshots; monthly fee and payroll records are included when their month overlaps the selected range. Account inflow/outflow uses all dated account entries in range. Books without a saved date cannot be period-filtered.</p>
+        <p class="text-[11px] text-slate-500">Generated from saved records. Student/staff counts and monthly tuition-fee distribution are current snapshots; monthly fee and payroll records are included when their month overlaps the selected range. Account inflow/outflow uses all dated account entries in range. Books without a saved date cannot be period-filtered.</p>
     </main>
 </div>
 <script>
@@ -109,6 +114,8 @@ function render(data) {
         card('Follow-up calls', fmt(followups.calls), `Promises logged at those calls: Rs ${fmt(followups.promised_amount)}`)
     ].join('');
     rows('classRows', st.by_class, [row => row.label, row => fmt(row.count)]);
+    rows('tuitionRows', st.by_tuition_fee, [row => `Rs ${fmt(row.label)}`, row => fmt(row.count)]);
+    $('averageTuitionFee').textContent = `Rs ${fmt(st.average_tuition_fee)}`;
     rows('feeRows', fees.by_type, [row => row.label, row => fmt(row.count), row => `Rs ${fmt(row.payable)}`, row => `Rs ${fmt(row.discount)}`]);
     rows('accountRows', accounts.by_account, [row => row.label, row => `Rs ${fmt(row.money_in)}`, row => `Rs ${fmt(row.money_out)}`]);
     rows('attendanceRows', staff.attendance, [row => row.label, row => fmt(row.count)]);
