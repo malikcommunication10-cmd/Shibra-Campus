@@ -15,8 +15,10 @@ Use this checklist against a separate staging Supabase project before changing p
 1. In the staging SQL Editor, run `supabase_updates.sql` first. Review any errors and confirm the required columns/indexes exist.
 2. Review the existing policies on all managed tables. `supabase_roles.sql` intentionally drops existing policies on those tables before installing its own; preserve any custom policy requirements before proceeding.
 3. Run `supabase_roles.sql` in staging as a database owner. Do not run it against production as part of this checklist.
-4. Run each read-only statement in `supabase_staging_validation.sql` and review every result set. Missing required tables, disabled RLS, unexpected anonymous grants, missing policies, or missing helper functions are blockers.
-5. If the app has no administrator yet, create the initial Auth user and add its exact email to `public.app_users` using the setup procedure in `README.md`. Do not share the password or access token.
+4. Run `supabase_staff_attendance.sql` to create attendance, add the payroll calculation columns, and install RLS. Confirm existing payroll rows remain intact.
+5. Run `supabase_require_previous_day_close.sql` in staging to add the opt-in role-based previous-day write gates.
+6. Run each read-only statement in `supabase_staging_validation.sql` and review every result set. Missing required tables, disabled RLS, unexpected anonymous grants, missing policies, or missing helper functions are blockers.
+7. If the app has no administrator yet, create the initial Auth user and add its exact email to `public.app_users` using the setup procedure in `README.md`. Do not share the password or access token.
 
 ## 3. Exercise authorization as real users
 
@@ -26,9 +28,11 @@ SQL Editor checks typically run with elevated privileges and do **not** prove th
 - [ ] Read-only role: can view permitted pages; add/edit/delete actions are denied.
 - [ ] Teacher or follow-up role: can see only permitted student/follow-up information.
 - [ ] Accounts role: can perform permitted financial actions; unrelated staff/user administration is denied.
+- [ ] Staff roles can add daily attendance only with add permission and correct existing marks only with edit permission; view-only users cannot write attendance.
 - [ ] Disabled user: after signing out and signing back in, cannot read or change app data.
 - [ ] Unauthenticated session: cannot read or change app data.
 - [ ] Day-close restrictions and any `todayonly` permission behave as expected.
+- [ ] For a role with **Require closing all previous days before working today**, operational writes are denied until dates are closed through yesterday, and become available after closing.
 - [ ] Attempt denied actions through the app and verify Supabase returns a permission error; a hidden/disabled button alone is not a passing test.
 
 Use a disposable staging record for write/delete tests. Do not test destructive actions against copied data unless that data is disposable.
@@ -39,6 +43,8 @@ Use a disposable staging record for write/delete tests. Do not test destructive 
 - [ ] Confirm exactly one valid School Year value is configured in System Settings before testing fee generation.
 - [ ] Generate a test voucher, record a test payment, and verify balances and ledger dates.
 - [ ] Generate the same test period again and verify the app does not create unintended duplicate charges.
+- [ ] Mark attendance for all configured working dates; verify an absent day deduction, the no-absence bonus, and one daily deduction at exactly 3 late marks.
+- [ ] Verify two late marks have no deduction, late counts reset for the next month, and incomplete attendance blocks payroll generation.
 - [ ] Change the school year in staging and verify existing vouchers remain unchanged while new periods use the configured year.
 - [ ] Test student add/edit, discounts, annual fund, payroll, follow-up ledger, import preview, and backup/restore as applicable.
 - [ ] Test login and critical workflows at 375px, 768px, and 1280px viewport widths.
@@ -47,7 +53,7 @@ Use a disposable staging record for write/delete tests. Do not test destructive 
 
 Do not promote a migration until all of the following are true:
 
-- [ ] Staging backup/restore and both SQL migrations have been reviewed.
+- [ ] Staging backup/restore and all schema/policy migrations have been reviewed.
 - [ ] The read-only validator has no unexplained blockers.
 - [ ] The role-based positive and negative tests above pass.
 - [ ] Financial records and totals have been cross-checked.
