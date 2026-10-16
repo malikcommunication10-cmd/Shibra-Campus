@@ -57,7 +57,7 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Staff & Payroll</h2>
-                    <p class="text-sm text-slate-500">Staff directory, monthly salary sheet, leaves, advances and salary payments</p>
+                    <p class="text-sm text-slate-500">Staff directory, daily attendance, attendance-based payroll and salary payments</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button onclick="openStaff()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➕ Add Staff</button>
@@ -94,6 +94,7 @@
             <div class="flex gap-2 mb-4 no-print overflow-x-auto whitespace-nowrap pb-1">
                 <button data-tab="overview" onclick="showTab('overview')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-on">📊 Overview</button>
                 <button data-tab="staff" onclick="showTab('staff')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">👥 Staff</button>
+                <button data-tab="attendance" onclick="showTab('attendance')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📅 Attendance</button>
                 <button data-tab="payroll" onclick="showTab('payroll')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">💵 Monthly Payroll</button>
                 <button data-tab="history" onclick="showTab('history')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📜 Payment History</button>
             </div>
@@ -156,6 +157,21 @@
                 <div id="sCards2" class="mobile-cards md:hidden space-y-2"></div>
             </section>
 
+            <!-- DAILY ATTENDANCE -->
+            <section id="tab-attendance" class="hidden space-y-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div><label for="attendanceDate" class="block text-[11px] font-medium text-slate-500 mb-1">Attendance date</label><input id="attendanceDate" type="date" onchange="changeAttendanceDate(this.value)" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"></div>
+                        <button onclick="markAllAttendance('present')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg text-sm font-semibold">Mark all present</button>
+                        <button onclick="markAllAttendance('absent')" class="bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2 rounded-lg text-sm font-semibold">Mark all absent</button>
+                        <button onclick="saveAttendance()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">Save attendance</button>
+                    </div>
+                    <p id="attendanceSummary" class="text-xs text-slate-500 mt-3"></p>
+                </div>
+                <div id="attendanceNotReady" class="hidden bg-white rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Attendance setup is required. Run the one-time SQL shown at the top of the page, then refresh.</div>
+                <div id="attendanceList" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
+            </section>
+
             <!-- PAYROLL -->
             <section id="tab-payroll" class="hidden space-y-4">
                 <div id="prCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
@@ -177,7 +193,7 @@
                 <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
-                            <tr><th class="p-2.5">Staff</th><th class="p-2.5 text-right">Base</th><th class="p-2.5 text-right">Leaves</th><th class="p-2.5 text-right">Leave ded.</th><th class="p-2.5 text-right">Bonus</th><th class="p-2.5 text-right">Fine</th><th class="p-2.5 text-right">Advance</th><th class="p-2.5 text-right">Net salary</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
+                            <tr><th class="p-2.5">Staff</th><th class="p-2.5 text-right">Base</th><th class="p-2.5 text-right">Absent</th><th class="p-2.5 text-right">Absence ded.</th><th class="p-2.5 text-right">Late</th><th class="p-2.5 text-right">Late ded.</th><th class="p-2.5 text-right">Bonus</th><th class="p-2.5 text-right">Fine</th><th class="p-2.5 text-right">Advance</th><th class="p-2.5 text-right">Net salary</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
                         </thead>
                         <tbody id="prBody"></tbody>
                         <tfoot id="prFoot" class="sticky bottom-0 bg-slate-100 font-bold"></tfoot>
@@ -255,9 +271,10 @@
             </div>
             <div class="p-5 space-y-3">
                 <p id="adjJoinHint" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2"></p>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-3 gap-3">
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Base salary</label><input id="adjBase" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Leaves taken (days)</label><input id="adjLeaves" type="number" min="0" step="0.5" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Absent days</label><input id="adjLeaves" type="number" min="0" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 outline-none"></div>
+                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Late marks</label><input id="adjLate" type="number" min="0" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 outline-none"></div>
                 </div>
                 <div class="grid grid-cols-3 gap-3 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
                     <div><label class="block text-xs font-medium text-emerald-700 mb-1">Bonus (+)</label><input id="adjBonus" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"></div>
@@ -268,6 +285,7 @@
                 <div class="bg-slate-50 border rounded-xl p-4 text-sm space-y-1">
                     <div class="flex justify-between"><span class="text-slate-500">Base salary</span><b id="bdBase">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500" id="bdLeaveLbl">Leave deduction</span><b id="bdLeave" class="text-rose-600">0</b></div>
+                    <div class="flex justify-between"><span class="text-slate-500" id="bdLateLbl">Late deduction</span><b id="bdLate" class="text-rose-600">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500">Bonus</span><b id="bdBonus" class="text-emerald-600">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500">Fine + Advance</span><b id="bdFine" class="text-rose-600">0</b></div>
                     <div class="flex justify-between border-t pt-2 mt-1 text-base"><span class="font-semibold">Net payable</span><b id="bdNet" class="text-indigo-700">PKR 0</b></div>
@@ -307,10 +325,9 @@
     <!-- RULES MODAL -->
     <div id="rulesModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-3">
-            <h3 class="text-lg font-bold text-indigo-950">Leave deduction rules</h3>
+            <h3 class="text-lg font-bold text-indigo-950">Attendance & salary rules</h3>
             <div><label class="block text-xs font-medium text-slate-700 mb-1">Working days in a month</label><input id="ruleDays" type="number" min="1" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-            <div><label class="block text-xs font-medium text-slate-700 mb-1">Free (paid) leaves per month</label><input id="ruleFree" type="number" min="0" step="0.5" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-            <p class="text-[11px] text-slate-500">Deduction = base salary ÷ working days × (leaves − free leaves). It is stored with each month's payroll, so changing the rules later does not alter old months.</p>
+            <p class="text-[11px] text-slate-500">Every absent day is deducted. No absent days earns a one-day salary bonus; late marks count as present for this bonus. Each group of 3 late marks deducts one day. Historical payroll is not recalculated when these rules change.</p>
             <div class="flex justify-end gap-2 pt-1"><button onclick="closeModal('rulesModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="saveRules()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">Save</button></div>
         </div>
     </div>
@@ -341,6 +358,10 @@ create table if not exists public.payroll (
   base_salary numeric default 0,
   leaves numeric default 0,
   leave_deduction numeric default 0,
+  working_days integer not null default 30,
+  late_count integer not null default 0,
+  late_deduction numeric not null default 0,
+  attendance_days integer not null default 0,
   bonus numeric default 0,
   fine numeric default 0,
   advance numeric default 0,
@@ -353,6 +374,11 @@ create table if not exists public.payroll (
   created_at timestamptz default now(),
   unique (staff_id, month)
 );
+alter table public.payroll
+  add column if not exists working_days integer not null default 30,
+  add column if not exists late_count integer not null default 0,
+  add column if not exists late_deduction numeric not null default 0,
+  add column if not exists attendance_days integer not null default 0;
 alter table public.payroll enable row level security;
 drop policy if exists shibra_select on public.payroll;
 drop policy if exists shibra_insert on public.payroll;
@@ -363,20 +389,64 @@ create policy shibra_insert on public.payroll for insert to authenticated with c
 create policy shibra_update on public.payroll for update to authenticated using (public.app_has_page_permission('staff', 'e')) with check (public.app_has_page_permission('staff', 'e'));
 create policy shibra_delete on public.payroll for delete to authenticated using (public.app_has_page_permission('staff', 'd'));
 grant select, insert, update, delete on public.payroll to authenticated;
-grant usage, select on sequence public.payroll_id_seq to authenticated;`;
+grant usage, select on sequence public.payroll_id_seq to authenticated;
+
+-- 3) Daily staff attendance
+create table if not exists public.staff_attendance (
+  id bigint generated by default as identity primary key,
+  staff_id text not null,
+  staff_name text not null,
+  attendance_date date not null,
+  status text not null check (status in ('present', 'absent', 'late')),
+  note text,
+  created_at timestamptz not null default now(),
+  unique (staff_id, attendance_date)
+);
+create index if not exists staff_attendance_date_idx
+  on public.staff_attendance (attendance_date);
+alter table public.staff_attendance enable row level security;
+revoke all on table public.staff_attendance from anon;
+grant select, insert, update, delete on table public.staff_attendance to authenticated;
+grant usage, select on sequence public.staff_attendance_id_seq to authenticated;
+drop policy if exists shibra_select on public.staff_attendance;
+drop policy if exists shibra_insert on public.staff_attendance;
+drop policy if exists shibra_update on public.staff_attendance;
+drop policy if exists shibra_delete on public.staff_attendance;
+drop policy if exists shibra_day_gate_insert on public.staff_attendance;
+drop policy if exists shibra_day_gate_update on public.staff_attendance;
+drop policy if exists shibra_day_gate_delete on public.staff_attendance;
+create policy shibra_select on public.staff_attendance for select to authenticated
+  using (public.app_has_page_permission('staff', 'v'));
+create policy shibra_insert on public.staff_attendance for insert to authenticated
+  with check (public.app_has_page_permission('staff', 'a'));
+create policy shibra_update on public.staff_attendance for update to authenticated
+  using (public.app_has_page_permission('staff', 'e'))
+  with check (public.app_has_page_permission('staff', 'e'));
+create policy shibra_delete on public.staff_attendance for delete to authenticated
+  using (public.app_has_page_permission('staff', 'd'));
+create policy shibra_day_gate_insert on public.staff_attendance as restrictive for insert to authenticated
+  with check (public.app_previous_days_closed());
+create policy shibra_day_gate_update on public.staff_attendance as restrictive for update to authenticated
+  using (public.app_previous_days_closed()) with check (public.app_previous_days_closed());
+create policy shibra_day_gate_delete on public.staff_attendance as restrictive for delete to authenticated
+  using (public.app_previous_days_closed());
+update public.settings set setting_value = '0' where lower(trim(setting_key)) = 'payroll free leaves';
+notify pgrst, 'reload schema';`;
 
 // ====================================================================================
 //  STATE + HELPERS
 // ====================================================================================
 let staff = [], staffByKey = {}, payroll = [], payById = {}, payMap = {};
-let staffExt = false, payrollOk = false;
+let staffExt = false, payrollOk = false, attendanceOk = false, payrollDays = 30;
+let attendanceRows = [], attendanceByStaff = {}, attendanceDrafts = {}, attendanceDirty = false;
+let attendanceDate = '';
 let editingStaffKey = null, adjId = null, payTarget = null;
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-US');
 const ymd = d => d.toLocaleDateString('en-CA');
-const todayStr = () => ymd(new Date());
+const todayStr = () => todayYmd();
 const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const js = v => esc(JSON.stringify(v));
 function parseYmd(s) { let [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); }
@@ -426,11 +496,12 @@ function serviceLength(joinDate) {
     return y ? `${y} yr${y > 1 ? 's' : ''}${m ? ' ' + m + ' mo' : ''}` : (m ? `${m} mo` : 'New');
 }
 const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-const getRules = () => ({ days: parseFloat(localStorage.getItem('payroll_days')) || 30, free: isNaN(parseFloat(localStorage.getItem('payroll_free'))) ? 1 : parseFloat(localStorage.getItem('payroll_free')) });
-function calcPay(base, leaves, bonus, fine, adv) {
-    let r = getRules(), daily = r.days > 0 ? base / r.days : 0, billable = Math.max(0, leaves - r.free);
+const getRules = () => ({ days: payrollDays, free: 0 });
+function calcPay(base, leaves, bonus, fine, adv, lateCount = 0, workingDays = getRules().days) {
+    let daily = workingDays > 0 ? base / workingDays : 0, billable = Math.max(0, leaves);
     let ded = Math.round(daily * billable);
-    return { daily, billable, ded, net: Math.max(0, Math.round(base - ded + bonus - fine - adv)) };
+    let lateDed = Math.round(daily * Math.floor(Math.max(0, lateCount) / 3));
+    return { daily, billable, ded, lateDed, net: Math.max(0, Math.round(base - ded - lateDed + bonus - fine - adv)) };
 }
 
 // ====================================================================================
@@ -446,7 +517,9 @@ function normStaff(r, idx) {
 }
 function normPay(r) {
     return { id: r.id, staffId: String(r.staff_id || '').trim(), name: String(r.staff_name || '').trim(), designation: String(r.designation || '').trim(), month: String(r.month || '').trim(),
-        base: parseFloat(r.base_salary) || 0, leaves: parseFloat(r.leaves) || 0, leaveDed: parseFloat(r.leave_deduction) || 0, bonus: parseFloat(r.bonus) || 0, fine: parseFloat(r.fine) || 0,
+        base: parseFloat(r.base_salary) || 0, leaves: parseFloat(r.leaves) || 0, leaveDed: parseFloat(r.leave_deduction) || 0,
+        workingDays: parseInt(r.working_days, 10) || 0, lateCount: parseInt(r.late_count, 10) || 0,
+        lateDed: parseFloat(r.late_deduction) || 0, attendanceDays: parseInt(r.attendance_days, 10) || 0, bonus: parseFloat(r.bonus) || 0, fine: parseFloat(r.fine) || 0,
         advance: parseFloat(r.advance) || 0, net: parseFloat(r.net_salary) || 0, status: String(r.status || 'Unpaid').trim() === 'Paid' ? 'Paid' : 'Unpaid',
         paidDate: String(r.paid_date || '').slice(0, 10), mode: String(r.payment_mode || '').trim(), voucher: String(r.voucher_no || '').trim(), notes: String(r.notes || '').trim() };
 }
@@ -457,14 +530,21 @@ async function initStaff() {
     showLoading('Loading staff & payroll...');
     let c = getSupabaseConfig();
     try {
-        let [sRes, pRes, probe] = await Promise.all([
+        let [sRes, pRes, staffProbe, attendanceProbe, settingsRes] = await Promise.all([
             sbFetchAll('staff', 'select=*'),
             sbFetchAll('payroll', 'select=*'),
-            fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() })
+            fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/staff_attendance?select=id&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/settings?select=setting_key,setting_value`, { headers: sbHeaders() })
         ]);
         let sRows = await sRes.json();
         if(!Array.isArray(sRows)) throw new Error('staff failed to load');
-        staffExt = probe.ok;
+        staffExt = staffProbe.ok;
+        attendanceOk = attendanceProbe.ok;
+        if(!settingsRes.ok) throw new Error('Payroll settings could not be loaded: ' + await settingsRes.text());
+        let settingRows = await settingsRes.json();
+        let savedDays = Array.isArray(settingRows) ? settingRows.find(x => norm(x.setting_key) === norm('Payroll Working Days')) : null;
+        payrollDays = Math.max(1, parseFloat(savedDays && savedDays.setting_value) || 30);
         let pRows = pRes.ok ? await pRes.json() : null;
         payrollOk = pRes.ok && Array.isArray(pRows);
 
@@ -475,20 +555,27 @@ async function initStaff() {
         payroll.forEach(p => { payById[p.id] = p; payMap[p.staffId + '|' + p.month] = p; });
 
         if(!$('gMonth').value) $('gMonth').value = todayStr().slice(0, 7);
+        $('attendanceDate').max = todayStr();
+        if(!$('attendanceDate').value) $('attendanceDate').value = todayStr();
+        attendanceDate = $('attendanceDate').value;
         updateBanner();
         fillFilters();
         renderAll();
+        if(attendanceOk) await loadAttendance(attendanceDate);
     } catch (e) {
         console.error(e);
-        toast('Could not load data. Check your internet connection or API settings.', false);
+        toast(e.message || 'Could not load data. Check your internet connection or API settings.', false);
     }
     hideLoading();
 }
 function updateBanner() {
-    let need = !staffExt || !payrollOk;
+    let need = !staffExt || !payrollOk || !attendanceOk;
     $('setupSql').innerText = SETUP_SQL;
-    $('setupText').innerText = !payrollOk ? 'The monthly payroll table is missing. Run this once in Supabase → SQL Editor, then refresh this page.' : 'Optional: run this once to add phone, status and notes for staff, then refresh this page.';
+    $('setupText').innerText = !payrollOk || !attendanceOk
+        ? 'Payroll attendance setup is missing. Run this once in Supabase → SQL Editor, then refresh this page.'
+        : 'Optional: run this once to add phone, status and notes for staff, then refresh this page.';
     $('setupBanner').classList.toggle('hidden', !need);
+    $('attendanceNotReady').classList.toggle('hidden', attendanceOk);
 }
 function copySetupSql() { navigator.clipboard.writeText(SETUP_SQL).then(() => toast('SQL copied. Paste it in the Supabase SQL Editor and run it.')); }
 function fillFilters() {
@@ -509,14 +596,138 @@ const curMonth = () => $('gMonth').value || todayStr().slice(0, 7);
 function shiftMonth(n) { let [y, m] = curMonth().split('-').map(Number); let d = new Date(y, m - 1 + n, 1); $('gMonth').value = ymd(d).slice(0, 7); renderAll(); }
 function setThisMonth() { $('gMonth').value = todayStr().slice(0, 7); renderAll(); }
 function showTab(t) {
-    ['overview', 'staff', 'payroll', 'history'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    ['overview', 'staff', 'attendance', 'payroll', 'history'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
-    const names = { overview: 'Overview', staff: 'Staff Directory', payroll: 'Salary Sheet', history: 'Salary Payment History' };
+    const names = { overview: 'Overview', staff: 'Staff Directory', attendance: 'Daily Attendance', payroll: 'Salary Sheet', history: 'Salary Payment History' };
     $('printTitle').innerText = `${names[t]}${t === 'payroll' || t === 'overview' ? ' — ' + monthLabel(curMonth()) : ''}`;
     window.scrollTo({ top: 0 });
 }
+function attendanceStaff(date) {
+    return staff.filter(s => (!s.joining || s.joining <= date) &&
+        (s.status === 'Active' || (s.leaving && s.leaving >= date)));
+}
+function renderAttendance() {
+    if(!$('attendanceList')) return;
+    let date = $('attendanceDate').value || todayStr(), members = attendanceStaff(date);
+    updateAttendanceSummary(date, members);
+    $('attendanceList').innerHTML = members.length ? members.map(s => {
+        let row = attendanceDrafts[s.staffId] || { status: '', note: '' };
+        return `<article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center gap-3 mb-3">${avatar(s.name)}<div class="min-w-0"><div class="font-bold text-slate-800 truncate">${esc(s.name)}</div><div class="text-xs text-slate-500">${esc(s.designation)}</div></div></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label class="text-xs text-slate-500">Status<select onchange="setAttendanceStatus(${js(s.staffId)},this.value)" class="mt-1 w-full border rounded-lg p-2.5 text-sm bg-white text-slate-800">
+                    <option value="" ${!row.status ? 'selected' : ''}>Select status</option>
+                    <option value="present" ${row.status === 'present' ? 'selected' : ''}>Present</option>
+                    <option value="absent" ${row.status === 'absent' ? 'selected' : ''}>Absent</option>
+                    <option value="late" ${row.status === 'late' ? 'selected' : ''}>Late</option>
+                </select></label>
+                <label class="text-xs text-slate-500">Note (optional)<input value="${esc(row.note || '')}" oninput="setAttendanceNote(${js(s.staffId)},this.value)" maxlength="300" class="mt-1 w-full border rounded-lg p-2.5 text-sm outline-none" placeholder="Optional note"></label>
+            </div>
+        </article>`;
+    }).join('') : '<div class="bg-white border rounded-2xl p-8 text-center text-slate-500 text-sm">No staff were employed on this date.</div>';
+}
+function updateAttendanceSummary(date, members) {
+    let counts = { present: 0, absent: 0, late: 0, unmarked: 0 };
+    members.forEach(s => {
+        let row = attendanceDrafts[s.staffId];
+        if(row && counts[row.status] !== undefined) counts[row.status]++;
+        else counts.unmarked++;
+    });
+    $('attendanceSummary').innerText = `${fmtDate(date)} · ${members.length} staff · Present ${counts.present} · Absent ${counts.absent} · Late ${counts.late} · Unmarked ${counts.unmarked}${attendanceDirty ? ' · Unsaved changes' : ''}`;
+}
+function setAttendanceStatus(staffId, status) {
+    attendanceDrafts[staffId] = { ...(attendanceDrafts[staffId] || {}), status, note: attendanceDrafts[staffId]?.note || '' };
+    attendanceDirty = true;
+    updateAttendanceSummary($('attendanceDate').value || todayStr(), attendanceStaff($('attendanceDate').value || todayStr()));
+}
+function setAttendanceNote(staffId, note) {
+    attendanceDrafts[staffId] = { ...(attendanceDrafts[staffId] || {}), note };
+    attendanceDirty = true;
+    updateAttendanceSummary($('attendanceDate').value || todayStr(), attendanceStaff($('attendanceDate').value || todayStr()));
+}
+function markAllAttendance(status) {
+    attendanceStaff($('attendanceDate').value || todayStr()).forEach(s => {
+        attendanceDrafts[s.staffId] = { ...(attendanceDrafts[s.staffId] || {}), status, note: attendanceDrafts[s.staffId]?.note || '' };
+    });
+    attendanceDirty = true;
+    renderAttendance();
+}
+async function loadAttendance(date) {
+    if(!attendanceOk || !date) { attendanceRows = []; attendanceByStaff = {}; attendanceDrafts = {}; renderAttendance(); return; }
+    let c = getSupabaseConfig();
+    let res = await fetch(`${c.url}/rest/v1/staff_attendance?select=id,staff_id,staff_name,attendance_date,status,note&attendance_date=eq.${encodeURIComponent(date)}`, { headers: sbHeaders() });
+    if(!res.ok) throw new Error('Could not load attendance: ' + await res.text());
+    let rows = await res.json();
+    attendanceRows = Array.isArray(rows) ? rows : [];
+    attendanceByStaff = {};
+    attendanceDrafts = {};
+    attendanceRows.forEach(row => {
+        let id = String(row.staff_id || '').trim();
+        attendanceByStaff[id] = row;
+        attendanceDrafts[id] = { status: row.status, note: row.note || '' };
+    });
+    attendanceDate = date;
+    attendanceDirty = false;
+    renderAttendance();
+}
+function changeAttendanceDate(date) {
+    if(!date || date > todayStr()) {
+        $('attendanceDate').value = attendanceDate || todayStr();
+        toast('Attendance can only be entered for today or an earlier date.', false);
+        return;
+    }
+    if(attendanceDirty) {
+        $('attendanceDate').value = attendanceDate || todayStr();
+        confirmBox('Discard unsaved attendance changes and open another date?', 'Discard', () => {
+            $('attendanceDate').value = date;
+            loadAttendance(date).catch(e => {
+                $('attendanceDate').value = attendanceDate || todayStr();
+                toast(e.message, false);
+            });
+        });
+        return;
+    }
+    let previous = attendanceDate;
+    loadAttendance(date).catch(e => {
+        $('attendanceDate').value = previous || todayStr();
+        toast(e.message, false);
+    });
+}
+async function saveAttendance() {
+    if(!attendanceOk) { toast('Run the attendance setup SQL first.', false); return; }
+    let date = $('attendanceDate').value, members = attendanceStaff(date);
+    let unmarked = members.filter(s => !attendanceDrafts[s.staffId] || !['present', 'absent', 'late'].includes(attendanceDrafts[s.staffId].status));
+    if(unmarked.length) { toast(`Mark attendance for all staff first (${unmarked.length} unmarked).`, false); return; }
+    showLoading('Saving attendance...');
+    try {
+        let c = getSupabaseConfig(), inserts = [], updates = [];
+        members.forEach(s => {
+            let draft = attendanceDrafts[s.staffId], old = attendanceByStaff[s.staffId];
+            let row = { staff_id: s.staffId, staff_name: s.name, attendance_date: date, status: draft.status, note: draft.note.trim() || null };
+            if(!old) inserts.push(row);
+            else if(old.status !== row.status || (old.note || null) !== row.note || old.staff_name !== row.staff_name) updates.push(row);
+        });
+        for(let row of updates) {
+            let res = await fetch(`${c.url}/rest/v1/staff_attendance?staff_id=eq.${encodeURIComponent(row.staff_id)}&attendance_date=eq.${encodeURIComponent(date)}`, {
+                method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify({ staff_name: row.staff_name, status: row.status, note: row.note })
+            });
+            if(!res.ok) throw new Error('Could not update attendance: ' + await res.text());
+        }
+        if(inserts.length) {
+            let res = await fetch(`${c.url}/rest/v1/staff_attendance`, {
+                method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify(inserts)
+            });
+            if(!res.ok) throw new Error('Could not add attendance: ' + await res.text());
+        }
+        attendanceDirty = false;
+        await loadAttendance(date);
+        toast(`Attendance saved for ${members.length} staff member(s).`);
+    } catch(e) {
+        toast(`${e.message || 'Could not save attendance.'} Review this date before retrying.`, false);
+    } finally { hideLoading(); }
+}
 function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
-function renderAll() { renderOverview(); renderStaff(); renderPayroll(); renderHistory(); showTab(currentTab()); }
+function renderAll() { renderOverview(); renderStaff(); renderAttendance(); renderPayroll(); renderHistory(); showTab(currentTab()); }
 
 function card(c) { return `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c || 'text-slate-900'} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`; }
 function avatar(name) { return `<span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold shrink-0">${esc(initials(name))}</span>`; }
@@ -543,7 +754,7 @@ function renderOverview() {
         { t: 'Net payable', v: rows.length ? 'PKR ' + fmt(net) : '—', c: 'text-slate-900', s: monthLabel(month) },
         { t: 'Paid', v: 'PKR ' + fmt(paid), c: 'text-emerald-600', s: `${rows.filter(p => p.status === 'Paid').length} of ${rows.length} staff` },
         { t: 'Pending', v: 'PKR ' + fmt(net - paid), c: net - paid > 0 ? 'text-rose-600' : 'text-emerald-600' },
-        { t: 'Leaves taken', v: fmt(rows.reduce((s, p) => s + p.leaves, 0)) + ' days', c: 'text-amber-600', s: `Deductions PKR ${fmt(rows.reduce((s, p) => s + p.leaveDed + p.fine + p.advance, 0))}` }
+        { t: 'Absences / late marks', v: `${fmt(rows.reduce((s, p) => s + p.leaves, 0))} / ${fmt(rows.reduce((s, p) => s + p.lateCount, 0))}`, c: 'text-amber-600', s: `Attendance deductions PKR ${fmt(rows.reduce((s, p) => s + p.leaveDed + p.lateDed, 0))}` }
     ].map(card).join('');
 
     // last 6 months chart
@@ -657,6 +868,14 @@ function deleteStaff(key) {
         showLoading('Deleting...');
         try {
             let c = getSupabaseConfig();
+            if(attendanceOk) {
+                let a = await fetch(`${c.url}/rest/v1/staff_attendance?select=id&staff_id=eq.${encodeURIComponent(s.staffId)}&limit=1`, { headers: sbHeaders() });
+                if(!a.ok) { hideLoading(); toast('Could not check attendance history: ' + await a.text(), false); return; }
+                let attendance = await a.json();
+                if(Array.isArray(attendance) && attendance.length) {
+                    hideLoading(); toast(`${s.name} has attendance history and cannot be deleted. Mark this staff member as "Left" instead.`, false); return;
+                }
+            }
             let filter = s.hasStaffIdCol ? `staff_id=eq.${encodeURIComponent(s.staffId)}` : `id=eq.${encodeURIComponent(s.id)}`;
             let res = await fetch(`${c.url}/rest/v1/staff?${filter}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=representation" }) });
             if(!res.ok) { hideLoading(); toast('Could not delete: ' + await res.text(), false); return; }
@@ -677,7 +896,7 @@ function payrollList() {
 function renderPayroll() {
     let month = curMonth(), all = monthRows(month), list = payrollList(), r = getRules();
     $('prNotReady').classList.toggle('hidden', payrollOk);
-    $('prRule').innerText = `${monthLabel(month)} · Rule: ${r.days} working days per month, ${r.free} free leave(s). Deduction = base ÷ ${r.days} × extra leave days.`;
+    $('prRule').innerText = `${monthLabel(month)} · ${r.days} configured working days · Each absent day and each full group of 3 late marks deducts one daily salary; late marks count as present for the no-absence bonus.`;
     let net = all.reduce((s, p) => s + p.net, 0), paid = all.filter(p => p.status === 'Paid').reduce((s, p) => s + p.net, 0);
     $('prCards').innerHTML = [
         { t: 'Staff on sheet', v: all.length, c: 'text-indigo-700' },
@@ -691,36 +910,58 @@ function renderPayroll() {
     $('prBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50 align-top">
         <td class="p-2.5"><div class="flex items-center gap-2">${avatar(p.name)}<div><div class="font-semibold text-slate-800">${esc(p.name)}</div><div class="text-[11px] text-slate-400">${esc(p.designation)}</div></div></div></td>
         <td class="p-2.5 text-right">${fmt(p.base)}</td><td class="p-2.5 text-right">${p.leaves ? fmt(p.leaves) : '-'}</td>
-        <td class="p-2.5 text-right text-rose-600">${p.leaveDed ? fmt(p.leaveDed) : '-'}</td><td class="p-2.5 text-right text-emerald-600">${p.bonus ? fmt(p.bonus) : '-'}</td>
+        <td class="p-2.5 text-right text-rose-600">${p.leaveDed ? fmt(p.leaveDed) : '-'}</td><td class="p-2.5 text-right">${p.lateCount ? fmt(p.lateCount) : '-'}</td>
+        <td class="p-2.5 text-right text-rose-600">${p.lateDed ? fmt(p.lateDed) : '-'}</td><td class="p-2.5 text-right text-emerald-600">${p.bonus ? fmt(p.bonus) : '-'}</td>
         <td class="p-2.5 text-right text-rose-600">${p.fine ? fmt(p.fine) : '-'}</td><td class="p-2.5 text-right text-amber-600">${p.advance ? fmt(p.advance) : '-'}</td>
         <td class="p-2.5 text-right font-extrabold whitespace-nowrap">PKR ${fmt(p.net)}</td>
         <td class="p-2.5">${statusBadge(p.status)}${p.paidDate ? `<div class="text-[11px] text-slate-400 mt-0.5">${fmtDate(p.paidDate)}</div>` : ''}</td>
         <td class="p-2.5 whitespace-nowrap no-print">${acts(p)}</td></tr>`).join('')
-        : `<tr><td colspan="10" class="p-8 text-center text-slate-400">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet. Click “Generate”.` : 'Payroll table not set up yet.'}</td></tr>`;
+        : `<tr><td colspan="12" class="p-8 text-center text-slate-400">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet. Click “Generate”.` : 'Payroll table not set up yet.'}</td></tr>`;
     let sum = k => list.reduce((s, p) => s + p[k], 0);
-    $('prFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right">Totals:</td><td class="p-3 text-right">${fmt(sum('base'))}</td><td class="p-3 text-right">${fmt(sum('leaves'))}</td><td class="p-3 text-right">${fmt(sum('leaveDed'))}</td><td class="p-3 text-right">${fmt(sum('bonus'))}</td><td class="p-3 text-right">${fmt(sum('fine'))}</td><td class="p-3 text-right">${fmt(sum('advance'))}</td><td class="p-3 text-right">PKR ${fmt(sum('net'))}</td><td colspan="2" class="no-print"></td></tr>` : '';
+    $('prFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right">Totals:</td><td class="p-3 text-right">${fmt(sum('base'))}</td><td class="p-3 text-right">${fmt(sum('leaves'))}</td><td class="p-3 text-right">${fmt(sum('leaveDed'))}</td><td class="p-3 text-right">${fmt(sum('lateCount'))}</td><td class="p-3 text-right">${fmt(sum('lateDed'))}</td><td class="p-3 text-right">${fmt(sum('bonus'))}</td><td class="p-3 text-right">${fmt(sum('fine'))}</td><td class="p-3 text-right">${fmt(sum('advance'))}</td><td class="p-3 text-right">PKR ${fmt(sum('net'))}</td><td colspan="2" class="no-print"></td></tr>` : '';
     $('prCards2').innerHTML = list.length ? list.map(p => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex items-start justify-between gap-2"><div class="flex items-center gap-3 min-w-0">${avatar(p.name)}<div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(p.name)}</div><div class="text-xs text-slate-500">${esc(p.designation)}</div></div></div>${statusBadge(p.status)}</div>
-        <div class="grid grid-cols-4 gap-1 mt-3 text-center text-[11px]"><div><div class="text-slate-400">Base</div><b>${fmt(p.base)}</b></div><div><div class="text-slate-400">Leaves</div><b>${fmt(p.leaves)}</b></div><div><div class="text-slate-400">Bonus</div><b class="text-emerald-600">${fmt(p.bonus)}</b></div><div><div class="text-slate-400">Fine+Adv</div><b class="text-rose-600">${fmt(p.fine + p.advance)}</b></div></div>
-        <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${p.leaveDed ? `Leave ded. ${fmt(p.leaveDed)}` : ''}${p.paidDate ? `<div>Paid ${fmtDate(p.paidDate)}</div>` : ''}</div><div class="text-xl font-extrabold">PKR ${fmt(p.net)}</div></div>
+        <div class="grid grid-cols-3 gap-1 mt-3 text-center text-[11px]"><div><div class="text-slate-400">Base</div><b>${fmt(p.base)}</b></div><div><div class="text-slate-400">Absent / late</div><b>${fmt(p.leaves)} / ${fmt(p.lateCount)}</b></div><div><div class="text-slate-400">Bonus</div><b class="text-emerald-600">${fmt(p.bonus)}</b></div></div>
+        <div class="mt-2 text-[11px] text-slate-500">Absence deduction ${fmt(p.leaveDed)} · Late deduction ${fmt(p.lateDed)} · Fine + advance ${fmt(p.fine + p.advance)}</div>
+        <div class="flex items-end justify-between mt-2"><div class="text-xs text-slate-500">${p.attendanceDays ? `${p.attendanceDays} marked days` : ''}${p.paidDate ? `<div>Paid ${fmtDate(p.paidDate)}</div>` : ''}</div><div class="text-xl font-extrabold">PKR ${fmt(p.net)}</div></div>
         <div class="flex justify-end items-center gap-1 mt-2 border-t pt-2">${acts(p)}</div></div>`).join('')
         : `<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet.` : 'Payroll table not set up yet.'}</div>`;
 }
 
 async function generatePayroll() {
     if(!payrollOk) { showTab('payroll'); toast('Please run the one-time SQL at the top of the page first.', false); window.scrollTo({ top: 0 }); return; }
+    if(!attendanceOk) { showTab('attendance'); toast('Run the attendance setup SQL before generating attendance-based payroll.', false); window.scrollTo({ top: 0 }); return; }
     let month = curMonth(), missing = eligibleStaff(month).filter(s => !payMap[s.staffId + '|' + month]);
+    if(monthEnd(month) > todayStr()) { toast('Generate attendance-based payroll after the salary month has ended.', false); return; }
     if(!missing.length) { toast(`The salary sheet for ${monthLabel(month)} is already complete.`); return; }
-    confirmBox(`Create the ${monthLabel(month)} salary sheet for ${missing.length} staff member(s) using their base salary?`, 'Generate', async () => {
+    confirmBox(`Create the ${monthLabel(month)} salary sheet for ${missing.length} staff member(s) using saved daily attendance? Attendance must cover at least ${payrollDays} working days.`, 'Generate', async () => {
         showLoading('Generating payroll...');
         try {
-            let c = getSupabaseConfig();
-            let rows = missing.map(s => ({ staff_id: s.staffId, staff_name: s.name, designation: s.designation, month, base_salary: s.base, leaves: 0, leave_deduction: 0, bonus: 0, fine: 0, advance: 0, net_salary: s.base, status: 'Unpaid' }));
+            let c = getSupabaseConfig(), aRes = await sbFetchAll('staff_attendance', `select=staff_id,attendance_date,status&attendance_date=gte.${monthStart(month)}&attendance_date=lte.${monthEnd(month)}`);
+            if(!aRes.ok) throw new Error('Could not read monthly attendance: ' + await aRes.text());
+            let aRows = await aRes.json(), dates = [...new Set(aRows.map(x => String(x.attendance_date).slice(0, 10)))].sort();
+            if(dates.length < payrollDays) throw new Error(`${monthLabel(month)} has attendance for only ${dates.length} working day(s); mark at least ${payrollDays} days before generating payroll.`);
+            let dateSet = new Set(dates);
+            let summaries = missing.map(s => {
+                let expectedDates = dates.filter(d => (!s.joining || s.joining <= d) && (s.status === 'Active' || (s.leaving && s.leaving >= d)));
+                let rows = aRows.filter(x => x.staff_id === s.staffId && dateSet.has(String(x.attendance_date).slice(0, 10)) &&
+                    (!s.joining || s.joining <= String(x.attendance_date).slice(0, 10)) &&
+                    (s.status === 'Active' || (s.leaving && s.leaving >= String(x.attendance_date).slice(0, 10))));
+                if(rows.length !== expectedDates.length) throw new Error(`${s.name} is missing attendance for ${expectedDates.length - rows.length} working day(s). Complete attendance before generating payroll.`);
+                let leaves = rows.filter(x => x.status === 'absent').length, lateCount = rows.filter(x => x.status === 'late').length;
+                let bonus = leaves === 0 ? Math.round(s.base / payrollDays) : 0;
+                let calc = calcPay(s.base, leaves, bonus, 0, 0, lateCount, payrollDays);
+                return { staff_id: s.staffId, staff_name: s.name, designation: s.designation, month, base_salary: s.base,
+                    leaves, leave_deduction: calc.ded, working_days: payrollDays, late_count: lateCount, late_deduction: calc.lateDed,
+                    attendance_days: rows.length, bonus, fine: 0, advance: 0, net_salary: calc.net, status: 'Unpaid' };
+            });
+            let rows = summaries;
             let res = await fetch(`${c.url}/rest/v1/payroll?on_conflict=staff_id,month`, { method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "resolution=ignore-duplicates,return=minimal" }), body: JSON.stringify(rows) });
-            if(!res.ok) { hideLoading(); toast('Could not generate payroll: ' + await res.text(), false); return; }
+            if(!res.ok) throw new Error('Could not generate payroll: ' + await res.text());
             toast(`Salary sheet created for ${rows.length} staff.`);
             await initStaff(); showTab('payroll');
-        } catch (e) { hideLoading(); toast('Could not connect to the database.', false); }
+        } catch (e) { toast(e.message || 'Could not connect to the database.', false); }
+        finally { hideLoading(); }
     });
 }
 
@@ -729,16 +970,18 @@ function openAdjust(id) {
     let p = payById[id]; if(!p || p.status === 'Paid') return;
     adjId = id;
     $('adjTitle').innerText = 'Adjust salary'; $('adjSub').innerText = `${p.name} · ${monthLabel(p.month)}`;
-    $('adjBase').value = p.base; $('adjLeaves').value = p.leaves; $('adjBonus').value = p.bonus; $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
+    $('adjBase').value = p.base; $('adjLeaves').value = p.leaves; $('adjLate').value = p.lateCount; $('adjBonus').value = p.bonus; $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
     let s = staff.find(x => x.staffId === p.staffId), hint = $('adjJoinHint');
     if(s && s.joining && s.joining > monthStart(p.month) && s.joining <= monthEnd(p.month)) { hint.innerText = `${p.name} joined on ${fmtDate(s.joining)} — adjust the base salary if this month should be pro-rata.`; hint.classList.remove('hidden'); } else hint.classList.add('hidden');
     calcAdj(); openModal('adjModal');
 }
 function adjVals() { return { base: parseFloat($('adjBase').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
 function calcAdj() {
-    let v = adjVals(), r = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv);
+    let v = adjVals(), p = payById[adjId], r = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv, p ? p.lateCount : 0, p && p.workingDays || getRules().days);
     $('bdBase').innerText = fmt(v.base); $('bdLeave').innerText = '− ' + fmt(r.ded);
     $('bdLeaveLbl').innerText = `Leave deduction (${fmt(r.billable)} day${r.billable === 1 ? '' : 's'} × ${fmt(Math.round(r.daily))})`;
+    $('bdLate').innerText = '− ' + fmt(r.lateDed);
+    $('bdLateLbl').innerText = `Late deduction (${p ? p.lateCount : 0} late mark(s), one day per 3)`;
     $('bdBonus').innerText = '+ ' + fmt(v.bonus); $('bdFine').innerText = '− ' + fmt(v.fine + v.adv); $('bdNet').innerText = 'PKR ' + fmt(r.net);
     return r;
 }
@@ -749,19 +992,41 @@ async function saveAdjust() {
     try {
         let c = getSupabaseConfig();
         let res = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }),
-            body: JSON.stringify({ base_salary: v.base, leaves: v.leaves, leave_deduction: r.ded, bonus: v.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: $('adjNotes').value.trim() || null }) });
+            body: JSON.stringify({ base_salary: v.base, leaves: p.leaves, leave_deduction: r.ded, working_days: p.workingDays || getRules().days, late_count: p.lateCount, late_deduction: r.lateDed, attendance_days: p.attendanceDays, bonus: v.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: $('adjNotes').value.trim() || null }) });
         if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
         closeModal('adjModal'); toast('Salary updated.'); await initStaff(); showTab('payroll');
     } catch (e) { hideLoading(); toast('Could not connect to the database.', false); }
 }
 
 // rules
-function openRules() { let r = getRules(); $('ruleDays').value = r.days; $('ruleFree').value = r.free; openModal('rulesModal'); }
-function saveRules() {
-    let d = parseFloat($('ruleDays').value), f = parseFloat($('ruleFree').value);
-    if(!(d > 0) || isNaN(f) || f < 0) { toast('Please enter valid values.', false); return; }
-    localStorage.setItem('payroll_days', String(d)); localStorage.setItem('payroll_free', String(f));
-    closeModal('rulesModal'); toast('Rules saved.'); renderPayroll();
+function openRules() { $('ruleDays').value = getRules().days; openModal('rulesModal'); }
+async function upsertPayrollSetting(key, value) {
+    let c = getSupabaseConfig();
+    let res = await fetch(`${c.url}/rest/v1/settings?setting_key=eq.${encodeURIComponent(key)}`, {
+        method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=representation" }),
+        body: JSON.stringify({ setting_value: String(value) })
+    });
+    if(!res.ok) throw new Error(await res.text());
+    let updated = await res.json();
+    if(!Array.isArray(updated) || !updated.length) {
+        let created = await fetch(`${c.url}/rest/v1/settings`, {
+            method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }),
+            body: JSON.stringify({ setting_key: key, setting_value: String(value) })
+        });
+        if(!created.ok) throw new Error(await created.text());
+    }
+}
+async function saveRules() {
+    let d = parseFloat($('ruleDays').value);
+    if(!(d > 0) || !Number.isInteger(d)) { toast('Please enter a whole number of working days.', false); return; }
+    showLoading('Saving attendance rules...');
+    try {
+        await upsertPayrollSetting('Payroll Working Days', d);
+        await upsertPayrollSetting('Payroll Free Leaves', 0);
+        payrollDays = d;
+        closeModal('rulesModal'); toast('Attendance and payroll rules saved.'); renderAll();
+    } catch(e) { toast('Could not save rules: ' + e.message, false); }
+    finally { hideLoading(); }
 }
 
 // ---------------- PAY ----------------
@@ -859,7 +1124,7 @@ function exportCsv(name, header, rows) {
     a.download = `${name}-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function exportStaffCsv() { let l = staffList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('staff', ['Staff ID', 'Name', 'Designation', 'Joining date', 'Phone', 'Base salary', 'Status'], l.map(s => [s.staffId, s.name, s.designation, s.joining, s.phone, s.base, s.status])); }
-function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Leaves', 'Leave deduction', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.leaves, p.leaveDed, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
+function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Working days', 'Attendance days', 'Absent days', 'Absence deduction', 'Late marks', 'Late deduction', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.attendanceDays, p.leaves, p.leaveDed, p.lateCount, p.lateDed, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
 function exportHistoryCsv() { let l = historyList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('salary-payments', ['Paid on', 'Salary month', 'Staff', 'Net paid', 'Account', 'Voucher'], l.map(p => [p.paidDate, p.month, p.name, p.net, p.mode, p.voucher])); }
 
 function printSlip(id) {
@@ -878,8 +1143,11 @@ function printSlip(id) {
       <tr><td class="l">Name</td><td style="text-align:right"><b>${esc(p.name)}</b></td></tr>
       <tr><td class="l">Designation</td><td style="text-align:right">${esc(p.designation)}</td></tr>
       ${row('Base salary', 'PKR ' + fmt(p.base))}
-      ${row('Leaves taken', fmt(p.leaves) + ' day(s)')}
-      ${row('Leave deduction', '− PKR ' + fmt(p.leaveDed), 'neg')}
+      ${row('Working days / attendance marked', `${p.workingDays || '-'} / ${p.attendanceDays || 0}`)}
+      ${row('Absent days', fmt(p.leaves))}
+      ${row('Absence deduction', '− PKR ' + fmt(p.leaveDed), 'neg')}
+      ${row('Late arrivals', fmt(p.lateCount))}
+      ${row('Late deduction', '− PKR ' + fmt(p.lateDed), 'neg')}
       ${row('Bonus', '+ PKR ' + fmt(p.bonus), 'pos')}
       ${row('Fine', '− PKR ' + fmt(p.fine), 'neg')}
       ${row('Advance recovered', '− PKR ' + fmt(p.advance), 'neg')}
