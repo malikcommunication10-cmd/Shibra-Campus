@@ -85,12 +85,12 @@
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                         <h3 class="text-sm font-bold text-indigo-900">👩‍🏫 Payroll rules</h3>
-                        <p class="text-xs text-slate-500 mt-0.5 mb-4">Used in Staff & Payroll to calculate the leave deduction.</p>
+                        <p class="text-xs text-slate-500 mt-0.5 mb-4">Shared with the Staff attendance register and monthly payroll.</p>
                         <div class="grid grid-cols-2 gap-3">
                             <div><label class="block text-xs font-medium text-slate-700 mb-1">Working days per month</label><input id="ruleDays" type="number" min="1" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-                            <div><label class="block text-xs font-medium text-slate-700 mb-1">Free (paid) leaves per month</label><input id="ruleFree" type="number" min="0" step="0.5" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                            <div class="rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-xs text-indigo-900"><b>Attendance rules</b><br>Every absent day is deducted. No absences earns a one-day salary bonus (late marks count as present). Each 3 late marks deduct one day. Paid free leaves are disabled.</div>
                         </div>
-                        <p class="text-[11px] text-slate-500 mt-3">Deduction = base salary ÷ working days × (leaves − free leaves). Each month's payroll keeps the amount it was created with.</p>
+                        <p class="text-[11px] text-slate-500 mt-3">Daily rate = base salary ÷ working days. Payroll generation requires complete attendance marking for the configured working days.</p>
                         <button onclick="saveRules()" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">Save payroll rules</button>
                     </div>
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -409,15 +409,14 @@ async function upsertSingle(key, value) {
 }
 function renderRules() {
     $('ruleDays').value = single('Payroll Working Days') || 30;
-    $('ruleFree').value = single('Payroll Free Leaves') || 1;
     $('ruleLow').value = single('Low Stock Limit') || 5;
     $('schoolYear').value = single('School Year') || new Date().getFullYear();
 }
 async function saveRules() {
-    let d = parseFloat($('ruleDays').value), f = parseFloat($('ruleFree').value);
-    if(!(d > 0) || isNaN(f) || f < 0) { toast('Please enter valid values.', false); return; }
+    let d = parseFloat($('ruleDays').value);
+    if(!(d > 0) || !Number.isInteger(d)) { toast('Please enter a whole number of working days.', false); return; }
     showLoading('Saving...');
-    try { await upsertSingle('Payroll Working Days', d); await upsertSingle('Payroll Free Leaves', f); toast('Payroll rules saved.'); }
+    try { await upsertSingle('Payroll Working Days', d); await upsertSingle('Payroll Free Leaves', 0); toast('Payroll rules saved.'); }
     catch (e) { toast('Could not save: ' + e.message, false); }
     hideLoading();
 }
