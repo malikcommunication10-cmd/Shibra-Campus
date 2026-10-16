@@ -20,6 +20,32 @@ function sbClearAuth() { try { localStorage.removeItem(SB_SESSION_KEY); localSto
 function sbLogout() { sbClearAuth(); location.replace('login.html'); }
 const _sbFetch = window.fetch.bind(window);
 let _sbRefreshing = null;
+function sbPakistanDate(offsetDays) {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+    const part = key => parts.find(x => x.type === key).value;
+    const day = new Date(Date.UTC(Number(part('year')), Number(part('month')) - 1, Number(part('day')) + (offsetDays || 0)));
+    return day.toISOString().slice(0, 10);
+}
+function sbDayClosePending() {
+    return !!(ME && ME.perms && (ME.perms.flags || []).includes('requiredayclose')
+        && String(ME.closedThrough || '') < sbPakistanDate(-1));
+}
+function sbUpdateDayCloseDateLimits() {
+    if (!document.body) return;
+    const pending = sbDayClosePending();
+    document.querySelectorAll('#emDate, #qeDate, #mDate, #ssDate, #sdDate, #payDate, #bulkPayDate').forEach(input => {
+        if (!input.dataset.dayCloseMaxSaved) {
+            input.dataset.dayCloseMaxSaved = '1';
+            input.dataset.dayCloseOriginalMax = input.getAttribute('max') || '';
+        }
+        if (pending) {
+            const yesterday = sbPakistanDate(-1);
+            const originalMax = input.dataset.dayCloseOriginalMax;
+            input.max = originalMax && originalMax < yesterday ? originalMax : yesterday;
+        } else if (input.dataset.dayCloseOriginalMax) input.max = input.dataset.dayCloseOriginalMax;
+        else input.removeAttribute('max');
+    });
+}
 async function sbFreshToken() {
     const s = sbSession(); if (!s) return null;
     if (s.expires_at - Date.now() / 1000 > 60) return s.access_token;
@@ -36,6 +62,14 @@ async function sbFreshToken() {
 window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : ((input && input.url) || '');
     if (url.startsWith(SB_URL + '/rest/v1')) {
+        const method = String((init && init.method) || (input instanceof Request && input.method) || 'GET').toUpperCase();
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)
+            && !/\/rest\/v1\/day_close(?:[/?]|$)/.test(url)
+            && sbDayClosePending()) {
+            const message = `Close all previous days through ${sbPakistanDate(-1)} before making changes for today.`;
+            if (typeof deny === 'function') deny(message);
+            return new Response(JSON.stringify({ message }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+        }
         const tok = await sbFreshToken();
         if (!tok) throw new Error('An active session is required to access school records.');
         init = Object.assign({}, init);
@@ -53,13 +87,13 @@ const PAGES = [['dashboard', 'Dashboard', 'index.html'], ['students', 'Students 
     ['settings', 'System Settings', 'settings.html'], ['users', 'Users & Roles', 'users.html']];
 const PAGE_ACTS = [['v', 'View'], ['a', 'Add'], ['e', 'Edit'], ['d', 'Delete']];
 const PERM_FLAGS = [['money', 'See money totals on the dashboard'], ['export', 'Download CSV / backup'], ['assign', 'Assign follow-ups to teachers'], ['allfollow', 'See ALL follow-up families (not only the assigned ones)'],
-    ['closeday', 'Close / reopen the day'], ['editclosed', 'Change entries of closed or old days'], ['todayonly', 'Change (edit / delete) only the entries of the current open day']];
+    ['closeday', 'Close / reopen the day'], ['requiredayclose', 'Require closing all previous days before working today'], ['editclosed', 'Change entries of closed or old days'], ['todayonly', 'Change (edit / delete) only the entries of the current open day']];
 const PAGE_FILE = {}; PAGES.forEach(p => { PAGE_FILE[p[2]] = p[0]; });
 const currentPageKey = () => PAGE_FILE[(location.pathname.split('/').pop() || 'index.html').toLowerCase()] || null;
 let ME = null;
 const can = (page, act) => !!(ME && ME.perms && String((ME.perms.pages || {})[page] || '').includes(act));
 const flag = f => !!(ME && ME.perms && (ME.perms.flags || []).includes(f));
-const todayYmd = () => new Date().toLocaleDateString('en-CA');
+const todayYmd = () => sbPakistanDate(0);
 function sbFirstPage(me) { const m = me || ME; for (const p of PAGES) if (m && m.perms && String((m.perms.pages || {})[p[0]] || '').includes('v')) return p[2]; return null; }
 async function sbFetchMe() {
     const s = sbSession(); if (!s) return null;
@@ -133,7 +167,15 @@ function sbApplyMe() {
     const key = currentPageKey();
     if (key && !can(key, 'v')) { const f = sbFirstPage(); if (f && f !== (location.pathname.split('/').pop() || 'index.html')) { location.replace(f); return; } sbShowBlock('No access', 'You are not allowed to open this page.', true); return; }
     document.documentElement.style.visibility = 'visible';
-    const go = () => { try { installGuards(); } catch (e) { console.error(e); } };
+    const go = () => {
+        try { installGuards(); } catch (e) { console.error(e); }
+        sbUpdateDayCloseDateLimits();
+        if (typeof window.shibraDayCloseRefresh === 'function') window.shibraDayCloseRefresh();
+        if (!window.__sbDayCloseObserver) {
+            window.__sbDayCloseObserver = new MutationObserver(sbUpdateDayCloseDateLimits);
+            window.__sbDayCloseObserver.observe(document.body, { childList: true, subtree: true });
+        }
+    };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
 }
 if (!window.SB_NO_GUARD) {
@@ -145,7 +187,8 @@ if (!window.SB_NO_GUARD) {
             sbFetchMe().then(m => {            // check in the background: if the administrator changed something, reload once
                 if (!m || m.error || m.noaccess) { if (m && (m.noaccess)) { sbSaveMe(m); location.reload(); } return; }
                 const same = JSON.stringify([m.perms, m.closedThrough, m.active, m.role]) === JSON.stringify([ME.perms, ME.closedThrough, ME.active, ME.role]);
-                sbSaveMe(m); if (!same && !sessionStorage.getItem('sb_me_reloaded')) { sessionStorage.setItem('sb_me_reloaded', '1'); location.reload(); } else if (same) sessionStorage.removeItem('sb_me_reloaded');
+                sbSaveMe(m); if (typeof window.shibraDayCloseRefresh === 'function') window.shibraDayCloseRefresh();
+                if (!same && !sessionStorage.getItem('sb_me_reloaded')) { sessionStorage.setItem('sb_me_reloaded', '1'); location.reload(); } else if (same) sessionStorage.removeItem('sb_me_reloaded');
             });
         } else {
             try { document.documentElement.style.visibility = 'hidden'; } catch (e) {}
