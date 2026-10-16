@@ -16,19 +16,21 @@ The checked-in `styles.css` is the compiled Tailwind output. Rebuild it after ch
 1. Back up the database and confirm that the core tables used by the app exist: `students`, `fees`, `accounts`, `increments`, `books`, `staff` and `settings`.
 2. Run `supabase_updates.sql` in Supabase SQL Editor for the additive columns and indexes.
 3. Run `supabase_roles.sql` as a database owner. This creates the role/auth tables when absent, enables RLS on the app tables, and replaces existing policies on those tables with policies derived from the app's role permissions. Test the migration in a staging project first.
-4. Create the first administrator in Supabase Authentication. Then, in SQL Editor, add that exact email to `public.app_users` with role `Admin`, for example:
+4. Run `supabase_staff_attendance.sql` to add the daily attendance table, payroll calculation columns, and RLS policies. It preserves existing payroll rows and resets the old free-leave setting to zero.
+5. Run `supabase_require_previous_day_close.sql` once to install additive RLS gates for the optional role-based previous-day close requirement. Attendance changes are covered by this gate as well.
+6. Create the first administrator in Supabase Authentication. Then, in SQL Editor, add that exact email to `public.app_users` with role `Admin`, for example:
 
    ```sql
    insert into public.app_users (email, name, role, active)
    values ('admin@example.com', 'School Administrator', 'Admin', true);
    ```
 
-5. Sign in as that administrator. Use **Users & Roles** to add users and assign least-privilege roles.
-6. From **System Settings → Rules & Defaults**, set **School year for fee vouchers** to the year that should be used for new fee periods. Existing fee records are not rewritten when this value changes.
+7. Sign in as that administrator. Use **Users & Roles** to add users and assign least-privilege roles.
+8. From **System Settings → Rules & Defaults**, set **School year for fee vouchers** to the year that should be used for new fee periods. Existing fee records are not rewritten when this value changes.
 
 `supabase_roles.sql` intentionally removes all existing RLS policies from its managed tables before installing the Shibra policies. Review any custom policies before running it. Never disable RLS to resolve a permission error. Service-role keys must never be placed in this static client; only the Supabase publishable/anon key belongs in `config.js`.
 
-Optional `payroll` and `call_logs` tables are created by `supabase_roles.sql`. If they are created separately later, run the matching policy statements from that SQL migration as well; do not use page-generated SQL that disables RLS.
+Optional `payroll` and `call_logs` tables are created by `supabase_roles.sql`. Daily attendance is recorded in Staff & Payroll; save a status for every active staff member on each school working day. Set **Working days per month** to the number of days the school is actually open, then payroll generation requires at least that many marked dates and complete marks for every staff member's applicable dates. Each absent day is deducted; zero absences earns one daily salary bonus, with late marks treated as present for bonus eligibility; every complete group of three late marks separately deducts one daily salary. Late remainders reset each month; paid free leaves are disabled. If these tables are created separately later, install their matching RLS policies as well; do not use page-generated SQL that disables RLS.
 
 ## Build and deployment
 
@@ -37,6 +39,7 @@ The GitHub Actions workflow builds Tailwind CSS when source or style configurati
 ## Notes
 
 - All authorization must be enforced by Supabase RLS, not only by hidden buttons or browser-side role checks.
+- The **Require closing all previous days before working today** role permission pauses operational writes until the role's users close through yesterday in Pakistan time. It also grants that role the ability to close/re-open days; install `supabase_require_previous_day_close.sql` once before enabling the permission. The day-close modal is available from the lower-right corner on every page.
 - The browser stores an Auth session for the static client to make authenticated requests. Protect the site against XSS, use strong individual passwords, and enable Supabase MFA for administrators where available.
 - Users can change their password from the sidebar while signed in, or request a password reset from the login screen. Configure the deployed HTTPS login URL in Supabase Auth's allowed redirect URLs and enable a working email provider before using reset links. Never share passwords or reset links in chat.
 - Use a staging Supabase project to validate schema changes, policies and imports before production.
