@@ -18,7 +18,7 @@ Use this checklist against a separate staging Supabase project before changing p
 4. Run `supabase_followups_access.sql` to install the permission-checked, read-only Follow-up data function.
 5. Run `supabase_staff_attendance.sql` to create attendance, add the payroll calculation columns, and install RLS. Confirm existing payroll rows remain intact.
 6. Run `supabase_require_previous_day_close.sql` in staging to add the opt-in role-based previous-day write gates.
-7. Run `supabase_reports_audit.sql` to install permission-checked report and audit functions plus write triggers. Confirm the built-in Admin role has Reports and Audit Trail → View.
+7. Run `supabase_reports_audit.sql` to install permission-checked report and audit functions plus write triggers. Confirm the built-in Admin role and any Admin user with a custom permission override have Reports and Audit Trail → View.
 8. Run each read-only statement in `supabase_staging_validation.sql` and review every result set. Missing required tables, disabled RLS, unexpected anonymous grants, missing policies, or missing helper functions are blockers.
 9. If the app has no administrator yet, create the initial Auth user and add its exact email to `public.app_users` using the setup procedure in `README.md`. Do not share the password or access token.
 

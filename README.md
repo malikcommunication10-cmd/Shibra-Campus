@@ -19,7 +19,7 @@ The checked-in `styles.css` is the compiled Tailwind output. Rebuild it after ch
 4. Run `supabase_followups_access.sql` to let users with Follow-up Calls → View load only the student, fee, and payment fields needed by the Follow-up page. It does not grant direct table access. This lets you remove their Students, Fee Vouchers, and Accounts page permissions.
 5. Run `supabase_staff_attendance.sql` to add the daily attendance table, payroll calculation columns, and RLS policies. It preserves existing payroll rows and resets the old free-leave setting to zero.
 6. Run `supabase_require_previous_day_close.sql` once to install additive RLS gates for the optional role-based previous-day close requirement. Attendance changes are covered by this gate as well.
-7. Run `supabase_reports_audit.sql` to add permission-checked system-wide reports and the append-only audit trail. It adds Reports and Audit Trail → View to the built-in Admin role; grant those page permissions separately to any other role that needs them. The audit log begins recording after this migration and does not backfill earlier changes.
+7. Run `supabase_reports_audit.sql` to add permission-checked system-wide reports and the append-only audit trail. It adds Reports and Audit Trail → View to the built-in Admin role and existing Admin users with explicit permission overrides; grant those page permissions separately to any other role that needs them. The audit log begins recording after this migration and does not backfill earlier changes.
 8. Create the first administrator in Supabase Authentication. Then, in SQL Editor, add that exact email to `public.app_users` with role `Admin`, for example:
 
    ```sql

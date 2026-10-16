@@ -28,6 +28,7 @@ It reports counts and roles only, not email addresses. If `app_users` is missing
 ## 2. Only after the migration is reviewed and safely installed
 
 1. After a verified backup and migration review, run the corrected `supabase_roles.sql` as database owner. It changes RLS/grants on existing app tables. Do not run an older copy: the page-permission helper must read the app's string format (`vaed`) correctly.
+   If a role will use **Require closing all previous days before working today**, run `supabase_require_previous_day_close.sql` once after the baseline migration. This is additive and does not alter records; do not rerun the baseline migration just to enable this role permission.
 2. In Supabase Dashboard → **Authentication → Users**, use the Dashboard to create the owner-controlled administrator Auth account. Use an email you control, set a strong unique password privately, and complete email confirmation if required by your Auth settings.
 3. Confirm `public.app_roles` contains the built-in `Admin` role and that `public.app_users` exists.
 4. In SQL Editor, run the one-row registration statement below after replacing the email/name placeholders. It links the existing Auth identity to the app's Admin role. It does not create an Auth account or store a password.
