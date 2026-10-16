@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Reports - Shibra Campus</title>
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <script src="config.js"></script>
+    <script src="nav.js"></script>
+    <style>
+        .report-table{width:100%;border-collapse:collapse}
+        .report-table th,.report-table td{padding:.6rem .75rem;border-bottom:1px solid #e2e8f0;text-align:left;font-size:.8rem}
+        .report-table th{color:#64748b;font-size:.7rem;text-transform:uppercase}
+        .report-table td:last-child,.report-table th:last-child{text-align:right;font-variant-numeric:tabular-nums}
+        .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem}
+        .report-kpi{min-width:0}
+        .report-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;align-items:end}
+        .report-filters-note{grid-column:1/-1}
+        #kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+        @media(min-width:1024px){.report-filters{grid-template-columns:repeat(5,minmax(0,1fr))}.report-filters-note{grid-column:auto}}
+        @media(min-width:1280px){#kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
+        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print{display:none!important}.report-grid{grid-template-columns:1fr 1fr}}
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans">
+<div class="min-h-screen flex flex-col md:flex-row">
+    <aside id="appNav"></aside>
+    <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
+        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div><h1 class="text-xl md:text-2xl font-extrabold text-indigo-950">Business Reports</h1><p class="text-sm text-slate-500">School-wide operational and financial overview</p></div>
+            <div class="flex gap-2 no-print"><button id="printReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Print</button><button id="exportReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Export CSV</button><button id="refreshReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Refresh</button></div>
+        </header>
+        <section class="report-filters bg-white p-3 md:p-4 rounded-2xl border border-slate-200 no-print">
+            <div><label for="preset" class="block text-xs font-semibold text-slate-600 mb-1">Period</label><select id="preset" class="w-full border rounded-lg p-2 text-sm"><option value="today">Today</option><option value="month">This month</option><option value="last_month">Last month</option><option value="year">This year</option><option value="last_year">Last year</option><option value="custom">Custom</option></select></div>
+            <div><label for="fromDate" class="block text-xs font-semibold text-slate-600 mb-1">From</label><input id="fromDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
+            <div><label for="toDate" class="block text-xs font-semibold text-slate-600 mb-1">To</label><input id="toDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
+            <p class="report-filters-note text-[11px] text-slate-500">Transactions follow the selected period. Student and staff counts are current snapshots.</p>
+            <button id="applyReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Apply</button>
+        </section>
+        <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm" role="status"></div>
+        <p id="periodLabel" class="text-xs text-slate-500"></p>
+        <section id="kpis" class="grid grid-cols-2 gap-3"></section>
+        <section class="report-grid">
+            <article class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <h2 class="font-bold text-indigo-900 p-4 border-b">Students by class</h2><div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Students</th></tr></thead><tbody id="classRows"></tbody></table></div>
+            </article>
+            <article class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <h2 class="font-bold text-indigo-900 p-4 border-b">Fees by type (gross payable)</h2><div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Fee type</th><th>Fee rows</th><th>Payable</th><th>Discounts</th></tr></thead><tbody id="feeRows"></tbody></table></div>
+            </article>
+            <article class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <h2 class="font-bold text-indigo-900 p-4 border-b">Account activity</h2><div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
+            </article>
+            <article class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <h2 class="font-bold text-indigo-900 p-4 border-b">Staff attendance</h2><div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
+            </article>
+            <article class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <h2 class="font-bold text-indigo-900 p-4 border-b">Follow-up outcomes</h2><div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
+            </article>
+            <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2">
+                <h2 class="font-bold text-indigo-900">Books & increments</h2><div id="booksSummary" class="text-sm text-slate-600"></div><div id="incrementSummary" class="text-sm text-slate-600"></div>
+            </article>
+        </section>
+        <p class="text-[11px] text-slate-500">Generated from saved records. Student/staff counts are current snapshots; monthly fee and payroll records are included when their month overlaps the selected range. Account inflow/outflow uses all dated account entries in range. Books without a saved date cannot be period-filtered.</p>
+    </main>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const n = value => Number(value) || 0;
+const fmt = value => n(value).toLocaleString(undefined, {maximumFractionDigits: 2});
+const iso = date => date.toISOString().slice(0, 10);
+let reportData = null;
+function periodDates(preset) {
+    const today = todayYmd().split('-').map(Number), y = today[0], m = today[1], d = today[2];
+    const utc = (year, month, day) => new Date(Date.UTC(year, month - 1, day));
+    if (preset === 'today') return [iso(utc(y, m, d)), iso(utc(y, m, d))];
+    if (preset === 'last_month') return [iso(utc(y, m - 1, 1)), iso(utc(y, m, 0))];
+    if (preset === 'year') return [iso(utc(y, 1, 1)), iso(utc(y, 12, 31))];
+    if (preset === 'last_year') return [iso(utc(y - 1, 1, 1)), iso(utc(y - 1, 12, 31))];
+    return [iso(utc(y, m, 1)), iso(utc(y, m, d))];
+}
+function setPreset(value) { const dates = periodDates(value); $('fromDate').value = dates[0]; $('toDate').value = dates[1]; }
+function status(message, ok) {
+    const box = $('reportStatus'); box.textContent = message;
+    box.className = `rounded-xl border px-4 py-3 text-sm ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`;
+    box.classList.toggle('hidden', !message);
+}
+function rows(id, data, columns) {
+    const list = Array.isArray(data) ? data : [];
+    $(id).innerHTML = list.length ? list.map(row => `<tr>${columns.map(col => `<td>${esc(col(row))}</td>`).join('')}</tr>`).join('')
+        : `<tr><td colspan="${columns.length}" class="text-slate-500">No records for this period</td></tr>`;
+}
+function card(label, value, note) {
+    return `<article class="report-kpi bg-white p-4 rounded-2xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500">${esc(label)}</p><p class="text-xl font-extrabold text-indigo-950 mt-1 break-words">${esc(value)}</p><p class="text-[11px] text-slate-400 mt-1">${esc(note || '')}</p></article>`;
+}
+function render(data) {
+    reportData = data;
+    const st = data.students || {}, fees = data.fees || {}, accounts = data.accounts || {}, staff = data.staff || {}, followups = data.followups || {};
+    $('periodLabel').textContent = `Activity from ${data.from} through ${data.to} · generated ${new Date(data.generated_at).toLocaleString()}`;
+    $('kpis').innerHTML = [
+        card('Students enrolled', fmt(st.total), `${fmt(st.active)} active now`),
+        card('Net fees payable', `Rs ${fmt(fees.payable)}`, `${fmt(fees.fee_rows)} fee rows · discounts Rs ${fmt(fees.discounts)} · collected Rs ${fmt(fees.collected_to_selected_vouchers)} · outstanding est. Rs ${fmt(fees.estimated_outstanding)}`),
+        card('Account inflow', `Rs ${fmt(accounts.money_in)}`, `${fmt(accounts.entries)} account entries`),
+        card('Account outflow', `Rs ${fmt(accounts.money_out)}`, 'All recorded account outflow'),
+        card('Staff', fmt(staff.total), `${fmt(staff.active)} active now`),
+        card('Payroll paid', `Rs ${fmt(staff.payroll_paid)}`, `${fmt(staff.payroll_rows)} payroll rows in period`),
+        card('Payroll unpaid', `Rs ${fmt(staff.payroll_unpaid)}`, 'Saved payroll marked unpaid'),
+        card('Follow-up calls', fmt(followups.calls), `Promises logged at those calls: Rs ${fmt(followups.promised_amount)}`)
+    ].join('');
+    rows('classRows', st.by_class, [row => row.label, row => fmt(row.count)]);
+    rows('feeRows', fees.by_type, [row => row.label, row => fmt(row.count), row => `Rs ${fmt(row.payable)}`, row => `Rs ${fmt(row.discount)}`]);
+    rows('accountRows', accounts.by_account, [row => row.label, row => `Rs ${fmt(row.money_in)}`, row => `Rs ${fmt(row.money_out)}`]);
+    rows('attendanceRows', staff.attendance, [row => row.label, row => fmt(row.count)]);
+    rows('followupRows', followups.by_outcome, [row => row.label, row => fmt(row.count)]);
+    $('booksSummary').textContent = `Books: ${fmt(data.books && data.books.records)} saved records · ${fmt(data.books && data.books.transactions)} dated transactions in period · ${fmt(data.books && data.books.units)} units`;
+    $('incrementSummary').textContent = `Increments (all saved records): ${fmt(data.increments && data.increments.records)} · Rs ${fmt(data.increments && data.increments.amount)} in the selected period`;
+}
+function exportReport() {
+    if (!flag('export')) { deny('Export permission is required to download reports.'); return; }
+    if (!reportData) { status('Load a report before exporting.', false); return; }
+    const result = reportData, flat = [];
+    const add = (section, label, value) => flat.push({period_from:result.from, period_to:result.to, section, label, value});
+    ['students','fees','accounts','books','staff','followups','increments'].forEach(section => {
+        const values = result[section] || {};
+        Object.entries(values).forEach(([key, value]) => {
+            if (Array.isArray(value)) value.forEach(row => add(section + ':' + key, row.label || 'Unspecified', JSON.stringify(row)));
+            else if (value === null || ['string','number','boolean'].includes(typeof value)) add(section, key, value);
+        });
+    });
+    const columns = ['period_from','period_to','section','label','value'];
+    const quote = value => {
+        let text = String(value == null ? '' : value);
+        if (/^[\s]*[=+\-@]/.test(text)) text = "'" + text;
+        return `"${text.replace(/"/g, '""')}"`;
+    };
+    const content = [columns.map(quote).join(','), ...flat.map(row => columns.map(key => quote(row[key])).join(','))].join('\r\n');
+    const url = URL.createObjectURL(new Blob([content], {type:'text/csv;charset=utf-8'}));
+    const link = document.createElement('a'); link.href = url; link.download = `school_reports_${result.from}_${result.to}.csv`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+async function load() {
+    reportData = null;
+    const from = $('fromDate').value, to = $('toDate').value;
+    if (!from || !to || from > to) { status('Choose a valid date range; From must be on or before To.', false); return; }
+    $('applyReport').disabled = $('refreshReport').disabled = true; status('', true);
+    try {
+        const response = await fetch(`${SB_URL}/rest/v1/rpc/app_business_reports`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({p_from: from, p_to: to})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || data.details || `Request failed (${response.status})`);
+        if (!data || !data.students || !data.fees) throw new Error('The report service returned an unexpected response.');
+        render(data);
+    } catch (error) {
+        status(`Could not load business reports: ${error.message}`, false);
+        console.error('Could not load business reports:', error);
+    } finally {
+        $('applyReport').disabled = $('refreshReport').disabled = false;
+    }
+}
+$('preset').onchange = () => { if ($('preset').value !== 'custom') setPreset($('preset').value); };
+['fromDate','toDate'].forEach(id => $(id).onchange = () => { $('preset').value = 'custom'; });
+$('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print(); $('exportReport').onclick = exportReport;
+if (!flag('export')) $('exportReport').disabled = true;
+window.addEventListener('DOMContentLoaded', () => {
+    setPreset('month');
+    load();
+});
+</script>
+</body>
+</html>

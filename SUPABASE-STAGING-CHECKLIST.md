@@ -15,10 +15,12 @@ Use this checklist against a separate staging Supabase project before changing p
 1. In the staging SQL Editor, run `supabase_updates.sql` first. Review any errors and confirm the required columns/indexes exist.
 2. Review the existing policies on all managed tables. `supabase_roles.sql` intentionally drops existing policies on those tables before installing its own; preserve any custom policy requirements before proceeding.
 3. Run `supabase_roles.sql` in staging as a database owner. Do not run it against production as part of this checklist.
-4. Run `supabase_staff_attendance.sql` to create attendance, add the payroll calculation columns, and install RLS. Confirm existing payroll rows remain intact.
-5. Run `supabase_require_previous_day_close.sql` in staging to add the opt-in role-based previous-day write gates.
-6. Run each read-only statement in `supabase_staging_validation.sql` and review every result set. Missing required tables, disabled RLS, unexpected anonymous grants, missing policies, or missing helper functions are blockers.
-7. If the app has no administrator yet, create the initial Auth user and add its exact email to `public.app_users` using the setup procedure in `README.md`. Do not share the password or access token.
+4. Run `supabase_followups_access.sql` to install the permission-checked, read-only Follow-up data function.
+5. Run `supabase_staff_attendance.sql` to create attendance, add the payroll calculation columns, and install RLS. Confirm existing payroll rows remain intact.
+6. Run `supabase_require_previous_day_close.sql` in staging to add the opt-in role-based previous-day write gates.
+7. Run `supabase_reports_audit.sql` to install permission-checked report and audit functions plus write triggers. Confirm the built-in Admin role has Reports and Audit Trail → View.
+8. Run each read-only statement in `supabase_staging_validation.sql` and review every result set. Missing required tables, disabled RLS, unexpected anonymous grants, missing policies, or missing helper functions are blockers.
+9. If the app has no administrator yet, create the initial Auth user and add its exact email to `public.app_users` using the setup procedure in `README.md`. Do not share the password or access token.
 
 ## 3. Exercise authorization as real users
 
@@ -28,6 +30,11 @@ SQL Editor checks typically run with elevated privileges and do **not** prove th
 - [ ] Read-only role: can view permitted pages; add/edit/delete actions are denied.
 - [ ] Teacher or follow-up role: can see only permitted student/follow-up information.
 - [ ] Accounts role: can perform permitted financial actions; unrelated staff/user administration is denied.
+- [ ] Follow-up-only role with View (and optionally Add) on Follow-up Calls, but no View on Students, Fees, or Accounts: can see accurate follow-up dues and record calls if permitted.
+- [ ] The follow-up-only role cannot directly SELECT students, fees, or accounts through PostgREST, and calling `app_followup_data()` without Follow-up View returns a permission error.
+- [ ] A Reports-only role can use `app_business_reports()` but cannot directly SELECT source tables; a role without Reports View is denied.
+- [ ] An Audit-only role can use `app_audit_events()` but cannot directly SELECT, insert, update, or delete `audit_log`; a role without Audit View is denied.
+- [ ] Create, edit, and delete disposable records in students, fees, accounts, staff, payroll/attendance, books, settings, users/roles, and follow-ups; verify each action creates the correct actor, table, operation, row key, and changed fields in the audit report.
 - [ ] Staff roles can add daily attendance only with add permission and correct existing marks only with edit permission; view-only users cannot write attendance.
 - [ ] Only an active user with the exact `Admin` role can save or remove an attendance exemption; non-Admins cannot set exemption flags through direct PostgREST requests.
 - [ ] Disabled user: after signing out and signing back in, cannot read or change app data.

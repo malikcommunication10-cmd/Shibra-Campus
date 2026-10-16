@@ -84,8 +84,10 @@ window.fetch = async function (input, init) {
 // ---- pages, actions and special permissions --------------------------------
 const PAGES = [['dashboard', 'Dashboard', 'index.html'], ['students', 'Students Directory', 'students.html'], ['increments', 'Bulk Updation', 'increments.html'], ['fees', 'Fee Vouchers', 'fees.html'],
     ['followups', 'Follow-up Calls', 'followups.html'], ['books', 'Book Store', 'books.html'], ['accounts', 'Accounts & Daybook', 'accounts.html'], ['staff', 'Staff & Payroll', 'staff.html'],
+    ['reports', 'Business Reports', 'reports.html'], ['audit', 'Audit Trail', 'audit.html'],
     ['settings', 'System Settings', 'settings.html'], ['users', 'Users & Roles', 'users.html']];
 const PAGE_ACTS = [['v', 'View'], ['a', 'Add'], ['e', 'Edit'], ['d', 'Delete']];
+const READ_ONLY_PAGES = new Set(['reports', 'audit']);
 const PERM_FLAGS = [['money', 'See money totals on the dashboard'], ['export', 'Download CSV / backup'], ['assign', 'Assign follow-ups to teachers'], ['allfollow', 'See ALL follow-up families (not only the assigned ones)'],
     ['closeday', 'Close / reopen the day'], ['requiredayclose', 'Require closing all previous days before working today'], ['editclosed', 'Change entries of closed or old days'], ['todayonly', 'Change (edit / delete) only the entries of the current open day']];
 const PAGE_FILE = {}; PAGES.forEach(p => { PAGE_FILE[p[2]] = p[0]; });
@@ -270,8 +272,6 @@ async function loadSettingLists() {
     } catch (e) { console.error('Settings lists', e); }
     // rules saved on the Settings page also drive the Staff / Book Store pages
     try {
-        if (out.rules['Payroll Working Days'] !== undefined) localStorage.setItem('payroll_days', out.rules['Payroll Working Days']);
-        if (out.rules['Payroll Free Leaves'] !== undefined) localStorage.setItem('payroll_free', out.rules['Payroll Free Leaves']);
         if (out.rules['Low Stock Limit'] !== undefined) localStorage.setItem('books_low_stock', out.rules['Low Stock Limit']);
     } catch (e) {}
     _settingLists = out;
