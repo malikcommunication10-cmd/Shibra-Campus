@@ -350,7 +350,8 @@ const SETUP_SQL = `alter table public.books
   add column if not exists notes text,
  add column if not exists item_class text,
  add column if not exists category text,
- add column if not exists sale_price numeric;`;
+ add column if not exists sale_price numeric,
+ add column if not exists unit_price numeric;`;
 
 // ====================================================================================
 //  STATE + HELPERS
