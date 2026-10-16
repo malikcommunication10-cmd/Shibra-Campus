@@ -70,7 +70,7 @@ const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, ch =
 const n = value => Number(value) || 0;
 const fmt = value => n(value).toLocaleString(undefined, {maximumFractionDigits: 2});
 const iso = date => date.toISOString().slice(0, 10);
-let reportData = null;
+let reportData = null, reportRequestId = 0, reportFilterTimer = null;
 function periodDates(preset) {
     const today = todayYmd().split('-').map(Number), y = today[0], m = today[1], d = today[2];
     const utc = (year, month, day) => new Date(Date.UTC(year, month - 1, day));
@@ -140,9 +140,14 @@ function exportReport() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function load() {
+    const requestId = ++reportRequestId;
     reportData = null;
     const from = $('fromDate').value, to = $('toDate').value;
-    if (!from || !to || from > to) { status('Choose a valid date range; From must be on or before To.', false); return; }
+    if (!from || !to || from > to) {
+        $('applyReport').disabled = $('refreshReport').disabled = false;
+        status('Choose a valid date range; From must be on or before To.', false);
+        return;
+    }
     $('applyReport').disabled = $('refreshReport').disabled = true; status('', true);
     try {
         const response = await fetch(`${SB_URL}/rest/v1/rpc/app_business_reports`, {
@@ -152,16 +157,25 @@ async function load() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || data.details || `Request failed (${response.status})`);
         if (!data || !data.students || !data.fees) throw new Error('The report service returned an unexpected response.');
+        if (requestId !== reportRequestId) return;
         render(data);
     } catch (error) {
+        if (requestId !== reportRequestId) return;
         status(`Could not load business reports: ${error.message}`, false);
         console.error('Could not load business reports:', error);
     } finally {
-        $('applyReport').disabled = $('refreshReport').disabled = false;
+        if (requestId === reportRequestId) $('applyReport').disabled = $('refreshReport').disabled = false;
     }
 }
-$('preset').onchange = () => { if ($('preset').value !== 'custom') setPreset($('preset').value); };
-['fromDate','toDate'].forEach(id => $(id).onchange = () => { $('preset').value = 'custom'; });
+function applyReportFiltersSoon() {
+    clearTimeout(reportFilterTimer);
+    reportFilterTimer = setTimeout(load, 250);
+}
+$('preset').onchange = () => {
+    if ($('preset').value !== 'custom') setPreset($('preset').value);
+    applyReportFiltersSoon();
+};
+['fromDate','toDate'].forEach(id => $(id).onchange = () => { $('preset').value = 'custom'; applyReportFiltersSoon(); });
 $('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print(); $('exportReport').onclick = exportReport;
 if (!flag('export')) $('exportReport').disabled = true;
 window.addEventListener('DOMContentLoaded', () => {

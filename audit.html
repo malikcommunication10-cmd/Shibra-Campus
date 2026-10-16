@@ -52,7 +52,7 @@
 <script>
 const $ = id => document.getElementById(id), PAGE_SIZE = 50;
 const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-let currentPage = 0, total = 0, events = [];
+let currentPage = 0, total = 0, events = [], auditRequestId = 0, auditFilterTimer = null;
 const iso = date => date.toISOString().slice(0, 10);
 function periodDates(preset) {
     const today = todayYmd().split('-').map(Number), y = today[0], m = today[1], d = today[2];
@@ -84,8 +84,13 @@ function render() {
     }).join('') : '<tr><td colspan="6" class="p-4 text-sm text-slate-500">No audit events match these filters.</td></tr>';
 }
 async function loadAudit() {
+    const requestId = ++auditRequestId;
     const from = $('fromDate').value, to = $('toDate').value;
-    if (!from || !to || from > to) { setStatus('Choose a valid date range; From must be on or before To.', false); return; }
+    if (!from || !to || from > to) {
+        $('applyAudit').disabled = false;
+        setStatus('Choose a valid date range; From must be on or before To.', false);
+        return;
+    }
     $('applyAudit').disabled = true; setStatus('', true);
     try {
         const response = await fetch(`${SB_URL}/rest/v1/rpc/app_audit_events`, {
@@ -99,16 +104,27 @@ async function loadAudit() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || result.details || `Request failed (${response.status})`);
         if (!result || !Array.isArray(result.events)) throw new Error('The audit service returned an unexpected response.');
+        if (requestId !== auditRequestId) return;
         events = result.events; total = Number(result.total) || 0; render();
     } catch (error) {
+        if (requestId !== auditRequestId) return;
         events = []; total = 0; render(); setStatus(`Could not load audit events: ${error.message}`, false);
         console.error('Could not load audit events:', error);
-    } finally { $('applyAudit').disabled = false; }
+    } finally { if (requestId === auditRequestId) $('applyAudit').disabled = false; }
+}
+function applyAuditFiltersSoon() {
+    clearTimeout(auditFilterTimer);
+    auditFilterTimer = setTimeout(() => { currentPage = 0; loadAudit(); }, 250);
 }
 const tableNames = ['students','fees','accounts','increments','books','staff','payroll','staff_attendance','call_logs','settings','app_users','app_roles','day_close'];
 tableNames.forEach(name => { const option = document.createElement('option'); option.value = `public.${name}`; option.textContent = name; $('tableFilter').appendChild(option); });
-$('period').onchange = () => { if ($('period').value !== 'custom') setPreset($('period').value); };
-['fromDate','toDate'].forEach(id => $(id).onchange = () => { $('period').value = 'custom'; });
+$('period').onchange = () => {
+    if ($('period').value !== 'custom') setPreset($('period').value);
+    applyAuditFiltersSoon();
+};
+['fromDate','toDate'].forEach(id => $(id).onchange = () => { $('period').value = 'custom'; applyAuditFiltersSoon(); });
+['tableFilter','operationFilter'].forEach(id => $(id).onchange = applyAuditFiltersSoon);
+['actorFilter','searchFilter'].forEach(id => $(id).addEventListener('input', applyAuditFiltersSoon));
 $('applyAudit').onclick = () => { currentPage = 0; loadAudit(); };
 $('previousAudit').onclick = () => { if (currentPage > 0) { currentPage--; loadAudit(); } };
 $('nextAudit').onclick = () => { if ((currentPage + 1) * PAGE_SIZE < total) { currentPage++; loadAudit(); } };
