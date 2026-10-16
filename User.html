@@ -70,7 +70,7 @@
 
 <!-- permissions modal -->
 <div id="permModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-3"><div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[94vh] flex flex-col">
-    <div class="p-4 border-b"><h3 id="pTitle" class="font-bold text-indigo-900"></h3><p class="text-xs text-slate-500">Tick what this role may do. Add / Edit / Delete also give View.</p>
+    <div class="p-4 border-b"><h3 id="pTitle" class="font-bold text-indigo-900"></h3><p class="text-xs text-slate-500">Tick what this role may do. Add / Edit / Delete also give View. Requiring previous-day close also grants day-close controls.</p>
         <div class="flex gap-2 mt-2 text-[11px] font-semibold"><button onclick="presetPerm('none')" class="px-2 py-1 bg-slate-100 rounded">Clear all</button><button onclick="presetPerm('view')" class="px-2 py-1 bg-slate-100 rounded">View only</button><button onclick="presetPerm('all')" class="px-2 py-1 bg-slate-100 rounded">Everything</button></div></div>
     <div class="p-4 overflow-y-auto space-y-4">
         <table class="w-full text-xs"><thead class="text-slate-500"><tr><th class="text-left p-1.5">Page</th><th class="p-1.5">View</th><th class="p-1.5">Add</th><th class="p-1.5">Edit</th><th class="p-1.5">Delete</th></tr></thead><tbody id="permRows"></tbody></table>
@@ -86,7 +86,7 @@ function toast(m, ok) { const d = document.createElement('div'); d.className = '
 function openModal(id) { $(id).classList.remove('hidden'); $(id).classList.add('flex'); }
 function closeModal(id) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
 let users = [], roles = [], closes = [], permTarget = null;
-const H = () => ({ 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+const H = () => ({ apikey: SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
 const roleOf = n => roles.find(r => r.name === n);
 const permsOf = u => u.perms || (roleOf(u.role) || {}).perms || { pages: {}, flags: [] };
 const adminCount = () => users.filter(u => u.active !== false && u.role === 'Admin' && !u.perms).length;
@@ -112,6 +112,7 @@ function collectPerms() {
     const pages = {};
     PAGES.forEach(pg => { let s = ''; PAGE_ACTS.forEach(a => { if ($(`pm_${pg[0]}_${a[0]}`).checked) s += a[0]; }); if (s && !s.includes('v')) s = 'v' + s; if (s) pages[pg[0]] = s; });
     const flags = PERM_FLAGS.filter(f => $('pf_' + f[0]).checked).map(f => f[0]);
+    if (flags.includes('requiredayclose') && !flags.includes('closeday')) flags.push('closeday');
     return { pages, flags };
 }
 
