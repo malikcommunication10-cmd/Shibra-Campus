@@ -29,6 +29,7 @@ SQL Editor checks typically run with elevated privileges and do **not** prove th
 - [ ] Teacher or follow-up role: can see only permitted student/follow-up information.
 - [ ] Accounts role: can perform permitted financial actions; unrelated staff/user administration is denied.
 - [ ] Staff roles can add daily attendance only with add permission and correct existing marks only with edit permission; view-only users cannot write attendance.
+- [ ] Only an active user with the exact `Admin` role can save or remove an attendance exemption; non-Admins cannot set exemption flags through direct PostgREST requests.
 - [ ] Disabled user: after signing out and signing back in, cannot read or change app data.
 - [ ] Unauthenticated session: cannot read or change app data.
 - [ ] Day-close restrictions and any `todayonly` permission behave as expected.
@@ -43,8 +44,11 @@ Use a disposable staging record for write/delete tests. Do not test destructive 
 - [ ] Confirm exactly one valid School Year value is configured in System Settings before testing fee generation.
 - [ ] Generate a test voucher, record a test payment, and verify balances and ledger dates.
 - [ ] Generate the same test period again and verify the app does not create unintended duplicate charges.
-- [ ] Mark attendance for all configured working dates; verify an absent day deduction, the no-absence bonus, and one daily deduction at exactly 3 late marks.
-- [ ] Verify two late marks have no deduction, late counts reset for the next month, and incomplete attendance blocks payroll generation.
+- [ ] Verify Sundays are skipped and payroll requires every Monday–Saturday date in the staff member's applicable employment period.
+- [ ] Test 29-, 30-, and 31-day months and confirm the daily salary and bonus always use base salary ÷ 30.
+- [ ] Verify an unexcused absence is deducted, an Admin-excused absence is not deducted but still cancels the no-absence bonus, and every exemption requires a saved reason.
+- [ ] Verify two unexcused late marks have no deduction, exactly 3 deduct one daily salary, Admin-excused lates do not count, and late counts reset for the next month.
+- [ ] Verify incomplete attendance blocks payroll generation and historical payroll rows remain unchanged until explicitly adjusted.
 - [ ] Change the school year in staging and verify existing vouchers remain unchanged while new periods use the configured year.
 - [ ] Test student add/edit, discounts, annual fund, payroll, follow-up ledger, import preview, and backup/restore as applicable.
 - [ ] Test login and critical workflows at 375px, 768px, and 1280px viewport widths.
