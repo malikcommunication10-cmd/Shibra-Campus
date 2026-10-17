@@ -45,7 +45,7 @@
         <section id="kpis" class="grid grid-cols-2 gap-3"></section>
         <section class="report-grid">
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="classContent">Students by class</button><div id="classContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Students</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>Total students</td><td id="classTotal">0</td></tr></tfoot></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="classContent">Students by class</button><div id="classContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active students</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
             </article>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="tuitionContent">Students by monthly tuition fee</button>
@@ -53,7 +53,7 @@
                     <tfoot><tr class="font-bold bg-indigo-50"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
             </article>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="feeContent">Fees by type</button><div id="feeContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Fee type</th><th>Fee rows</th><th>Gross payable</th><th>Discounts</th><th>Net payable</th></tr></thead><tbody id="feeRows"></tbody></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="feeContent">Fees by type</button><div id="feeContent" class="report-card-content overflow-x-auto"><table class="report-table min-w-[1200px]"><thead><tr><th rowspan="2">Fee type</th><th colspan="4" class="text-center">Active students</th><th colspan="4" class="text-center">Left students</th><th colspan="4" class="text-center">All records</th></tr><tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr></thead><tbody id="feeRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot></table></div>
             </article>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="accountContent">Account activity</button><div id="accountContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
@@ -132,11 +132,33 @@ function render(data) {
         card('Payroll unpaid', `Rs ${fmt(staff.payroll_unpaid)}`, 'Saved payroll marked unpaid'),
         card('Follow-up calls', fmt(followups.calls), `Promises logged at those calls: Rs ${fmt(followups.promised_amount)}`)
     ].join('');
-    rows('classRows', st.by_class, [row => row.label, row => fmt(row.count)]);
+    rows('classRows', st.by_class, [row => row.label, row => fmt(row.count), row => fmt(row.left_count), row => fmt(row.net_count)]);
     $('classTotal').textContent = fmt(st.total);
+    $('classLeftTotal').textContent = fmt(st.left);
+    $('classNetTotal').textContent = fmt(st.active);
     rows('tuitionRows', st.by_tuition_fee, [row => `Rs ${fmt(row.label)}`, row => fmt(row.count)]);
     $('averageTuitionFee').textContent = `Rs ${fmt(st.average_tuition_fee)}`;
-    rows('feeRows', fees.by_type, [row => row.label, row => fmt(row.count), row => `Rs ${fmt(row.payable)}`, row => `Rs ${fmt(row.discount)}`, row => `Rs ${fmt(row.net_payable)}`]);
+    const feeTypes = Array.isArray(fees.by_type) ? fees.by_type : [];
+    rows('feeRows', feeTypes, [
+        row => row.label,
+        row => fmt(row.active_count), row => `Rs ${fmt(row.active_payable)}`, row => `Rs ${fmt(row.active_discount)}`, row => `Rs ${fmt(row.active_net_payable)}`,
+        row => fmt(row.left_count), row => `Rs ${fmt(row.left_payable)}`, row => `Rs ${fmt(row.left_discount)}`, row => `Rs ${fmt(row.left_net_payable)}`,
+        row => fmt(row.count), row => `Rs ${fmt(row.payable)}`, row => `Rs ${fmt(row.discount)}`, row => `Rs ${fmt(row.net_payable)}`
+    ]);
+    const feeTotals = feeTypes.reduce((totals, row) => {
+        ['active_count','active_payable','active_discount','active_net_payable','left_count','left_payable','left_discount','left_net_payable','count','payable','discount','net_payable'].forEach(key => {
+            totals[key] += n(row[key]);
+        });
+        return totals;
+    }, {active_count:0,active_payable:0,active_discount:0,active_net_payable:0,left_count:0,left_payable:0,left_discount:0,left_net_payable:0,count:0,payable:0,discount:0,net_payable:0});
+    [
+        ['feeActiveCountTotal', feeTotals.active_count, false], ['feeActiveGrossTotal', feeTotals.active_payable, true],
+        ['feeActiveDiscountTotal', feeTotals.active_discount, true], ['feeActiveNetTotal', feeTotals.active_net_payable, true],
+        ['feeLeftCountTotal', feeTotals.left_count, false], ['feeLeftGrossTotal', feeTotals.left_payable, true],
+        ['feeLeftDiscountTotal', feeTotals.left_discount, true], ['feeLeftNetTotal', feeTotals.left_net_payable, true],
+        ['feeAllCountTotal', feeTotals.count, false], ['feeAllGrossTotal', feeTotals.payable, true],
+        ['feeAllDiscountTotal', feeTotals.discount, true], ['feeAllNetTotal', feeTotals.net_payable, true]
+    ].forEach(([id, value, currency]) => { $(id).textContent = currency ? `Rs ${fmt(value)}` : fmt(value); });
     renderAccountRows(accounts.by_account);
     rows('attendanceRows', staff.attendance, [row => row.label, row => fmt(row.count)]);
     rows('followupRows', followups.by_outcome, [row => row.label, row => fmt(row.count)]);
