@@ -327,20 +327,35 @@ function makeVidGenerator(used){
 }
 
 /* ---------- Load ---------- */
-async function fetchAll(t) { const r = await sbFetchAll(t, 'select=*'); return await r.json(); }
+async function fetchAll(t, columns = '*') { const r = await sbFetchAll(t, `select=${columns}`); return await r.json(); }
 async function initFeePage(){
-  setFeeSchoolYear(await getSchoolYear());
-  fillPaySelects(['payToAccount','bulkAccount']).then(l=>{payChoices=l}).catch(()=>{});
+  showLoading("Loading data...");
+  const settingsPromise = loadSettingLists();
   $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
+  let loaded;
+  try {
+    loaded = await Promise.all([
+      settingsPromise,
+      fetchAll('students'),
+      fetchAll('increments', 'admis_no,effective_period,old_fee,new_fee,fee_type,annual_fund,remarks'),
+      fetchAll('accounts', 'voucher_id,amount_in,date,description,remarks'),
+      fetchAll('fees')
+    ]);
+    setFeeSchoolYear(await getSchoolYear());
+    payChoices = await fillPaySelects(['payToAccount','bulkAccount']);
+  } catch (e) {
+    console.error(e);
+    hideLoading();
+    $('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`;
+    return;
+  }
   if(!$('voucherPeriod').options.length){
     $('voucherPeriod').innerHTML=MONTHS.map(m=>`<option>${m}</option>`).join('')+`<option value="ALL_YEAR">🚀 Generate all (Jan to Dec ${SCHOOL_YEAR})</option>`;
     const mo=MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
     $('fromMonth').innerHTML=mo;$('toMonth').innerHTML=mo;resetRange(true);
   }
-  showLoading("Loading data...");
   try{
-    const g=fetchAll;
-    const [students,increments,accounts,fees]=await Promise.all(['students','increments','accounts','fees'].map(g));
+    const [,students,increments,accounts,fees]=loaded;
     if(Array.isArray(students)){allStudentsCache=students;populateClassDropdown(students)}
     incrementsCacheMap={};
     if(Array.isArray(increments))increments.forEach(i=>{const a=(i.admis_no||'').trim().toLowerCase();if(a)incrementsCacheMap[a]=i});

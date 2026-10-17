@@ -436,6 +436,7 @@ async function initFollowups() {
     showLoading('Loading data...');
     try {
         let c = getSupabaseConfig();
+        const logsPromise = loadLogs(false);
         let dataResponse = await fetch(`${c.url}/rest/v1/rpc/app_followup_data`, { headers: sbHeaders() });
         if(!dataResponse.ok) {
             let detail = await dataResponse.text();
@@ -470,7 +471,7 @@ async function initFollowups() {
             allFees.forEach((r, i) => { r._paid = pa[i]; r._balance = r._payable - pa[i]; });
         }
 
-        await loadLogs(false);
+        await logsPromise;
         populateClassFilter();
         refreshAll();
     } catch (e) {

@@ -465,13 +465,20 @@ function normalize(row, idx) {
 async function initAccounts() {
     _bd = null;
     showLoading('Loading accounts...');
-    try { const L = await loadSettingLists(); INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; setupWallets(L['Payment Account']); if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD); if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable'); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable'); if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD); } catch (e) { console.error(e); }
-    let c = getSupabaseConfig();
+    const settingsPromise = loadSettingLists();
     try {
-        let [aRes, fRes] = await Promise.all([
-            sbFetchAll('accounts', 'select=*&order=date.asc,voucher_id.asc'),
-            sbFetchAll('fees', 'select=voucher_id,admis_no,student_name,class,period,type')
+        let [L, [aRes, fRes]] = await Promise.all([
+            settingsPromise,
+            Promise.all([
+                sbFetchAll('accounts', 'select=*&order=date.asc,voucher_id.asc'),
+                sbFetchAll('fees', 'select=voucher_id,admis_no,student_name,class,period,type')
+            ])
         ]);
+        INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; setupWallets(L['Payment Account']);
+        if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD);
+        if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable');
+        if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable');
+        if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD);
         let acc = await aRes.json(), fees = await fRes.json();
         feesByVoucher = {};
         (Array.isArray(fees) ? fees : []).forEach(f => { feesByVoucher[String(f.voucher_id || '').trim()] = f; });
@@ -529,6 +536,12 @@ function scopeList() {
 function showTab(t) {
     ['overview', 'daybook', 'fees', 'heads', 'wallets', 'dues'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
+    if (t === 'overview') renderOverview();
+    else if (t === 'daybook') renderDaybook();
+    else if (t === 'fees') renderFeeTab();
+    else if (t === 'heads') renderHeads();
+    else if (t === 'wallets') renderWallets();
+    else if (t === 'dues') renderDues();
     const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable' };
     let r = getRange();
     $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;
@@ -536,7 +549,6 @@ function showTab(t) {
 function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
 
 function renderAll() {
-    renderOverview(); renderDaybook(); renderFeeTab(); renderHeads(); renderWallets(); renderDues();
     showTab(currentTab());
 }
 
@@ -736,7 +748,7 @@ function renderWallets() {
     let total = 0;
     let cards = Object.keys(WALLETS).map(w => {
         let b = balanceUpTo(end, w); total += b;
-        return `<button onclick="$('gWallet').value='${w}';renderAll();showTab('daybook')" class="text-left bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-indigo-300 transition print-card">
+        return `<button onclick="$('gWallet').value='${w}';showTab('daybook')" class="text-left bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-indigo-300 transition print-card">
             <div class="text-xs text-slate-500">${WALLETS[w].icon} ${WALLETS[w].label}</div><div class="text-xl font-extrabold ${b >= 0 ? 'text-slate-900' : 'text-rose-600'} mt-1">PKR ${fmt(b)}</div><div class="text-[11px] text-slate-400 mt-0.5">as of ${fmtDate(end)}</div></button>`;
     });
     cards.push(`<div class="bg-indigo-900 text-white rounded-2xl p-4 shadow-sm"><div class="text-xs text-indigo-200">Total balance</div><div class="text-xl font-extrabold mt-1">PKR ${fmt(total)}</div><div class="text-[11px] text-indigo-300 mt-0.5">Cash + Bank + Online</div></div>`);
