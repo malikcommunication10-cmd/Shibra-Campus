@@ -193,7 +193,7 @@
                 <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
-                            <tr><th class="p-2.5">Staff</th><th class="p-2.5 text-right">Base</th><th class="p-2.5 text-right">Absent (excused)</th><th class="p-2.5 text-right">Absence ded.</th><th class="p-2.5 text-right">Late (excused)</th><th class="p-2.5 text-right">Late ded.</th><th class="p-2.5 text-right">Bonus</th><th class="p-2.5 text-right">Fine</th><th class="p-2.5 text-right">Advance</th><th class="p-2.5 text-right">Net salary</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
+                            <tr><th class="p-2.5">Staff</th><th class="p-2.5 text-right">Base</th><th class="p-2.5 text-right">Salary days</th><th class="p-2.5 text-right">Dates marked</th><th class="p-2.5 text-right">Absent (excused)</th><th class="p-2.5 text-right">Absence ded.</th><th class="p-2.5 text-right">Late (excused)</th><th class="p-2.5 text-right">Late ded.</th><th class="p-2.5 text-right">Bonus</th><th class="p-2.5 text-right">Fine</th><th class="p-2.5 text-right">Advance</th><th class="p-2.5 text-right">Net salary</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
                         </thead>
                         <tbody id="prBody"></tbody>
                         <tfoot id="prFoot" class="sticky bottom-0 bg-slate-100 font-bold"></tfoot>
@@ -262,6 +262,24 @@
         </div>
     </div>
 
+    <!-- MONTHLY ATTENDANCE / PAYROLL SETUP -->
+    <div id="genPayrollModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-4xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                <div><h3 class="text-lg font-bold text-indigo-950">Monthly attendance & salary days</h3><p id="genPayrollSub" class="text-xs text-slate-500"></p></div>
+                <button onclick="closeModal('genPayrollModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-3">
+                <p class="text-xs text-slate-600 bg-indigo-50 border border-indigo-100 rounded-xl p-3">Set salary days (0–30) and deductible leave days for each staff member. Unmarked working dates will be saved as Present; already saved Present, Absent, or Late records will not be changed. Add a reason whenever you override the standard salary days or leave deduction.</p>
+                <div id="genPayrollRows" class="space-y-3"></div>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2 sticky bottom-0 bg-white">
+                <button onclick="closeModal('genPayrollModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="confirmGeneratePayroll()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save attendance & generate salary</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ADJUST MODAL -->
     <div id="adjModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
         <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
@@ -273,15 +291,19 @@
                 <p id="adjJoinHint" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2"></p>
                 <div class="grid grid-cols-3 gap-3">
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Base salary</label><input id="adjBase" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Deductible absent days</label><input id="adjLeaves" type="number" min="0" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 outline-none"></div>
+                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Salary days (0–30)</label><input id="adjSalaryDays" type="number" min="0" max="30" step="1" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Deductible leave days</label><input id="adjLeaves" type="number" min="0" max="30" step="1" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Late marks</label><input id="adjLate" type="number" min="0" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 outline-none"></div>
+                    <div class="text-[11px] text-slate-500 self-end pb-2">Daily rate = base salary ÷ 30</div>
                 </div>
                 <div class="grid grid-cols-3 gap-3 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
                     <div><label class="block text-xs font-medium text-emerald-700 mb-1">Bonus (+)</label><input id="adjBonus" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"></div>
                     <div><label class="block text-xs font-medium text-rose-700 mb-1">Fine (−)</label><input id="adjFine" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"></div>
                     <div><label class="block text-xs font-medium text-amber-700 mb-1">Advance (−)</label><input id="adjAdv" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"></div>
                 </div>
-                <div><label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label><input id="adjNotes" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                <div><label class="block text-xs font-medium text-slate-700 mb-1">Remarks <span class="text-slate-400">(required when salary days or leave deduction is changed)</span></label><input id="adjNotes" type="text" maxlength="300" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                 <div class="bg-slate-50 border rounded-xl p-4 text-sm space-y-1">
                     <div class="flex justify-between"><span class="text-slate-500">Base salary</span><b id="bdBase">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500" id="bdLeaveLbl">Leave deduction</span><b id="bdLeave" class="text-rose-600">0</b></div>
@@ -327,7 +349,7 @@
         <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-3">
             <h3 class="text-lg font-bold text-indigo-950">Attendance & salary rules</h3>
             <p class="text-sm text-slate-700">Daily salary = monthly base salary ÷ 30, regardless of the calendar month's length.</p>
-            <p class="text-[11px] text-slate-500">Sundays are off. Each unexcused absence is deducted; an Admin may excuse it with a reason, waiving the deduction, but it still disqualifies the no-absence bonus. No absences earns a one-day salary bonus; late marks count as present for that bonus. Each group of 3 unexcused late marks deducts one day. Historical payroll is not recalculated.</p>
+            <p class="text-[11px] text-slate-500">Sundays are off. Salary days can be set from 0 to 30; each deductible leave and every group of 3 unexcused late marks deducts one daily salary. Manual salary-day or leave adjustments require a reason. Missing daily attendance can be completed as Present during payroll generation, without changing saved records. An Admin may excuse an absence with a reason, but it still disqualifies the no-absence bonus. No absences earns a one-day salary bonus; late marks count as present for that bonus. Historical payroll is not recalculated.</p>
             <div class="flex justify-end pt-1"><button onclick="closeModal('rulesModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button></div>
         </div>
     </div>
@@ -365,6 +387,7 @@ create table if not exists public.payroll (
   excused_lates integer not null default 0,
   late_deduction numeric not null default 0,
   attendance_days integer not null default 0,
+  salary_days integer not null default 30,
   bonus numeric default 0,
   fine numeric default 0,
   advance numeric default 0,
@@ -384,7 +407,8 @@ alter table public.payroll
   add column if not exists late_count integer not null default 0,
   add column if not exists excused_lates integer not null default 0,
   add column if not exists late_deduction numeric not null default 0,
-  add column if not exists attendance_days integer not null default 0;
+  add column if not exists attendance_days integer not null default 0,
+  add column if not exists salary_days integer not null default 30;
 alter table public.payroll enable row level security;
 revoke all on table public.payroll from anon;
 drop policy if exists shibra_select on public.payroll;
@@ -502,7 +526,7 @@ let staff = [], staffByKey = {}, payroll = [], payById = {}, payMap = {};
 let staffExt = false, payrollOk = false, attendanceOk = false;
 let attendanceRows = [], attendanceByStaff = {}, attendanceDrafts = {}, attendanceDirty = false;
 let attendanceDate = '';
-let editingStaffKey = null, adjId = null, payTarget = null;
+let editingStaffKey = null, adjId = null, payTarget = null, payrollGenDrafts = [];
 
 const $ = id => document.getElementById(id);
 const PAYROLL_DIVISOR = 30;
@@ -559,11 +583,12 @@ function serviceLength(joinDate) {
     return y ? `${y} yr${y > 1 ? 's' : ''}${m ? ' ' + m + ' mo' : ''}` : (m ? `${m} mo` : 'New');
 }
 const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-function calcPay(base, leaves, bonus, fine, adv, lateCount = 0) {
+function calcPay(base, leaves, bonus, fine, adv, lateCount = 0, salaryDays = PAYROLL_DIVISOR) {
     let daily = base / PAYROLL_DIVISOR, billable = Math.max(0, leaves);
     let ded = Math.round(daily * billable);
     let lateDed = Math.round(daily * Math.floor(Math.max(0, lateCount) / 3));
-    return { daily, billable, ded, lateDed, net: Math.max(0, Math.round(base - ded - lateDed + bonus - fine - adv)) };
+    let salaryAmount = Math.round(daily * Math.min(PAYROLL_DIVISOR, Math.max(0, salaryDays)));
+    return { daily, billable, ded, lateDed, salaryAmount, net: Math.max(0, Math.round(salaryAmount - ded - lateDed + bonus - fine - adv)) };
 }
 
 // ====================================================================================
@@ -584,7 +609,9 @@ function normPay(r) {
         absenceCount: parseInt(r.absence_count, 10) || parseInt(r.leaves, 10) || 0,
         excusedLeaves: parseInt(r.excused_leaves, 10) || 0,
         lateCount: parseInt(r.late_count, 10) || 0, excusedLates: parseInt(r.excused_lates, 10) || 0,
-        lateDed: parseFloat(r.late_deduction) || 0, attendanceDays: parseInt(r.attendance_days, 10) || 0, bonus: parseFloat(r.bonus) || 0, fine: parseFloat(r.fine) || 0,
+        lateDed: parseFloat(r.late_deduction) || 0, attendanceDays: parseInt(r.attendance_days, 10) || 0,
+        salaryDays: r.salary_days === null || r.salary_days === undefined ? PAYROLL_DIVISOR : (parseInt(r.salary_days, 10) || 0),
+        bonus: parseFloat(r.bonus) || 0, fine: parseFloat(r.fine) || 0,
         advance: parseFloat(r.advance) || 0, net: parseFloat(r.net_salary) || 0, status: String(r.status || 'Unpaid').trim() === 'Paid' ? 'Paid' : 'Unpaid',
         paidDate: String(r.paid_date || '').slice(0, 10), mode: String(r.payment_mode || '').trim(), voucher: String(r.voucher_no || '').trim(), notes: String(r.notes || '').trim() };
 }
@@ -599,7 +626,7 @@ async function initStaff() {
             sbFetchAll('staff', 'select=*'),
             sbFetchAll('payroll', 'select=*'),
             fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`, { headers: sbHeaders() })
         ]);
         let sRows = await sRes.json();
@@ -1000,7 +1027,7 @@ function payrollList() {
 function renderPayroll() {
     let month = curMonth(), all = monthRows(month), list = payrollList();
     $('prNotReady').classList.toggle('hidden', payrollOk);
-    $('prRule').innerText = `${monthLabel(month)} · Daily salary = monthly base ÷ 30 · Sundays off · Unexcused absences are deducted; an excused absence still cancels the no-absence bonus. Every 3 unexcused late marks deduct one daily salary.`;
+    $('prRule').innerText = `${monthLabel(month)} · Daily salary = monthly base ÷ 30 · Salary days can be adjusted from 0–30. Deductible leaves and every 3 unexcused late marks each deduct one daily salary. Manual overrides require a reason.`;
     let net = all.reduce((s, p) => s + p.net, 0), paid = all.filter(p => p.status === 'Paid').reduce((s, p) => s + p.net, 0);
     $('prCards').innerHTML = [
         { t: 'Staff on sheet', v: all.length, c: 'text-indigo-700' },
@@ -1013,21 +1040,21 @@ function renderPayroll() {
         : `<button onclick="openAdjust(${js(p.id)})" title="Adjust salary" class="px-1.5 hover:bg-slate-100 rounded">✏️</button><button onclick="openPay(${js(p.id)})" class="px-2 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold">Pay</button><button onclick="printSlip(${js(p.id)})" title="Salary slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button><button onclick="removePayrollRow(${js(p.id)})" title="Remove from this month" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`;
     $('prBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50 align-top">
         <td class="p-2.5"><div class="flex items-center gap-2">${avatar(p.name)}<div><div class="font-semibold text-slate-800">${esc(p.name)}</div><div class="text-[11px] text-slate-400">${esc(p.designation)}</div></div></div></td>
-        <td class="p-2.5 text-right">${fmt(p.base)}</td><td class="p-2.5 text-right">${p.absenceCount ? `${fmt(p.absenceCount)}${p.excusedLeaves ? ` (${fmt(p.excusedLeaves)} excused)` : ''}` : '-'}</td>
+        <td class="p-2.5 text-right">${fmt(p.base)}</td><td class="p-2.5 text-right">${p.salaryDays}/30</td><td class="p-2.5 text-right">${p.attendanceDays}</td><td class="p-2.5 text-right">${p.absenceCount ? `${fmt(p.absenceCount)}${p.excusedLeaves ? ` (${fmt(p.excusedLeaves)} excused)` : ''}` : '-'}</td>
         <td class="p-2.5 text-right text-rose-600">${p.leaveDed ? fmt(p.leaveDed) : '-'}</td><td class="p-2.5 text-right">${p.lateCount + p.excusedLates ? `${fmt(p.lateCount + p.excusedLates)}${p.excusedLates ? ` (${fmt(p.excusedLates)} excused)` : ''}` : '-'}</td>
         <td class="p-2.5 text-right text-rose-600">${p.lateDed ? fmt(p.lateDed) : '-'}</td><td class="p-2.5 text-right text-emerald-600">${p.bonus ? fmt(p.bonus) : '-'}</td>
         <td class="p-2.5 text-right text-rose-600">${p.fine ? fmt(p.fine) : '-'}</td><td class="p-2.5 text-right text-amber-600">${p.advance ? fmt(p.advance) : '-'}</td>
         <td class="p-2.5 text-right font-extrabold whitespace-nowrap">PKR ${fmt(p.net)}</td>
         <td class="p-2.5">${statusBadge(p.status)}${p.paidDate ? `<div class="text-[11px] text-slate-400 mt-0.5">${fmtDate(p.paidDate)}</div>` : ''}</td>
         <td class="p-2.5 whitespace-nowrap no-print">${acts(p)}</td></tr>`).join('')
-        : `<tr><td colspan="12" class="p-8 text-center text-slate-400">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet. Click “Generate”.` : 'Payroll table not set up yet.'}</td></tr>`;
+        : `<tr><td colspan="14" class="p-8 text-center text-slate-400">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet. Click “Generate”.` : 'Payroll table not set up yet.'}</td></tr>`;
     let sum = k => list.reduce((s, p) => s + p[k], 0);
-    $('prFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right">Totals:</td><td class="p-3 text-right">${fmt(sum('base'))}</td><td class="p-3 text-right">${fmt(sum('absenceCount'))}</td><td class="p-3 text-right">${fmt(sum('leaveDed'))}</td><td class="p-3 text-right">${fmt(sum('lateCount') + sum('excusedLates'))}</td><td class="p-3 text-right">${fmt(sum('lateDed'))}</td><td class="p-3 text-right">${fmt(sum('bonus'))}</td><td class="p-3 text-right">${fmt(sum('fine'))}</td><td class="p-3 text-right">${fmt(sum('advance'))}</td><td class="p-3 text-right">PKR ${fmt(sum('net'))}</td><td colspan="2" class="no-print"></td></tr>` : '';
+    $('prFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right">Totals:</td><td class="p-3 text-right">${fmt(sum('base'))}</td><td class="p-3 text-right">${fmt(sum('salaryDays'))}</td><td class="p-3 text-right">${fmt(sum('attendanceDays'))}</td><td class="p-3 text-right">${fmt(sum('absenceCount'))}</td><td class="p-3 text-right">${fmt(sum('leaveDed'))}</td><td class="p-3 text-right">${fmt(sum('lateCount') + sum('excusedLates'))}</td><td class="p-3 text-right">${fmt(sum('lateDed'))}</td><td class="p-3 text-right">${fmt(sum('bonus'))}</td><td class="p-3 text-right">${fmt(sum('fine'))}</td><td class="p-3 text-right">${fmt(sum('advance'))}</td><td class="p-3 text-right">PKR ${fmt(sum('net'))}</td><td colspan="2" class="no-print"></td></tr>` : '';
     $('prCards2').innerHTML = list.length ? list.map(p => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex items-start justify-between gap-2"><div class="flex items-center gap-3 min-w-0">${avatar(p.name)}<div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(p.name)}</div><div class="text-xs text-slate-500">${esc(p.designation)}</div></div></div>${statusBadge(p.status)}</div>
         <div class="grid grid-cols-3 gap-1 mt-3 text-center text-[11px]"><div><div class="text-slate-400">Base</div><b>${fmt(p.base)}</b></div><div><div class="text-slate-400">Absent / late</div><b>${fmt(p.absenceCount)} / ${fmt(p.lateCount + p.excusedLates)}</b></div><div><div class="text-slate-400">Bonus</div><b class="text-emerald-600">${fmt(p.bonus)}</b></div></div>
         <div class="mt-2 text-[11px] text-slate-500">Absence deduction ${fmt(p.leaveDed)} · Late deduction ${fmt(p.lateDed)} · Fine + advance ${fmt(p.fine + p.advance)}</div>
-        <div class="flex items-end justify-between mt-2"><div class="text-xs text-slate-500">${p.attendanceDays ? `${p.attendanceDays} marked days` : ''}${p.paidDate ? `<div>Paid ${fmtDate(p.paidDate)}</div>` : ''}</div><div class="text-xl font-extrabold">PKR ${fmt(p.net)}</div></div>
+        <div class="flex items-end justify-between mt-2"><div class="text-xs text-slate-500">${p.salaryDays}/30 salary days · ${p.attendanceDays} work dates marked${p.paidDate ? `<div>Paid ${fmtDate(p.paidDate)}</div>` : ''}</div><div class="text-xl font-extrabold">PKR ${fmt(p.net)}</div></div>
         <div class="flex justify-end items-center gap-1 mt-2 border-t pt-2">${acts(p)}</div></div>`).join('')
         : `<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet.` : 'Payroll table not set up yet.'}</div>`;
 }
@@ -1035,42 +1062,129 @@ function renderPayroll() {
 async function generatePayroll() {
     if(!payrollOk) { showTab('payroll'); toast('Please run the one-time SQL at the top of the page first.', false); window.scrollTo({ top: 0 }); return; }
     if(!attendanceOk) { showTab('attendance'); toast('Run the attendance setup SQL before generating attendance-based payroll.', false); window.scrollTo({ top: 0 }); return; }
-    let month = curMonth(), missing = eligibleStaff(month).filter(s => !payMap[s.staffId + '|' + month]);
-    if(monthEnd(month) > todayStr()) { toast('Generate attendance-based payroll after the salary month has ended.', false); return; }
+    const month = curMonth(), missing = eligibleStaff(month).filter(s => !payMap[s.staffId + '|' + month]);
+    if(monthEnd(month) > todayStr()) { toast('Generate payroll after the salary month has ended.', false); return; }
     if(!missing.length) { toast(`The salary sheet for ${monthLabel(month)} is already complete.`); return; }
-    confirmBox(`Create the ${monthLabel(month)} salary sheet for ${missing.length} staff member(s) using saved daily attendance? Sundays are off and all other dates in the month must be marked for each staff member.`, 'Generate', async () => {
-        showLoading('Generating payroll...');
-        try {
-            let c = getSupabaseConfig(), aRes = await sbFetchAll('staff_attendance', `select=staff_id,attendance_date,status,absence_exempt,late_exempt,note&attendance_date=gte.${monthStart(month)}&attendance_date=lte.${monthEnd(month)}`);
-            if(!aRes.ok) throw new Error('Could not read monthly attendance: ' + await aRes.text());
-            let aRows = await aRes.json(), expectedSchoolDates = monthSchoolDays(month), dateSet = new Set(expectedSchoolDates);
-            let summaries = missing.map(s => {
-                let expectedDates = expectedSchoolDates.filter(d => (!s.joining || s.joining <= d) && (s.status === 'Active' || (s.leaving && s.leaving >= d)));
-                let rows = aRows.filter(x => x.staff_id === s.staffId && dateSet.has(String(x.attendance_date).slice(0, 10)) &&
-                    (!s.joining || s.joining <= String(x.attendance_date).slice(0, 10)) &&
-                    (s.status === 'Active' || (s.leaving && s.leaving >= String(x.attendance_date).slice(0, 10))));
-                if(rows.length !== expectedDates.length) throw new Error(`${s.name} is missing attendance for ${expectedDates.length - rows.length} working day(s). Complete attendance before generating payroll.`);
-                let absences = rows.filter(x => x.status === 'absent').length,
-                    excusedLeaves = rows.filter(x => x.status === 'absent' && x.absence_exempt).length,
-                    leaves = absences - excusedLeaves,
-                    lateCount = rows.filter(x => x.status === 'late' && !x.late_exempt).length,
-                    excusedLates = rows.filter(x => x.status === 'late' && x.late_exempt).length;
-                let bonus = absences === 0 ? Math.round(s.base / PAYROLL_DIVISOR) : 0;
-                let calc = calcPay(s.base, leaves, bonus, 0, 0, lateCount);
-                return { staff_id: s.staffId, staff_name: s.name, designation: s.designation, month, base_salary: s.base,
-                    leaves, absence_count: absences, excused_leaves: excusedLeaves,
-                    leave_deduction: calc.ded, working_days: PAYROLL_DIVISOR, late_count: lateCount,
-                    excused_lates: excusedLates, late_deduction: calc.lateDed,
-                    attendance_days: rows.length, bonus, fine: 0, advance: 0, net_salary: calc.net, status: 'Unpaid' };
+
+    showLoading('Loading monthly attendance...');
+    try {
+        const response = await sbFetchAll('staff_attendance',
+            `select=staff_id,staff_name,attendance_date,status,absence_exempt,late_exempt,note&attendance_date=gte.${monthStart(month)}&attendance_date=lte.${monthEnd(month)}`);
+        if(!response.ok) throw new Error('Could not read monthly attendance: ' + await response.text());
+        const rows = await response.json();
+        if(!Array.isArray(rows)) throw new Error('Supabase returned invalid monthly attendance data.');
+        const dates = monthSchoolDays(month);
+        payrollGenDrafts = missing.map(s => {
+            const expectedDates = dates.filter(d => (!s.joining || s.joining <= d) &&
+                (s.status === 'Active' || (s.leaving && s.leaving >= d)));
+            const staffRows = rows.filter(r => r.staff_id === s.staffId &&
+                expectedDates.includes(String(r.attendance_date).slice(0, 10)));
+            const byDate = new Map(staffRows.map(r => [String(r.attendance_date).slice(0, 10), r]));
+            const absences = staffRows.filter(r => r.status === 'absent').length;
+            const excusedLeaves = staffRows.filter(r => r.status === 'absent' && r.absence_exempt).length;
+            const deductibleLeaves = absences - excusedLeaves;
+            return { staff: s, expectedDates, byDate, markedDays: staffRows.length, missingDays: expectedDates.length - staffRows.length,
+                absenceCount: absences, excusedLeaves, defaultLeaves: deductibleLeaves, lateCount: staffRows.filter(r => r.status === 'late' && !r.late_exempt).length,
+                excusedLates: staffRows.filter(r => r.status === 'late' && r.late_exempt).length };
+        });
+        renderPayrollGeneration(month);
+        openModal('genPayrollModal');
+    } catch (error) {
+        toast(error.message || 'Could not load monthly attendance.', false);
+    } finally {
+        hideLoading();
+    }
+}
+
+function renderPayrollGeneration(month) {
+    $('genPayrollSub').innerText = `${monthLabel(month)} · ${payrollGenDrafts.length} staff · daily rate is base salary ÷ 30`;
+    $('genPayrollRows').innerHTML = payrollGenDrafts.map((draft, index) => `
+        <article class="border rounded-xl p-3 space-y-2">
+            <div class="flex flex-wrap items-baseline justify-between gap-1">
+                <b class="text-sm text-slate-800">${esc(draft.staff.name)}</b>
+                <span class="text-[11px] text-slate-500">${draft.markedDays} dates already marked · ${draft.missingDays} unmarked workdays will be saved as Present · ${draft.absenceCount} absent / ${draft.lateCount + draft.excusedLates} late</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-[140px_160px_1fr] gap-2">
+                <label class="text-xs text-slate-600">Salary days (0–30)
+                    <input data-gen-days="${index}" type="number" min="0" max="30" step="1" value="30" class="mt-1 w-full border rounded-lg p-2 text-sm">
+                </label>
+                <label class="text-xs text-slate-600">Deductible leave days
+                    <input data-gen-leaves="${index}" type="number" min="0" max="30" step="1" value="${draft.defaultLeaves}" class="mt-1 w-full border rounded-lg p-2 text-sm">
+                </label>
+                <label class="text-xs text-slate-600">Remarks${draft.defaultLeaves ? ' (required if changing days/leaves)' : ''}
+                    <input data-gen-note="${index}" type="text" maxlength="300" class="mt-1 w-full border rounded-lg p-2 text-sm" placeholder="Reason for a manual adjustment">
+                </label>
+            </div>
+        </article>`).join('');
+}
+
+async function confirmGeneratePayroll() {
+    const month = curMonth(), drafts = [];
+    for(let index = 0; index < payrollGenDrafts.length; index++) {
+        const base = payrollGenDrafts[index];
+        const daysValue = $(`genPayrollRows`).querySelector(`[data-gen-days="${index}"]`).value;
+        const leavesValue = $(`genPayrollRows`).querySelector(`[data-gen-leaves="${index}"]`).value;
+        const note = $(`genPayrollRows`).querySelector(`[data-gen-note="${index}"]`).value.trim();
+        const salaryDays = Number(daysValue), leaves = Number(leavesValue);
+        if(!Number.isInteger(salaryDays) || salaryDays < 0 || salaryDays > PAYROLL_DIVISOR) {
+            toast(`${base.staff.name}: salary days must be a whole number from 0 to 30.`, false); return;
+        }
+        if(!Number.isInteger(leaves) || leaves < 0 || leaves > PAYROLL_DIVISOR || leaves > salaryDays) {
+            toast(`${base.staff.name}: deductible leave days must be a whole number no greater than salary days.`, false); return;
+        }
+        if((salaryDays !== PAYROLL_DIVISOR || leaves !== base.defaultLeaves) && !note) {
+            toast(`${base.staff.name}: enter a reason for changing salary days or leave deduction.`, false); return;
+        }
+        drafts.push({ ...base, salaryDays, leaves, note });
+    }
+
+    closeModal('genPayrollModal');
+    showLoading('Saving attendance & generating payroll...');
+    try {
+        const c = getSupabaseConfig(), toInsert = [];
+        drafts.forEach(draft => {
+            const note = draft.note ? `Monthly attendance backfill: ${draft.note}` : 'Monthly attendance backfilled during payroll generation.';
+            draft.expectedDates.forEach(date => {
+                if(!draft.byDate.has(date)) {
+                    toInsert.push({ staff_id: draft.staff.staffId, staff_name: draft.staff.name, attendance_date: date,
+                        status: 'present', note, absence_exempt: false, late_exempt: false });
+                }
             });
-            let rows = summaries;
-            let res = await fetch(`${c.url}/rest/v1/payroll?on_conflict=staff_id,month`, { method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "resolution=ignore-duplicates,return=minimal" }), body: JSON.stringify(rows) });
-            if(!res.ok) throw new Error('Could not generate payroll: ' + await res.text());
-            toast(`Salary sheet created for ${rows.length} staff.`);
-            await initStaff(); showTab('payroll');
-        } catch (e) { toast(e.message || 'Could not connect to the database.', false); }
-        finally { hideLoading(); }
-    });
+        });
+        for(let i = 0; i < toInsert.length; i += 250) {
+            const url = `${c.url}/rest/v1/staff_attendance?on_conflict=staff_id,attendance_date`;
+            const response = await fetch(url, { method: 'POST',
+                headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=minimal' }),
+                body: JSON.stringify(toInsert.slice(i, i + 250)) });
+            if(!response.ok) throw new Error(`Could not save missing attendance dates: ${await response.text()}`);
+        }
+
+        const payrollRows = drafts.map(draft => {
+            const s = draft.staff;
+            const bonus = draft.absenceCount === 0 && draft.salaryDays > 0 ? Math.round(s.base / PAYROLL_DIVISOR) : 0;
+            const calc = calcPay(s.base, draft.leaves, bonus, 0, 0, draft.lateCount, draft.salaryDays);
+            const autoNote = draft.missingDays ? `${draft.missingDays} unmarked workday(s) were marked Present.` : '';
+            const note = [draft.note ? `Manual payroll adjustment: ${draft.note}` : '', autoNote].filter(Boolean).join(' ');
+            return { staff_id: s.staffId, staff_name: s.name, designation: s.designation, month, base_salary: s.base,
+                leaves: draft.leaves, absence_count: draft.absenceCount, excused_leaves: draft.excusedLeaves,
+                leave_deduction: calc.ded, working_days: PAYROLL_DIVISOR, salary_days: draft.salaryDays,
+                late_count: draft.lateCount, excused_lates: draft.excusedLates, late_deduction: calc.lateDed,
+                attendance_days: draft.markedDays + draft.missingDays, bonus, fine: 0, advance: 0,
+                net_salary: calc.net, status: 'Unpaid', notes: note || null };
+        });
+        const response = await fetch(`${c.url}/rest/v1/payroll?on_conflict=staff_id,month`, {
+            method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=minimal' }),
+            body: JSON.stringify(payrollRows)
+        });
+        if(!response.ok) throw new Error('Attendance was saved, but payroll generation failed: ' + await response.text());
+        toast(`Salary sheet created for ${payrollRows.length} staff; ${toInsert.length} missing workday(s) marked Present.`);
+        await initStaff();
+        showTab('payroll');
+    } catch (error) {
+        toast(error.message || 'Could not save attendance and generate payroll.', false);
+    } finally {
+        hideLoading();
+    }
 }
 
 // adjust modal
@@ -1078,14 +1192,14 @@ function openAdjust(id) {
     let p = payById[id]; if(!p || p.status === 'Paid') return;
     adjId = id;
     $('adjTitle').innerText = 'Adjust salary'; $('adjSub').innerText = `${p.name} · ${monthLabel(p.month)}`;
-    $('adjBase').value = p.base; $('adjLeaves').value = p.leaves; $('adjLate').value = p.lateCount; $('adjBonus').value = p.bonus; $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
+    $('adjBase').value = p.base; $('adjSalaryDays').value = p.salaryDays; $('adjLeaves').value = p.leaves; $('adjLate').value = p.lateCount; $('adjBonus').value = p.bonus; $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
     let s = staff.find(x => x.staffId === p.staffId), hint = $('adjJoinHint');
     if(s && s.joining && s.joining > monthStart(p.month) && s.joining <= monthEnd(p.month)) { hint.innerText = `${p.name} joined on ${fmtDate(s.joining)} — adjust the base salary if this month should be pro-rata.`; hint.classList.remove('hidden'); } else hint.classList.add('hidden');
     calcAdj(); openModal('adjModal');
 }
-function adjVals() { return { base: parseFloat($('adjBase').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
+function adjVals() { return { base: parseFloat($('adjBase').value) || 0, salaryDays: parseFloat($('adjSalaryDays').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
 function calcAdj() {
-    let v = adjVals(), p = payById[adjId], r = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv, p ? p.lateCount : 0);
+    let v = adjVals(), p = payById[adjId], r = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv, p ? p.lateCount : 0, v.salaryDays);
     $('bdBase').innerText = fmt(v.base); $('bdLeave').innerText = '− ' + fmt(r.ded);
     $('bdLeaveLbl').innerText = `Leave deduction (${fmt(r.billable)} day${r.billable === 1 ? '' : 's'} × ${fmt(Math.round(r.daily))})`;
     $('bdLate').innerText = '− ' + fmt(r.lateDed);
@@ -1096,11 +1210,21 @@ function calcAdj() {
 async function saveAdjust() {
     let p = payById[adjId]; if(!p) return;
     let v = adjVals(), r = calcAdj();
+    const notes = $('adjNotes').value.trim();
+    if(!Number.isInteger(v.salaryDays) || v.salaryDays < 0 || v.salaryDays > PAYROLL_DIVISOR) {
+        toast('Salary days must be a whole number from 0 to 30.', false); return;
+    }
+    if(!Number.isInteger(v.leaves) || v.leaves < 0 || v.leaves > PAYROLL_DIVISOR || v.leaves > v.salaryDays) {
+        toast('Deductible leave days must be a whole number no greater than salary days.', false); return;
+    }
+    if((v.salaryDays !== p.salaryDays || v.leaves !== p.leaves) && !notes) {
+        toast('Enter a reason when changing salary days or leave deduction.', false); return;
+    }
     showLoading('Saving...');
     try {
         let c = getSupabaseConfig();
         let res = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }),
-            body: JSON.stringify({ base_salary: v.base, leaves: p.leaves, absence_count: p.absenceCount, excused_leaves: p.excusedLeaves, leave_deduction: r.ded, working_days: PAYROLL_DIVISOR, late_count: p.lateCount, excused_lates: p.excusedLates, late_deduction: r.lateDed, attendance_days: p.attendanceDays, bonus: v.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: $('adjNotes').value.trim() || null }) });
+            body: JSON.stringify({ base_salary: v.base, leaves: v.leaves, absence_count: p.absenceCount, excused_leaves: p.excusedLeaves, leave_deduction: r.ded, working_days: PAYROLL_DIVISOR, salary_days: v.salaryDays, late_count: p.lateCount, excused_lates: p.excusedLates, late_deduction: r.lateDed, attendance_days: p.attendanceDays, bonus: v.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: notes || null }) });
         if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
         closeModal('adjModal'); toast('Salary updated.'); await initStaff(); showTab('payroll');
     } catch (e) { hideLoading(); toast('Could not connect to the database.', false); }
@@ -1204,7 +1328,7 @@ function exportCsv(name, header, rows) {
     a.download = `${name}-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function exportStaffCsv() { let l = staffList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('staff', ['Staff ID', 'Name', 'Designation', 'Joining date', 'Phone', 'Base salary', 'Status'], l.map(s => [s.staffId, s.name, s.designation, s.joining, s.phone, s.base, s.status])); }
-function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Salary divisor', 'Attendance days', 'Absent days', 'Excused absences', 'Deductible absences', 'Absence deduction', 'Late marks', 'Excused lates', 'Deductible late marks', 'Late deduction', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.attendanceDays, p.absenceCount, p.excusedLeaves, p.leaves, p.leaveDed, p.lateCount + p.excusedLates, p.excusedLates, p.lateCount, p.lateDed, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
+function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Salary divisor', 'Salary days', 'Attendance dates marked', 'Absent days', 'Excused absences', 'Deductible leave days', 'Leave deduction', 'Late marks', 'Excused lates', 'Deductible late marks', 'Late deduction', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.salaryDays, p.attendanceDays, p.absenceCount, p.excusedLeaves, p.leaves, p.leaveDed, p.lateCount + p.excusedLates, p.excusedLates, p.lateCount, p.lateDed, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
 function exportHistoryCsv() { let l = historyList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('salary-payments', ['Paid on', 'Salary month', 'Staff', 'Net paid', 'Account', 'Voucher'], l.map(p => [p.paidDate, p.month, p.name, p.net, p.mode, p.voucher])); }
 
 function printSlip(id) {
@@ -1223,7 +1347,9 @@ function printSlip(id) {
       <tr><td class="l">Name</td><td style="text-align:right"><b>${esc(p.name)}</b></td></tr>
       <tr><td class="l">Designation</td><td style="text-align:right">${esc(p.designation)}</td></tr>
       ${row('Base salary', 'PKR ' + fmt(p.base))}
-      ${row('Working days / attendance marked', `${p.workingDays || '-'} / ${p.attendanceDays || 0}`)}
+      ${row('Salary days', `${p.salaryDays} / 30`)}
+      ${row('Attendance dates marked', p.attendanceDays || 0)}
+      ${row('Deductible leave days', fmt(p.leaves))}
       ${row('Absent days (including excused)', fmt(p.absenceCount))}
       ${row('Excused absences', fmt(p.excusedLeaves))}
       ${row('Absence deduction', '− PKR ' + fmt(p.leaveDed), 'neg')}
