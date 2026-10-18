@@ -168,6 +168,15 @@
                     </div>
                     <p id="attendanceSummary" class="text-xs text-slate-500 mt-3">Sundays are off; attendance is not marked on Sundays.</p>
                 </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-bold text-indigo-900">Monthly attendance</h3>
+                            <p class="text-xs text-slate-500 mt-1">Uses the Salary month selected above. Fills only unmarked working dates as Present; saved attendance is preserved.</p>
+                        </div>
+                        <button id="markMonthPresentBtn" onclick="markMonthAttendancePresent()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">✅ Mark missing days Present for month</button>
+                    </div>
+                </div>
                 <div id="attendanceNotReady" class="hidden bg-white rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Attendance setup is required. Run the one-time SQL shown at the top of the page, then refresh.</div>
                 <div id="attendanceList" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
             </section>
@@ -770,6 +779,70 @@ function markAllAttendance(status) {
     });
     attendanceDirty = true;
     renderAttendance();
+}
+async function markMonthAttendancePresent() {
+    if(!attendanceOk) { toast('Run the attendance setup SQL first.', false); return; }
+    if(attendanceDirty) { toast('Save or discard the unsaved daily attendance changes before marking the month.', false); return; }
+    const month = curMonth(), today = todayStr();
+    if(monthStart(month) > today) { toast('Attendance cannot be marked for a future month.', false); return; }
+
+    showLoading(`Loading ${monthLabel(month)} attendance...`);
+    let toInsert;
+    try {
+        const response = await sbFetchAll('staff_attendance',
+            `select=staff_id,attendance_date&attendance_date=gte.${monthStart(month)}&attendance_date=lte.${monthEnd(month)}`);
+        if(!response.ok) throw new Error('Could not read monthly attendance: ' + await response.text());
+        const rows = await response.json();
+        if(!Array.isArray(rows)) throw new Error('Supabase returned invalid monthly attendance data.');
+        const marked = new Set(rows.map(row => `${row.staff_id}|${String(row.attendance_date).slice(0, 10)}`));
+        toInsert = [];
+        monthSchoolDays(month).filter(date => date <= today).forEach(date => {
+            attendanceStaff(date).forEach(member => {
+                if(!marked.has(`${member.staffId}|${date}`)) {
+                    toInsert.push({ staff_id: member.staffId, staff_name: member.name, attendance_date: date,
+                        status: 'present', note: 'Marked Present using monthly attendance action.',
+                        absence_exempt: false, late_exempt: false });
+                }
+            });
+        });
+    } catch(error) {
+        toast(error.message || 'Could not load monthly attendance.', false);
+        hideLoading();
+        return;
+    }
+    hideLoading();
+
+    if(!toInsert.length) {
+        toast(`All applicable working dates for ${monthLabel(month)} are already marked.`);
+        return;
+    }
+    confirmBox(
+        `Mark ${toInsert.length} unmarked staff workday(s) as Present for ${monthLabel(month)}? Existing Present, Absent, and Late records will not change. Sundays and future dates are skipped. Existing payroll is not recalculated.`,
+        'Mark Present',
+        async () => {
+            const button = $('markMonthPresentBtn');
+            button.disabled = true;
+            showLoading('Saving monthly attendance...');
+            try {
+                const c = getSupabaseConfig();
+                for(let i = 0; i < toInsert.length; i += 250) {
+                    const response = await fetch(`${c.url}/rest/v1/staff_attendance?on_conflict=staff_id,attendance_date`, {
+                        method: 'POST',
+                        headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=minimal' }),
+                        body: JSON.stringify(toInsert.slice(i, i + 250))
+                    });
+                    if(!response.ok) throw new Error('Could not save monthly attendance: ' + await response.text());
+                }
+                if(attendanceDate.startsWith(month + '-')) await loadAttendance(attendanceDate);
+                toast(`Monthly attendance saved: ${toInsert.length} unmarked workday(s) set to Present. Existing payroll was not recalculated.`);
+            } catch(error) {
+                toast(`${error.message || 'Could not save monthly attendance.'} Any completed batches are safe to retry; existing records were not overwritten.`, false);
+            } finally {
+                button.disabled = false;
+                hideLoading();
+            }
+        }
+    );
 }
 async function loadAttendance(date) {
     if(!attendanceOk || !date) { attendanceRows = []; attendanceByStaff = {}; attendanceDrafts = {}; renderAttendance(); return; }
