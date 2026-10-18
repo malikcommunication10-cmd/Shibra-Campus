@@ -205,7 +205,19 @@
 
             <!-- RECEIVABLE / PAYABLE -->
         <section id="tab-dues" class="hidden space-y-4">
-            <div id="duesCards" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+            <div id="duesCards" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3"></div>
+            <div id="staffSecurityNotice" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900"></div>
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
+                <div class="p-3 border-b">
+                    <h3 class="font-bold text-sm text-indigo-900">Staff security payable</h3>
+                    <p class="text-[11px] text-slate-500 mt-1">Opening security plus salary deductions, less refunds paid. This liability is tracked separately from vendor bills; refund vouchers reduce cash and the liability, not expense totals.</p>
+                </div>
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Staff member</th><th class="p-2.5 text-right">Opening</th><th class="p-2.5 text-right">Salary deductions</th><th class="p-2.5 text-right">Refunds paid</th><th class="p-2.5 text-right">Outstanding payable</th></tr></thead>
+                    <tbody id="staffSecurityBody"></tbody>
+                    <tfoot id="staffSecurityFoot" class="bg-slate-100 font-bold"></tfoot>
+                </table>
+            </div>
             <div class="flex flex-wrap gap-2 items-center no-print">
                 <button onclick="openEntry('bill_raised')" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">🧾 Bill Raised (to receive)</button>
                 <button onclick="openEntry('bill_received')" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">📥 Bill Received (to pay)</button>
@@ -330,6 +342,7 @@ const KIND_META = {
 //  STATE + HELPERS
 // ====================================================================================
 let entries = [], entryById = {}, feesByVoucher = {};
+let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
 let dbLimit = 300;
 let editingId = null, entryKind = 'receipt';
 
@@ -414,7 +427,7 @@ function normalize(row, idx) {
     const from = String(row.from_account || '').trim(), to = String(row.to_account || '').trim();
     const desc = String(row.description || '').trim(), rem = String(row.remarks || '').trim();
     const up = id.toUpperCase();
-    let e = { id, idx, date: String(row.date || '').slice(0, 10), raw: row, notes: rem, legacy: false, isFee: false, manual: false, wallet2: null, fee: null };
+    let e = { id, idx, date: String(row.date || '').slice(0, 10), raw: row, notes: rem, legacy: false, isFee: false, isLiabilitySettlement: false, isSecurityRefund: securityRefundVouchers.has(id), manual: false, wallet2: null, fee: null };
 
     const mb = up.match(/^(AR|AP)-\d+$/), ms = up.match(/^((?:AR|AP|BK)-\d+)-/);
 
@@ -433,7 +446,8 @@ function normalize(row, idx) {
     } else if(up.startsWith('OB-')) {
         Object.assign(e, { kind: 'opening', wallet: normWallet(to), amount: inAmt || outAmt, head: 'Opening Balance', title: desc || 'Opening Balance', manual: true });
     } else if(up.startsWith('PV-')) {
-        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt || inAmt, head: to || 'Misc Expense', title: desc, manual: true });
+        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt || inAmt, head: to || 'Misc Expense',
+            title: desc, manual: true, isLiabilitySettlement: partyKey(to) === partyKey('Staff Security Payable') });
     } else if(up.startsWith('RV-')) {
         Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt || outAmt, head: from || 'Other Income', title: desc, manual: true });
     } else if(/^(cash receipt|cash payment|salary payment)$/i.test(from)) {
@@ -467,11 +481,12 @@ async function initAccounts() {
     showLoading('Loading accounts...');
     const settingsPromise = loadSettingLists();
     try {
-        let [L, [aRes, fRes]] = await Promise.all([
+        let [L, [aRes, fRes, securityRes]] = await Promise.all([
             settingsPromise,
             Promise.all([
                 sbFetchAll('accounts', 'select=*&order=date.asc,voucher_id.asc'),
-                sbFetchAll('fees', 'select=voucher_id,admis_no,student_name,class,period,type')
+                sbFetchAll('fees', 'select=voucher_id,admis_no,student_name,class,period,type'),
+                sbFetchAll('staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes')
             ])
         ]);
         INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; setupWallets(L['Payment Account']);
@@ -480,6 +495,10 @@ async function initAccounts() {
         if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable');
         if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD);
         let acc = await aRes.json(), fees = await fRes.json();
+        staffSecurityReady = securityRes.ok;
+        staffSecurityLedger = staffSecurityReady ? await securityRes.json() : [];
+        if(!Array.isArray(staffSecurityLedger)) { staffSecurityLedger = []; staffSecurityReady = false; }
+        securityRefundVouchers = new Set(staffSecurityLedger.filter(entry => entry.entry_type === 'refund' && entry.voucher_id).map(entry => String(entry.voucher_id)));
         feesByVoucher = {};
         (Array.isArray(fees) ? fees : []).forEach(f => { feesByVoucher[String(f.voucher_id || '').trim()] = f; });
         if(!Array.isArray(acc)) throw new Error('accounts failed to load');
@@ -552,7 +571,7 @@ function renderAll() {
     showTab(currentTab());
 }
 
-function sumKind(list, kind, w) { return list.filter(e => e.kind === kind && (w === 'ALL' || e.wallet === w)).reduce((s, e) => s + e.amount, 0); }
+function sumKind(list, kind, w) { return list.filter(e => e.kind === kind && !(kind === 'payment' && e.isLiabilitySettlement) && (w === 'ALL' || e.wallet === w)).reduce((s, e) => s + e.amount, 0); }
 
 function barRow(label, value, max, total, color) {
     let w = max > 0 ? Math.max(2, Math.round(value / max * 100)) : 0;
@@ -582,7 +601,7 @@ function renderOverview() {
     while(cur <= to) { months.push({ key: ymd(cur).slice(0, 7), label: cur.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), inc: 0, exp: 0 }); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1); }
     if(months.length > 12) months = months.slice(-12);
     let mm = {}; months.forEach(m => mm[m.key] = m);
-    list.forEach(e => { let m = mm[e.date.slice(0, 7)]; if(!m) return; if(e.kind === 'receipt') m.inc += e.amount; if(e.kind === 'payment') m.exp += e.amount; });
+    list.forEach(e => { let m = mm[e.date.slice(0, 7)]; if(!m) return; if(e.kind === 'receipt') m.inc += e.amount; if(e.kind === 'payment' && !e.isLiabilitySettlement) m.exp += e.amount; });
     let max = Math.max(1, ...months.map(m => Math.max(m.inc, m.exp)));
     let W = Math.max(520, months.length * 70), H = 230, padL = 8, padB = 28, padT = 20, ch = H - padB - padT, gw = (W - padL) / Math.max(months.length, 1), bw = Math.min(22, gw / 3);
     const short = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : (v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + 'k' : String(Math.round(v)));
@@ -601,7 +620,7 @@ function renderOverview() {
 
     // top expense heads
     let heads = {};
-    list.filter(e => e.kind === 'payment' && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { heads[e.headLabel] = (heads[e.headLabel] || 0) + e.amount; });
+    list.filter(e => e.kind === 'payment' && !e.isLiabilitySettlement && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { heads[e.headLabel] = (heads[e.headLabel] || 0) + e.amount; });
     let arr = Object.entries(heads).sort((a, b) => b[1] - a[1]).slice(0, 6), tot = Object.values(heads).reduce((s, v) => s + v, 0);
     $('topExpenses').innerHTML = arr.length ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, 'bg-rose-500')).join('') : '<p class="text-xs text-slate-400">No expenses in this period.</p>';
 
@@ -654,7 +673,7 @@ function renderDaybook() {
         let recAmt = e._d > 0 ? 'PKR ' + fmt(e._d) : '', payAmt = e._d < 0 ? 'PKR ' + fmt(-e._d) : '';
         let kindBadge = `<span class="px-2 py-0.5 rounded-md border ${KIND_META[e.kind].cls}">${KIND_META[e.kind].label}</span>${e.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
         let acct = e.kind === 'transfer' ? `${WALLETS[e.wallet].icon} → ${WALLETS[e.wallet2].icon}` : `${WALLETS[e.wallet].icon} ${WALLETS[e.wallet].label}`;
-        let canEdit = e.manual;
+        let canEdit = e.manual && !e.isSecurityRefund;
         return `<tr class="border-b hover:bg-slate-50 align-top">
             <td class="p-2.5 whitespace-nowrap text-slate-600">${fmtDate(e.date)}</td>
             <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap" title="${esc(e.id)}">${esc(e.ref)}</td>
@@ -666,8 +685,8 @@ function renderDaybook() {
             <td class="p-2.5 text-right font-semibold text-slate-700 whitespace-nowrap">${fmt(e._bal)}</td>
             <td class="p-2.5 whitespace-nowrap no-print">
                 <button onclick="printVoucher(${esc(JSON.stringify(e.id))})" title="Print voucher" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button>
-                ${canEdit ? `<button onclick="editEntry(${esc(JSON.stringify(e.id))})" title="Edit" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>` : `<button onclick="quickEdit(${esc(JSON.stringify(e.id))})" title="Edit account / date / amount" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>`}
-                <button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>
+                ${e.isSecurityRefund ? '<span class="text-[10px] text-slate-400">Managed by Payroll</span>' : canEdit ? `<button onclick="editEntry(${esc(JSON.stringify(e.id))})" title="Edit" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>` : `<button onclick="quickEdit(${esc(JSON.stringify(e.id))})" title="Edit account / date / amount" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>`}
+                ${e.isSecurityRefund ? '' : `<button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`}
             </td></tr>`;
     }).join('') : `<tr><td colspan="9" class="p-8 text-center text-slate-400">No entries found in this period.</td></tr>`;
     $('dbMore').innerHTML = rows.length > dbLimit ? `<button onclick="dbLimit+=300;renderDaybook()" class="bg-white border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold">Show more (${rows.length - dbLimit} remaining)</button>` : '';
@@ -732,7 +751,7 @@ function renderHeads() {
     let r = getRange(), list = scopeList();
     const build = (kind, color, el) => {
         let map = {};
-        list.filter(e => e.kind === kind && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { map[e.headLabel] = (map[e.headLabel] || 0) + e.amount; });
+        list.filter(e => e.kind === kind && !(kind === 'payment' && e.isLiabilitySettlement) && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { map[e.headLabel] = (map[e.headLabel] || 0) + e.amount; });
         let arr = Object.entries(map).sort((a, b) => b[1] - a[1]), tot = arr.reduce((s, x) => s + x[1], 0);
         $(el).innerHTML = arr.length
             ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, color)).join('') + `<div class="flex justify-between text-sm font-bold border-t pt-2 mt-2"><span>Total</span><span>PKR ${fmt(tot)}</span></div>`
@@ -867,12 +886,42 @@ async function startSettle(kind, key) {
     await updateDuesPicker();
     $('emParty').value = key; pickDuesParty();
 }
+function renderStaffSecurityPayable(query = '') {
+    const notice = $('staffSecurityNotice');
+    if(!staffSecurityReady) {
+        notice.innerText = 'Staff security ledger is not available. Run supabase_staff_security.sql and verify Accounts → View permission.';
+        notice.classList.remove('hidden');
+        $('staffSecurityBody').innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">Security liability data is unavailable.</td></tr>';
+        $('staffSecurityFoot').innerHTML = '';
+        return 0;
+    }
+    notice.classList.add('hidden');
+    const byStaff = new Map();
+    staffSecurityLedger.forEach(entry => {
+        const id = String(entry.staff_id || '');
+        if(!byStaff.has(id)) byStaff.set(id, { name: entry.staff_name || id, opening: 0, deductions: 0, refunds: 0 });
+        const item = byStaff.get(id);
+        item.name = entry.staff_name || item.name;
+        if(entry.entry_type === 'opening') item.opening += Number(entry.amount) || 0;
+        else if(entry.entry_type === 'deduction') item.deductions += Number(entry.amount) || 0;
+        else if(entry.entry_type === 'refund') item.refunds += Number(entry.amount) || 0;
+    });
+    const all = [...byStaff.values()].map(item => ({ ...item, outstanding: item.opening + item.deductions - item.refunds }));
+    const total = all.reduce((sum, item) => sum + item.outstanding, 0);
+    const rows = all.filter(item => !query || item.name.toLowerCase().includes(query));
+    $('staffSecurityBody').innerHTML = rows.length ? rows.sort((a, b) => b.outstanding - a.outstanding).map(item =>
+        `<tr class="border-b"><td class="p-2.5 font-semibold">${esc(item.name)}</td><td class="p-2.5 text-right">${fmt(item.opening)}</td><td class="p-2.5 text-right">${fmt(item.deductions)}</td><td class="p-2.5 text-right">${fmt(item.refunds)}</td><td class="p-2.5 text-right font-bold ${item.outstanding > 0.005 ? 'text-rose-600' : 'text-emerald-700'}">PKR ${fmt(item.outstanding)}</td></tr>`
+    ).join('') : '<tr><td colspan="5" class="p-4 text-center text-slate-400">No staff security balances found.</td></tr>';
+    $('staffSecurityFoot').innerHTML = `<tr><td class="p-2.5">Total liability</td><td class="p-2.5 text-right">${fmt(all.reduce((sum, item) => sum + item.opening, 0))}</td><td class="p-2.5 text-right">${fmt(all.reduce((sum, item) => sum + item.deductions, 0))}</td><td class="p-2.5 text-right">${fmt(all.reduce((sum, item) => sum + item.refunds, 0))}</td><td class="p-2.5 text-right">PKR ${fmt(total)}</td></tr>`;
+    return total;
+}
 async function renderDues() {
     if(!$('duesBody')) return;
     const list = await ensureBookDues(), q = ($('duesSearch').value || '').trim().toLowerCase();
     const sumP = k => list.reduce((s, p) => s + Math.max(p[k].pending, 0), 0);
     const open = list.filter(p => p.recv.pending > 0.005 || p.pay.pending > 0.005);
-    $('duesCards').innerHTML = [['To receive (Accounts Receivable)', 'PKR ' + fmt(sumP('recv')), 'text-emerald-700'], ['To pay (Accounts Payable)', 'PKR ' + fmt(sumP('pay')), 'text-rose-600'], ['Parties with pending bills', open.length, 'text-indigo-900']]
+    const securityTotal = renderStaffSecurityPayable(q);
+    $('duesCards').innerHTML = [['To receive (Accounts Receivable)', 'PKR ' + fmt(sumP('recv')), 'text-emerald-700'], ['To pay (Accounts Payable bills)', 'PKR ' + fmt(sumP('pay')), 'text-rose-600'], ['Staff security payable', 'PKR ' + fmt(securityTotal), 'text-amber-700'], ['Parties with pending bills', open.length, 'text-indigo-900']]
         .map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c[0]}</div><div class="text-xl font-extrabold ${c[2]} mt-1">${c[1]}</div></div>`).join('');
     const rows = open.filter(p => !q || p.name.toLowerCase().includes(q)).sort((a, b) => (b.recv.pending + b.pay.pending) - (a.recv.pending + a.pay.pending));
     const chips = p => [...p.recvE, ...p.payE].filter(e => e.rem > 0.005).map(e => `<span class="inline-block mr-1 mb-1 px-1.5 py-0.5 rounded border bg-slate-50 font-mono text-[10px]">${esc(e.voucher)} ${fmt(e.rem)}</span>`).join('');
@@ -900,6 +949,7 @@ function openEntry(kind) {
 }
 function editEntry(id) {
     let e = entryById[id]; if(!e || !e.manual) return;
+    if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     editingId = id;
     $('emDate').value = e.date; $('emAmount').value = e.amount; $('emHead').value = (e.kind === 'receipt' || e.kind === 'payment') ? e.head : '';
     $('emTitle2').value = e.title || ''; $('emNotes').value = e.notes || '';
@@ -910,6 +960,7 @@ function editEntry(id) {
 }
 function quickEdit(id) {
     const e = entryById[id]; if(!e) return;
+    if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     $('qeVid').value = id; $('qeDate').value = e.date; $('qeAmount').value = e.amount; $('qeNotes').value = e.notes || '';
     $('qeInfo').innerText = e.isFee ? `Fee payment: ${e.fee.student || ''} - ${titleCase(e.fee.type || '')} ${e.fee.period || ''}` : `${e.headLabel || e.head || ''}${e.title ? ' - ' + e.title : ''}`;
     $('qeAcctLabel').innerText = (parseFloat(e.raw.amount_in) || 0) > 0 ? 'Received in (account)' : 'Paid from (account)';
@@ -920,6 +971,7 @@ function quickEdit(id) {
 function closeQuickEdit() { $('qeModal').classList.add('hidden'); }
 async function saveQuickEdit() {
     const id = $('qeVid').value, e = entryById[id]; if(!e) return;
+    if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     const date = $('qeDate').value, amt = parseFloat($('qeAmount').value) || 0, w = $('qeWallet').value, notes = $('qeNotes').value.trim();
     if(!date) { toast('Please enter a date.', false); return; }
     if(amt <= 0) { toast('Amount must be greater than 0.', false); return; }
@@ -952,6 +1004,7 @@ async function saveEntry() {
 
     let id = editingId || genVoucherNo(kind);
     let oldEntry = editingId ? entryById[editingId] : null;
+    if(oldEntry && oldEntry.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     if(oldEntry && oldEntry.legacy) id = genVoucherNo(kind);   // old-format entry gets converted to the new format
 
     let payload;
@@ -982,6 +1035,7 @@ async function saveEntry() {
 // ====================================================================================
 function deleteEntry(id) {
     let e = entryById[id]; if(!e) return;
+    if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
  if(e.kind === 'bill_raised' || e.kind === 'bill_received') { const n = entries.filter(x => x.billRef === e.id).length; if(n) { toast(`This bill has ${n} receipt/payment entr${n > 1 ? 'ies' : 'y'}. Delete those first.`, false); return; } }
     let msg = e.isFee
         ? `This is a fee payment for ${e.fee.student || 'a student'} (PKR ${fmt(e.amount)}, ${e.fee.period || ''}).\n\nDeleting it will reopen the balance on the Fee Vouchers page.\n\nDelete it?`
