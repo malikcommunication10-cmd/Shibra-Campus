@@ -80,7 +80,15 @@
                 <div class="flex flex-wrap items-end gap-3">
                     <div>
                         <label class="block text-[11px] font-medium text-slate-500 mb-1">Salary month</label>
-                        <input id="gMonth" type="month" onchange="renderAll()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                        <input id="gMonth" type="hidden">
+                        <div class="flex gap-2">
+                            <select id="gMonthName" aria-label="Salary month" onchange="updateSalaryMonth()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                                <option value="01">January</option><option value="02">February</option><option value="03">March</option><option value="04">April</option>
+                                <option value="05">May</option><option value="06">June</option><option value="07">July</option><option value="08">August</option>
+                                <option value="09">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                            </select>
+                            <select id="gMonthYear" aria-label="Salary year" onchange="updateSalaryMonth()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"></select>
+                        </div>
                     </div>
                     <button onclick="shiftMonth(-1)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold" aria-label="Previous month">‹ Prev</button>
                     <button onclick="shiftMonth(1)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold" aria-label="Next month">Next ›</button>
@@ -652,6 +660,8 @@ async function initStaff() {
         payroll.forEach(p => { payById[p.id] = p; payMap[p.staffId + '|' + p.month] = p; });
 
         if(!$('gMonth').value) $('gMonth').value = todayStr().slice(0, 7);
+        populateSalaryMonthYears();
+        syncSalaryMonthControls($('gMonth').value);
         $('attendanceDate').max = todayStr();
         if(!$('attendanceDate').value) $('attendanceDate').value = todayStr();
         attendanceDate = $('attendanceDate').value;
@@ -690,8 +700,40 @@ function fillFilters() {
 //  MONTH + TABS
 // ====================================================================================
 const curMonth = () => $('gMonth').value || todayStr().slice(0, 7);
-function shiftMonth(n) { let [y, m] = curMonth().split('-').map(Number); let d = new Date(y, m - 1 + n, 1); $('gMonth').value = ymd(d).slice(0, 7); renderAll(); }
-function setThisMonth() { $('gMonth').value = todayStr().slice(0, 7); renderAll(); }
+function populateSalaryMonthYears() {
+    const currentYear = Number(todayStr().slice(0, 4));
+    const payrollYears = payroll.map(p => Number(String(p.month).slice(0, 4))).filter(Number.isInteger);
+    const firstYear = Math.min(currentYear - 5, ...(payrollYears.length ? payrollYears : [currentYear]));
+    const lastYear = currentYear + 2;
+    $('gMonthYear').innerHTML = Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index)
+        .map(year => `<option value="${year}">${year}</option>`).join('');
+}
+function syncSalaryMonthControls(month) {
+    const [year, monthNumber] = month.split('-');
+    if(!$('gMonthYear').querySelector(`option[value="${year}"]`)) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        $('gMonthYear').appendChild(option);
+    }
+    $('gMonthName').value = monthNumber;
+    $('gMonthYear').value = year;
+}
+function updateSalaryMonth() {
+    $('gMonth').value = `${$('gMonthYear').value}-${$('gMonthName').value}`;
+    renderAll();
+}
+function shiftMonth(n) {
+    let [y, m] = curMonth().split('-').map(Number), d = new Date(y, m - 1 + n, 1);
+    $('gMonth').value = ymd(d).slice(0, 7);
+    syncSalaryMonthControls($('gMonth').value);
+    renderAll();
+}
+function setThisMonth() {
+    $('gMonth').value = todayStr().slice(0, 7);
+    syncSalaryMonthControls($('gMonth').value);
+    renderAll();
+}
 function showTab(t) {
     ['overview', 'staff', 'attendance', 'payroll', 'history'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
