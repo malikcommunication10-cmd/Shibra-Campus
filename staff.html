@@ -199,6 +199,7 @@
                             <option value="ALL">All</option><option value="Unpaid">Unpaid</option><option value="Paid">Paid</option>
                         </select>
                         <button onclick="openRules()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">⚙️ Leave rules</button>
+                        <button onclick="openSecurityOpening()" class="bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-2 rounded-lg text-sm font-semibold">🔐 Security opening</button>
                         <button onclick="generatePayroll()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg text-sm font-semibold">⚡ Generate</button>
                         <button onclick="openPay('ALL')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">💰 Pay all unpaid</button>
                         <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print sheet</button>
@@ -210,7 +211,7 @@
                 <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
-                            <tr><th class="p-2.5">Staff</th><th class="p-2.5 text-right">Base</th><th class="p-2.5 text-right">Absent (excused)</th><th class="p-2.5 text-right">Absence ded.</th><th class="p-2.5 text-right">Late (excused)</th><th class="p-2.5 text-right">Late ded.</th><th class="p-2.5 text-right">Bonus</th><th class="p-2.5 text-right">Fine</th><th class="p-2.5 text-right">Advance</th><th class="p-2.5 text-right">Net salary</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
+                            <tr><th class="p-2.5">Staff</th><th class="p-2.5 text-right">Base</th><th class="p-2.5 text-right">Absent (excused)</th><th class="p-2.5 text-right">Absence ded.</th><th class="p-2.5 text-right">Late (excused)</th><th class="p-2.5 text-right">Late ded.</th><th class="p-2.5 text-right">Security</th><th class="p-2.5 text-right">Bonus</th><th class="p-2.5 text-right">Fine</th><th class="p-2.5 text-right">Advance</th><th class="p-2.5 text-right">Net salary</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
                         </thead>
                         <tbody id="prBody"></tbody>
                         <tfoot id="prFoot" class="sticky bottom-0 bg-slate-100 font-bold"></tfoot>
@@ -287,7 +288,7 @@
                 <button onclick="closeModal('genPayrollModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
             </div>
             <div class="p-5 space-y-3">
-                <p class="text-xs text-slate-600 bg-indigo-50 border border-indigo-100 rounded-xl p-3">Set salary days (0–30) and deductible leave days for each staff member. Unmarked working dates will be saved as Present; already saved Present, Absent, or Late records will not be changed. Add a reason whenever you override the standard salary days or leave deduction.</p>
+                <p class="text-xs text-slate-600 bg-indigo-50 border border-indigo-100 rounded-xl p-3">Set salary days, deductible leave days and this month's security deduction for each staff member. Security is withheld from salary and added to the school's payable liability. Unmarked workdays will be saved as Present without changing saved attendance. Add a reason for manual overrides.</p>
                 <div id="genPayrollRows" class="space-y-3"></div>
             </div>
             <div class="p-5 border-t flex justify-end gap-2 sticky bottom-0 bg-white">
@@ -306,10 +307,11 @@
             </div>
             <div class="p-5 space-y-3">
                 <p id="adjJoinHint" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2"></p>
-                <div class="grid grid-cols-3 gap-3">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Base salary</label><input id="adjBase" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Salary days (0–30)</label><input id="adjSalaryDays" type="number" min="0" max="30" step="1" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Deductible leave days</label><input id="adjLeaves" type="number" min="0" max="30" step="1" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Security deduction (PKR)</label><input id="adjSecurity" type="number" min="0" step="0.01" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Late marks</label><input id="adjLate" type="number" min="0" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 outline-none"></div>
@@ -325,6 +327,7 @@
                     <div class="flex justify-between"><span class="text-slate-500">Base salary</span><b id="bdBase">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500" id="bdLeaveLbl">Leave deduction</span><b id="bdLeave" class="text-rose-600">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500" id="bdLateLbl">Late deduction</span><b id="bdLate" class="text-rose-600">0</b></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Security withheld (payable)</span><b id="bdSecurity" class="text-rose-600">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500">Bonus</span><b id="bdBonus" class="text-emerald-600">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500">Fine + Advance</span><b id="bdFine" class="text-rose-600">0</b></div>
                     <div class="flex justify-between border-t pt-2 mt-1 text-base"><span class="font-semibold">Net payable</span><b id="bdNet" class="text-indigo-700">PKR 0</b></div>
@@ -345,18 +348,36 @@
                 <button onclick="closeModal('payModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
             </div>
             <div class="p-5 space-y-3">
-                <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center"><div class="text-xs text-indigo-700">Amount to pay</div><div id="payAmount" class="text-2xl font-extrabold text-indigo-800">PKR 0</div><div id="payCount" class="text-[11px] text-indigo-500"></div></div>
+                <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center"><div class="text-xs text-indigo-700">Total cash / bank payment</div><div id="payAmount" class="text-2xl font-extrabold text-indigo-800">PKR 0</div><div id="payCount" class="text-[11px] text-indigo-500"></div></div>
+                <div id="paySecurityRows" class="space-y-2"></div>
                 <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Payment date</label><input id="payDate" type="date" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Pay from account</label>
                         <select id="payWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"><option value="cash">💵 Cash in Hand</option><option value="bank">🏦 Bank</option><option value="online">📱 Online / JazzCash</option></select></div>
                 </div>
                 <div><label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label><input id="payNotes" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-                <p class="text-[11px] text-slate-500">A payment voucher (head: Salaries) is recorded in Accounts & Daybook automatically.</p>
+                <p class="text-[11px] text-slate-500">Salary and any security refund are recorded as separate payment vouchers. Refunds reduce Staff Security Payable in Accounts.</p>
             </div>
             <div class="p-5 border-t flex justify-end gap-2">
                 <button onclick="closeModal('payModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
                 <button onclick="confirmPay()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Pay now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECURITY OPENING BALANCES -->
+    <div id="securityOpeningModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                <div><h3 class="text-lg font-bold text-indigo-950">January opening security</h3><p id="securityOpeningSub" class="text-xs text-slate-500"></p></div>
+                <button onclick="closeModal('securityOpeningModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-3">
+                <p class="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-xl p-3">Enter each staff member's opening security liability for January. The opening is recorded once and carries forward; monthly deductions and refunds change the outstanding balance. The transaction is dated today for the accounts audit trail.</p>
+                <div id="securityOpeningRows" class="space-y-2"></div>
+            </div>
+            <div class="p-5 border-t flex justify-end">
+                <button onclick="closeModal('securityOpeningModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Done</button>
             </div>
         </div>
     </div>
@@ -366,7 +387,7 @@
         <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-3">
             <h3 class="text-lg font-bold text-indigo-950">Attendance & salary rules</h3>
             <p class="text-sm text-slate-700">Daily salary = monthly base salary ÷ 30, regardless of the calendar month's length.</p>
-            <p class="text-[11px] text-slate-500">Sundays are off. Each unexcused absence is deducted; an Admin may excuse it with a reason, waiving the deduction, but it still disqualifies the no-absence bonus. No absences earns a one-day salary bonus; late marks count as present for that bonus. Each group of 3 unexcused late marks deducts one day. Historical payroll is not recalculated.</p>
+            <p class="text-[11px] text-slate-500">Security deductions are withheld from net salary and tracked as a school payable; an opening balance can be entered once in Accounts and carries forward. Security is refunded against the outstanding balance when paying staff. Sundays are off. Each unexcused absence is deducted; an Admin may excuse it with a reason, waiving its deduction, but it still disqualifies the no-absence bonus. No absences earns a one-day salary bonus; late marks count as present for that bonus. Each group of 3 unexcused late marks deducts one day. Historical payroll is not recalculated.</p>
             <div class="flex justify-end pt-1"><button onclick="closeModal('rulesModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button></div>
         </div>
     </div>
@@ -405,6 +426,7 @@ create table if not exists public.payroll (
   late_deduction numeric not null default 0,
   attendance_days integer not null default 0,
   salary_days integer not null default 30,
+  security_deduction numeric not null default 0,
   bonus numeric default 0,
   fine numeric default 0,
   advance numeric default 0,
@@ -425,7 +447,8 @@ alter table public.payroll
   add column if not exists excused_lates integer not null default 0,
   add column if not exists late_deduction numeric not null default 0,
   add column if not exists attendance_days integer not null default 0,
-  add column if not exists salary_days integer not null default 30;
+  add column if not exists salary_days integer not null default 30,
+  add column if not exists security_deduction numeric not null default 0;
 alter table public.payroll enable row level security;
 revoke all on table public.payroll from anon;
 drop policy if exists shibra_select on public.payroll;
@@ -534,16 +557,63 @@ create policy shibra_attendance_exemption_delete on public.staff_attendance as r
   for delete to authenticated
   using (public.app_is_admin() or (not absence_exempt and not late_exempt));
 update public.settings set setting_value = '0' where lower(trim(setting_key)) = 'payroll free leaves';
+
+-- Staff security opening balances, monthly deductions, and refunds
+create table if not exists public.staff_security_ledger (
+  id bigint generated by default as identity primary key,
+  staff_id text not null,
+  staff_name text not null,
+  entry_type text not null check (entry_type in ('opening', 'deduction', 'refund')),
+  amount numeric not null check (amount >= 0 and (entry_type = 'opening' or amount > 0)),
+  transaction_date date not null,
+  salary_month text,
+  payroll_id bigint references public.payroll(id) on delete restrict,
+  voucher_id text,
+  source_key text not null unique,
+  notes text,
+  created_at timestamptz not null default now()
+);
+alter table public.staff_security_ledger add column if not exists voucher_id text;
+create unique index if not exists staff_security_one_opening_per_staff
+  on public.staff_security_ledger (staff_id) where entry_type = 'opening';
+create index if not exists staff_security_staff_date_idx
+  on public.staff_security_ledger (staff_id, transaction_date);
+create index if not exists staff_security_month_idx
+  on public.staff_security_ledger (salary_month);
+alter table public.staff_security_ledger enable row level security;
+revoke all on table public.staff_security_ledger from anon;
+grant select, insert, update, delete on public.staff_security_ledger to authenticated;
+grant usage, select on sequence public.staff_security_ledger_id_seq to authenticated;
+drop policy if exists staff_security_select on public.staff_security_ledger;
+drop policy if exists staff_security_insert on public.staff_security_ledger;
+drop policy if exists staff_security_update on public.staff_security_ledger;
+drop policy if exists staff_security_delete on public.staff_security_ledger;
+create policy staff_security_select on public.staff_security_ledger for select to authenticated
+  using (public.app_has_page_permission('staff', 'v') or public.app_has_page_permission('accounts', 'v'));
+create policy staff_security_insert on public.staff_security_ledger for insert to authenticated with check (
+  (entry_type = 'opening' and (public.app_has_page_permission('accounts', 'a') or public.app_has_page_permission('accounts', 'e') or public.app_has_page_permission('staff', 'a') or public.app_has_page_permission('staff', 'e')) and public.app_can_change_day(transaction_date))
+  or (entry_type = 'deduction' and (public.app_has_page_permission('staff', 'a') or public.app_has_page_permission('staff', 'e')))
+  or (entry_type = 'refund' and public.app_has_page_permission('accounts', 'a') and public.app_has_page_permission('staff', 'e') and public.app_can_change_day(transaction_date))
+);
+create policy staff_security_update on public.staff_security_ledger for update to authenticated
+  using ((entry_type = 'opening' and (public.app_has_page_permission('accounts', 'e') or public.app_has_page_permission('staff', 'e')) and public.app_can_change_day(transaction_date)) or (entry_type = 'deduction' and public.app_has_page_permission('staff', 'e')))
+  with check ((entry_type = 'opening' and (public.app_has_page_permission('accounts', 'e') or public.app_has_page_permission('staff', 'e')) and public.app_can_change_day(transaction_date)) or (entry_type = 'deduction' and public.app_has_page_permission('staff', 'e')));
+create policy staff_security_delete on public.staff_security_ledger for delete to authenticated using (
+  (entry_type = 'opening' and (public.app_has_page_permission('accounts', 'd') or public.app_has_page_permission('accounts', 'e') or public.app_has_page_permission('staff', 'd') or public.app_has_page_permission('staff', 'e')) and public.app_can_change_day(transaction_date))
+  or (entry_type = 'deduction' and (public.app_has_page_permission('staff', 'd') or public.app_has_page_permission('staff', 'e')))
+  or (entry_type = 'refund' and (public.app_has_page_permission('accounts', 'd') or public.app_has_page_permission('accounts', 'e')) and public.app_has_page_permission('staff', 'e'))
+);
 notify pgrst, 'reload schema';`;
 
 // ====================================================================================
 //  STATE + HELPERS
 // ====================================================================================
 let staff = [], staffByKey = {}, payroll = [], payById = {}, payMap = {};
-let staffExt = false, payrollOk = false, attendanceOk = false;
+let staffExt = false, payrollOk = false, attendanceOk = false, securityOk = false;
 let attendanceRows = [], attendanceByStaff = {}, attendanceDrafts = {}, attendanceDirty = false;
 let attendanceDate = '';
 let editingStaffKey = null, adjId = null, payTarget = null, payrollGenDrafts = [];
+let securityLedger = [], securityByStaff = {};
 
 const $ = id => document.getElementById(id);
 const PAYROLL_DIVISOR = 30;
@@ -559,6 +629,130 @@ function monthLabel(m) { if(!m) return '-'; let [y, mo] = m.split('-').map(Numbe
 function monthShort(m) { let [y, mo] = m.split('-').map(Number); return new Date(y, mo - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }); }
 function monthEnd(m) { let [y, mo] = m.split('-').map(Number); return ymd(new Date(y, mo, 0)); }
 function monthStart(m) { return m + '-01'; }
+const securitySourceKey = (staffId, month) => `deduction:${encodeURIComponent(staffId)}:${month}`;
+function securityBalance(staffId) { return Math.max(0, Math.round((securityByStaff[staffId] || 0) * 100) / 100); }
+async function findSecurityEvent(sourceKey) {
+    const c = getSupabaseConfig();
+    const response = await fetch(`${c.url}/rest/v1/staff_security_ledger?select=*&source_key=eq.${encodeURIComponent(sourceKey)}`, { headers: sbHeaders() });
+    if(!response.ok) throw new Error('Could not read staff security ledger: ' + await response.text());
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows[0] || null : null;
+}
+async function saveSecurityDeduction(p, amount, date, notes) {
+    const c = getSupabaseConfig(), key = securitySourceKey(p.staffId, p.month);
+    if(!Number.isFinite(amount) || amount < 0 || Math.round(amount * 100) / 100 !== amount)
+        throw new Error(`${p.name}: security deduction must be a non-negative amount with at most two decimal places.`);
+    const old = await findSecurityEvent(key);
+    if(amount <= 0 && !old) return async () => {};
+    if(amount <= 0) {
+        const response = await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(old.id)}`, {
+            method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
+        });
+        if(!response.ok) throw new Error('Could not remove old security deduction: ' + await response.text());
+        return async () => {
+            const rollback = await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
+                method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+                body: JSON.stringify(old)
+            });
+            if(!rollback.ok) throw new Error('Could not restore prior security deduction: ' + await rollback.text());
+        };
+    }
+    const payload = {
+        staff_id: p.staffId, staff_name: p.name, entry_type: 'deduction', amount,
+        transaction_date: date, salary_month: p.month, payroll_id: p.id,
+        source_key: key, notes: notes || null
+    };
+    const response = old
+        ? await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(old.id)}`, {
+            method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(payload)
+        })
+        : await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
+            method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=representation' }), body: JSON.stringify(payload)
+        });
+    if(!response.ok) throw new Error('Could not save security deduction liability: ' + await response.text());
+    const inserted = old ? null : (await response.json())[0];
+    return async () => {
+        const rollback = old
+            ? await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(old.id)}`, {
+                method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(old)
+            })
+            : await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(inserted.id)}`, {
+                method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
+            });
+        if(!rollback.ok) throw new Error('Could not roll back security ledger change: ' + await rollback.text());
+    };
+}
+function rebuildSecurityBalances() {
+    securityByStaff = {};
+    securityLedger.forEach(entry => {
+        const staffId = String(entry.staff_id || '');
+        const sign = entry.entry_type === 'refund' ? -1 : 1;
+        securityByStaff[staffId] = (securityByStaff[staffId] || 0) + sign * (parseFloat(entry.amount) || 0);
+    });
+}
+function openingSecurity(staffId) {
+    return securityLedger.find(entry => entry.staff_id === staffId && entry.entry_type === 'opening') || null;
+}
+function openSecurityOpening() {
+    if(!securityOk) { toast('Run the staff security setup SQL shown at the top of the page first.', false); window.scrollTo({ top: 0 }); return; }
+    $('securityOpeningSub').innerText = `January ${curMonth().slice(0, 4)} · opening liability carries forward after entry`;
+    renderSecurityOpeningRows();
+    openModal('securityOpeningModal');
+}
+function renderSecurityOpeningRows() {
+    $('securityOpeningRows').innerHTML = staff.map(member => {
+        const opening = openingSecurity(member.staffId);
+        return `<div class="grid grid-cols-1 sm:grid-cols-[1fr_150px_100px] items-center gap-2 border rounded-xl p-3">
+            <div><b class="text-sm text-slate-800">${esc(member.name)}</b><div class="text-[11px] text-slate-500">${esc(member.designation)} · outstanding PKR ${fmt(securityBalance(member.staffId))}</div></div>
+            <label class="text-xs text-slate-600">January opening (PKR)
+                <input id="securityOpening-${esc(member.key)}" data-security-opening="${esc(member.staffId)}" type="number" min="0" step="0.01" value="${opening ? fmt(opening.amount).replace(/,/g, '') : '0'}" class="mt-1 w-full border rounded-lg p-2 text-sm">
+            </label>
+            <button onclick="saveSecurityOpening(${js(member.staffId)})" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-semibold">Save</button>
+        </div>`;
+    }).join('') || '<div class="text-sm text-slate-500">No staff members found.</div>';
+}
+async function saveSecurityOpening(staffId) {
+    const member = staff.find(item => item.staffId === staffId);
+    if(!member) { toast('Staff member was not found. Refresh and try again.', false); return; }
+    const input = [...document.querySelectorAll('[data-security-opening]')].find(node => node.dataset.securityOpening === staffId);
+    const amount = Number(input && input.value);
+    if(!Number.isFinite(amount) || amount < 0) { toast(`${member.name}: opening security must be zero or a positive amount.`, false); return; }
+    if(Math.round(amount * 100) / 100 !== amount) { toast(`${member.name}: opening security must have at most two decimal places.`, false); return; }
+    const old = openingSecurity(staffId);
+    if(!old && amount === 0) { toast(`No opening liability was saved for ${member.name}; enter an amount greater than zero when needed.`); return; }
+    const otherEntries = securityLedger.filter(entry => entry.staff_id === staffId && entry.entry_type !== 'opening');
+    const otherBalance = otherEntries.reduce((total, entry) => total + (entry.entry_type === 'refund' ? -1 : 1) * (parseFloat(entry.amount) || 0), 0);
+    if(amount + otherBalance < -0.005) {
+        toast(`Opening balance cannot be below the security already refunded to ${member.name}.`, false); return;
+    }
+    const date = todayStr(), salaryMonth = `${curMonth().slice(0, 4)}-01`;
+    const payload = {
+        staff_id: staffId, staff_name: member.name, entry_type: 'opening', amount,
+        transaction_date: date, salary_month: salaryMonth, payroll_id: null, voucher_id: null,
+        source_key: `opening:${encodeURIComponent(staffId)}`,
+        notes: `Opening staff security liability for January ${salaryMonth.slice(0, 4)}`
+    };
+    showLoading(`Saving ${member.name}'s opening security...`);
+    try {
+        const c = getSupabaseConfig();
+        const response = old
+            ? await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(old.id)}`, {
+                method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(payload)
+            })
+            : await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
+                method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=representation' }), body: JSON.stringify(payload)
+            });
+        if(!response.ok) throw new Error('Could not save opening security: ' + await response.text());
+        const saved = old ? { ...old, ...payload } : (await response.json())[0];
+        securityLedger = securityLedger.filter(entry => entry.staff_id !== staffId || entry.entry_type !== 'opening');
+        if(saved) securityLedger.push(saved);
+        rebuildSecurityBalances();
+        renderSecurityOpeningRows();
+        toast(`January opening security saved for ${member.name}.`);
+    } catch(error) {
+        toast(error.message || 'Could not save opening security.', false);
+    } finally { hideLoading(); }
+}
 function showLoading(t) { $('loadingText').innerText = t || 'Loading...'; $('loadingOverlay').classList.remove('hidden'); }
 function hideLoading() { $('loadingOverlay').classList.add('hidden'); }
 function toast(msg, ok = true) {
@@ -600,12 +794,13 @@ function serviceLength(joinDate) {
     return y ? `${y} yr${y > 1 ? 's' : ''}${m ? ' ' + m + ' mo' : ''}` : (m ? `${m} mo` : 'New');
 }
 const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-function calcPay(base, leaves, bonus, fine, adv, lateCount = 0, salaryDays = PAYROLL_DIVISOR) {
+function calcPay(base, leaves, bonus, fine, adv, lateCount = 0, salaryDays = PAYROLL_DIVISOR, security = 0) {
     let daily = base / PAYROLL_DIVISOR, billable = Math.max(0, leaves);
     let ded = Math.round(daily * billable);
     let lateDed = Math.round(daily * Math.floor(Math.max(0, lateCount) / 3));
     let salaryAmount = Math.round(daily * Math.min(PAYROLL_DIVISOR, Math.max(0, salaryDays)));
-    return { daily, billable, ded, lateDed, salaryAmount, net: Math.max(0, Math.round(salaryAmount - ded - lateDed + bonus - fine - adv)) };
+    let beforeSecurity = Math.max(0, Math.round(salaryAmount - ded - lateDed + bonus - fine - adv));
+    return { daily, billable, ded, lateDed, salaryAmount, beforeSecurity, security: Math.max(0, security), net: Math.max(0, beforeSecurity - Math.max(0, security)) };
 }
 
 // ====================================================================================
@@ -628,6 +823,7 @@ function normPay(r) {
         lateCount: parseInt(r.late_count, 10) || 0, excusedLates: parseInt(r.excused_lates, 10) || 0,
         lateDed: parseFloat(r.late_deduction) || 0, attendanceDays: parseInt(r.attendance_days, 10) || 0,
         salaryDays: r.salary_days === null || r.salary_days === undefined ? PAYROLL_DIVISOR : (parseInt(r.salary_days, 10) || 0),
+        security: parseFloat(r.security_deduction) || 0,
         bonus: parseFloat(r.bonus) || 0, fine: parseFloat(r.fine) || 0,
         advance: parseFloat(r.advance) || 0, net: parseFloat(r.net_salary) || 0, status: String(r.status || 'Unpaid').trim() === 'Paid' ? 'Paid' : 'Unpaid',
         paidDate: String(r.paid_date || '').slice(0, 10), mode: String(r.payment_mode || '').trim(), voucher: String(r.voucher_no || '').trim(), notes: String(r.notes || '').trim() };
@@ -639,19 +835,25 @@ async function initStaff() {
     showLoading('Loading staff & payroll...');
     let c = getSupabaseConfig();
     try {
-        let [sRes, pRes, staffProbe, payrollProbe, attendanceProbe] = await Promise.all([
+        let [sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityPayrollProbe, securityRes] = await Promise.all([
             sbFetchAll('staff', 'select=*'),
             sbFetchAll('payroll', 'select=*'),
             fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days&limit=1`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`, { headers: sbHeaders() })
+            fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/payroll?select=security_deduction&limit=1`, { headers: sbHeaders() }),
+            sbFetchAll('staff_security_ledger', 'select=*')
         ]);
         let sRows = await sRes.json();
         if(!Array.isArray(sRows)) throw new Error('staff failed to load');
         staffExt = staffProbe.ok;
         attendanceOk = attendanceProbe.ok;
+        securityOk = securityPayrollProbe.ok && securityRes.ok;
         let pRows = pRes.ok ? await pRes.json() : null;
         payrollOk = pRes.ok && payrollProbe.ok && Array.isArray(pRows);
+        securityLedger = securityOk ? await securityRes.json() : [];
+        if(!Array.isArray(securityLedger)) { securityLedger = []; securityOk = false; }
+        rebuildSecurityBalances();
 
         staff = sRows.map(normStaff).sort((a, b) => a.name.localeCompare(b.name));
         staffByKey = {}; staff.forEach(s => staffByKey[s.key] = s);
@@ -676,9 +878,11 @@ async function initStaff() {
     hideLoading();
 }
 function updateBanner() {
-    let need = !staffExt || !payrollOk || !attendanceOk;
+    let need = !staffExt || !payrollOk || !attendanceOk || !securityOk;
     $('setupSql').innerText = SETUP_SQL;
-    $('setupText').innerText = !payrollOk || !attendanceOk
+    $('setupText').innerText = !securityOk
+        ? 'Staff security setup is missing. Run the updated setup SQL once in Supabase → SQL Editor, then refresh this page.'
+        : !payrollOk || !attendanceOk
         ? 'Payroll attendance setup is missing. Run this once in Supabase → SQL Editor, then refresh this page.'
         : 'Optional: run this once to add phone, status and notes for staff, then refresh this page.';
     $('setupBanner').classList.toggle('hidden', !need);
@@ -1157,18 +1361,18 @@ function renderPayroll() {
         <td class="p-2.5"><div class="flex items-center gap-2">${avatar(p.name)}<div><div class="font-semibold text-slate-800">${esc(p.name)}</div><div class="text-[11px] text-slate-400">${esc(p.designation)}</div></div></div></td>
         <td class="p-2.5 text-right">${fmt(p.base)}</td><td class="p-2.5 text-right">${p.absenceCount ? `${fmt(p.absenceCount)}${p.excusedLeaves ? ` (${fmt(p.excusedLeaves)} excused)` : ''}` : '-'}</td>
         <td class="p-2.5 text-right text-rose-600">${p.leaveDed ? fmt(p.leaveDed) : '-'}</td><td class="p-2.5 text-right">${p.lateCount + p.excusedLates ? `${fmt(p.lateCount + p.excusedLates)}${p.excusedLates ? ` (${fmt(p.excusedLates)} excused)` : ''}` : '-'}</td>
-        <td class="p-2.5 text-right text-rose-600">${p.lateDed ? fmt(p.lateDed) : '-'}</td><td class="p-2.5 text-right text-emerald-600">${p.bonus ? fmt(p.bonus) : '-'}</td>
+        <td class="p-2.5 text-right text-rose-600">${p.lateDed ? fmt(p.lateDed) : '-'}</td><td class="p-2.5 text-right text-rose-600">${p.security ? fmt(p.security) : '-'}</td><td class="p-2.5 text-right text-emerald-600">${p.bonus ? fmt(p.bonus) : '-'}</td>
         <td class="p-2.5 text-right text-rose-600">${p.fine ? fmt(p.fine) : '-'}</td><td class="p-2.5 text-right text-amber-600">${p.advance ? fmt(p.advance) : '-'}</td>
         <td class="p-2.5 text-right font-extrabold whitespace-nowrap">PKR ${fmt(p.net)}</td>
         <td class="p-2.5">${statusBadge(p.status)}${p.paidDate ? `<div class="text-[11px] text-slate-400 mt-0.5">${fmtDate(p.paidDate)}</div>` : ''}</td>
         <td class="p-2.5 whitespace-nowrap no-print">${acts(p)}</td></tr>`).join('')
-        : `<tr><td colspan="12" class="p-8 text-center text-slate-400">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet. Click “Generate”.` : 'Payroll table not set up yet.'}</td></tr>`;
+        : `<tr><td colspan="13" class="p-8 text-center text-slate-400">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet. Click “Generate”.` : 'Payroll table not set up yet.'}</td></tr>`;
     let sum = k => list.reduce((s, p) => s + p[k], 0);
-    $('prFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right">Totals:</td><td class="p-3 text-right">${fmt(sum('base'))}</td><td class="p-3 text-right">${fmt(sum('absenceCount'))}</td><td class="p-3 text-right">${fmt(sum('leaveDed'))}</td><td class="p-3 text-right">${fmt(sum('lateCount') + sum('excusedLates'))}</td><td class="p-3 text-right">${fmt(sum('lateDed'))}</td><td class="p-3 text-right">${fmt(sum('bonus'))}</td><td class="p-3 text-right">${fmt(sum('fine'))}</td><td class="p-3 text-right">${fmt(sum('advance'))}</td><td class="p-3 text-right">PKR ${fmt(sum('net'))}</td><td colspan="2" class="no-print"></td></tr>` : '';
+    $('prFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right">Totals:</td><td class="p-3 text-right">${fmt(sum('base'))}</td><td class="p-3 text-right">${fmt(sum('absenceCount'))}</td><td class="p-3 text-right">${fmt(sum('leaveDed'))}</td><td class="p-3 text-right">${fmt(sum('lateCount') + sum('excusedLates'))}</td><td class="p-3 text-right">${fmt(sum('lateDed'))}</td><td class="p-3 text-right">${fmt(sum('security'))}</td><td class="p-3 text-right">${fmt(sum('bonus'))}</td><td class="p-3 text-right">${fmt(sum('fine'))}</td><td class="p-3 text-right">${fmt(sum('advance'))}</td><td class="p-3 text-right">PKR ${fmt(sum('net'))}</td><td colspan="2" class="no-print"></td></tr>` : '';
     $('prCards2').innerHTML = list.length ? list.map(p => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex items-start justify-between gap-2"><div class="flex items-center gap-3 min-w-0">${avatar(p.name)}<div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(p.name)}</div><div class="text-xs text-slate-500">${esc(p.designation)}</div></div></div>${statusBadge(p.status)}</div>
         <div class="grid grid-cols-3 gap-1 mt-3 text-center text-[11px]"><div><div class="text-slate-400">Base</div><b>${fmt(p.base)}</b></div><div><div class="text-slate-400">Absent / late</div><b>${fmt(p.absenceCount)} / ${fmt(p.lateCount + p.excusedLates)}</b></div><div><div class="text-slate-400">Bonus</div><b class="text-emerald-600">${fmt(p.bonus)}</b></div></div>
-        <div class="mt-2 text-[11px] text-slate-500">Absence deduction ${fmt(p.leaveDed)} · Late deduction ${fmt(p.lateDed)} · Fine + advance ${fmt(p.fine + p.advance)}</div>
+        <div class="mt-2 text-[11px] text-slate-500">Absence ${fmt(p.leaveDed)} · Late ${fmt(p.lateDed)} · Security ${fmt(p.security)} · Fine + advance ${fmt(p.fine + p.advance)}</div>
         <div class="flex items-end justify-between mt-2"><div class="text-xs text-slate-500">${p.attendanceDays ? `${p.attendanceDays} marked days` : ''}${p.paidDate ? `<div>Paid ${fmtDate(p.paidDate)}</div>` : ''}</div><div class="text-xl font-extrabold">PKR ${fmt(p.net)}</div></div>
         <div class="flex justify-end items-center gap-1 mt-2 border-t pt-2">${acts(p)}</div></div>`).join('')
         : `<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet.` : 'Payroll table not set up yet.'}</div>`;
@@ -1177,6 +1381,7 @@ function renderPayroll() {
 async function generatePayroll() {
     if(!payrollOk) { showTab('payroll'); toast('Please run the one-time SQL at the top of the page first.', false); window.scrollTo({ top: 0 }); return; }
     if(!attendanceOk) { showTab('attendance'); toast('Run the attendance setup SQL before generating attendance-based payroll.', false); window.scrollTo({ top: 0 }); return; }
+    if(!securityOk) { showTab('payroll'); toast('Run the staff security setup SQL shown at the top of the page first.', false); window.scrollTo({ top: 0 }); return; }
     const month = curMonth(), missing = eligibleStaff(month).filter(s => !payMap[s.staffId + '|' + month]);
     if(monthEnd(month) > todayStr()) { toast('Generate payroll after the salary month has ended.', false); return; }
     if(!missing.length) { toast(`The salary sheet for ${monthLabel(month)} is already complete.`); return; }
@@ -1219,14 +1424,17 @@ function renderPayrollGeneration(month) {
                 <b class="text-sm text-slate-800">${esc(draft.staff.name)}</b>
                 <span class="text-[11px] text-slate-500">${draft.markedDays} dates already marked · ${draft.missingDays} unmarked workdays will be saved as Present · ${draft.absenceCount} absent / ${draft.lateCount + draft.excusedLates} late</span>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-[140px_160px_1fr] gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-[120px_150px_180px_1fr] gap-2">
                 <label class="text-xs text-slate-600">Salary days (0–30)
                     <input data-gen-days="${index}" type="number" min="0" max="30" step="1" value="30" class="mt-1 w-full border rounded-lg p-2 text-sm">
                 </label>
                 <label class="text-xs text-slate-600">Deductible leave days
                     <input data-gen-leaves="${index}" type="number" min="0" max="30" step="1" value="${draft.defaultLeaves}" class="mt-1 w-full border rounded-lg p-2 text-sm">
                 </label>
-                <label class="text-xs text-slate-600">Remarks${draft.defaultLeaves ? ' (required if changing days/leaves)' : ''}
+                <label class="text-xs text-slate-600">Security deduction (PKR)
+                    <input data-gen-security="${index}" type="number" min="0" step="0.01" value="0" class="mt-1 w-full border rounded-lg p-2 text-sm">
+                </label>
+                <label class="text-xs text-slate-600">Remarks
                     <input data-gen-note="${index}" type="text" maxlength="300" class="mt-1 w-full border rounded-lg p-2 text-sm" placeholder="Reason for a manual adjustment">
                 </label>
             </div>
@@ -1239,18 +1447,29 @@ async function confirmGeneratePayroll() {
         const base = payrollGenDrafts[index];
         const daysValue = $(`genPayrollRows`).querySelector(`[data-gen-days="${index}"]`).value;
         const leavesValue = $(`genPayrollRows`).querySelector(`[data-gen-leaves="${index}"]`).value;
+        const securityValue = $(`genPayrollRows`).querySelector(`[data-gen-security="${index}"]`).value;
         const note = $(`genPayrollRows`).querySelector(`[data-gen-note="${index}"]`).value.trim();
-        const salaryDays = Number(daysValue), leaves = Number(leavesValue);
+        const salaryDays = Number(daysValue), leaves = Number(leavesValue), security = Number(securityValue);
         if(!Number.isInteger(salaryDays) || salaryDays < 0 || salaryDays > PAYROLL_DIVISOR) {
             toast(`${base.staff.name}: salary days must be a whole number from 0 to 30.`, false); return;
         }
         if(!Number.isInteger(leaves) || leaves < 0 || leaves > PAYROLL_DIVISOR || leaves > salaryDays) {
             toast(`${base.staff.name}: deductible leave days must be a whole number no greater than salary days.`, false); return;
         }
-        if((salaryDays !== PAYROLL_DIVISOR || leaves !== base.defaultLeaves) && !note) {
-            toast(`${base.staff.name}: enter a reason for changing salary days or leave deduction.`, false); return;
+        if(!Number.isFinite(security) || security < 0) {
+            toast(`${base.staff.name}: security deduction must be zero or a positive amount.`, false); return;
         }
-        drafts.push({ ...base, salaryDays, leaves, note });
+        if(Math.round(security * 100) / 100 !== security) {
+            toast(`${base.staff.name}: security deduction must have at most two decimal places.`, false); return;
+        }
+        const preview = calcPay(base.staff.base, leaves, 0, 0, 0, base.lateCount, salaryDays);
+        if(security > preview.beforeSecurity) {
+            toast(`${base.staff.name}: security deduction cannot exceed salary payable before security (PKR ${fmt(preview.beforeSecurity)}).`, false); return;
+        }
+        if((salaryDays !== PAYROLL_DIVISOR || leaves !== base.defaultLeaves || security > 0) && !note) {
+            toast(`${base.staff.name}: enter a reason for a manual salary or security deduction.`, false); return;
+        }
+        drafts.push({ ...base, salaryDays, leaves, security, note });
     }
 
     closeModal('genPayrollModal');
@@ -1277,21 +1496,40 @@ async function confirmGeneratePayroll() {
         const payrollRows = drafts.map(draft => {
             const s = draft.staff;
             const bonus = draft.absenceCount === 0 && draft.salaryDays > 0 ? Math.round(s.base / PAYROLL_DIVISOR) : 0;
-            const calc = calcPay(s.base, draft.leaves, bonus, 0, 0, draft.lateCount, draft.salaryDays);
+            const calc = calcPay(s.base, draft.leaves, bonus, 0, 0, draft.lateCount, draft.salaryDays, draft.security);
             const autoNote = draft.missingDays ? `${draft.missingDays} unmarked workday(s) were marked Present.` : '';
             const note = [draft.note ? `Manual payroll adjustment: ${draft.note}` : '', autoNote].filter(Boolean).join(' ');
             return { staff_id: s.staffId, staff_name: s.name, designation: s.designation, month, base_salary: s.base,
                 leaves: draft.leaves, absence_count: draft.absenceCount, excused_leaves: draft.excusedLeaves,
                 leave_deduction: calc.ded, working_days: PAYROLL_DIVISOR, salary_days: draft.salaryDays,
+                security_deduction: draft.security,
                 late_count: draft.lateCount, excused_lates: draft.excusedLates, late_deduction: calc.lateDed,
                 attendance_days: draft.markedDays + draft.missingDays, bonus, fine: 0, advance: 0,
                 net_salary: calc.net, status: 'Unpaid', notes: note || null };
         });
         const response = await fetch(`${c.url}/rest/v1/payroll?on_conflict=staff_id,month`, {
-            method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=minimal' }),
+            method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=representation' }),
             body: JSON.stringify(payrollRows)
         });
         if(!response.ok) throw new Error('Attendance was saved, but payroll generation failed: ' + await response.text());
+        const createdPayroll = await response.json();
+        const createdByStaff = new Map((Array.isArray(createdPayroll) ? createdPayroll : []).map(row => [row.staff_id, row]));
+        const rollbackSecurity = [];
+        try {
+            for(const draft of drafts.filter(item => item.security > 0)) {
+                const saved = createdByStaff.get(draft.staff.staffId);
+                if(!saved) throw new Error(`Payroll row for ${draft.staff.name} was not returned; refresh and review before retrying security posting.`);
+                rollbackSecurity.push(await saveSecurityDeduction(
+                    { id: saved.id, staffId: saved.staff_id, name: saved.staff_name, month: saved.month },
+                    draft.security, monthEnd(month), draft.note
+                ));
+            }
+        } catch(error) {
+            for(const rollback of rollbackSecurity.reverse()) {
+                try { await rollback(); } catch(rollbackError) { console.error(rollbackError); }
+            }
+            throw new Error(`Payroll was created, but a security payable could not be posted: ${error.message} Refresh the page and resolve this before paying.`);
+        }
         toast(`Salary sheet created for ${payrollRows.length} staff; ${toInsert.length} missing workday(s) marked Present.`);
         await initStaff();
         showTab('payroll');
@@ -1307,18 +1545,19 @@ function openAdjust(id) {
     let p = payById[id]; if(!p || p.status === 'Paid') return;
     adjId = id;
     $('adjTitle').innerText = 'Adjust salary'; $('adjSub').innerText = `${p.name} · ${monthLabel(p.month)}`;
-    $('adjBase').value = p.base; $('adjSalaryDays').value = p.salaryDays; $('adjLeaves').value = p.leaves; $('adjLate').value = p.lateCount; $('adjBonus').value = p.bonus; $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
+    $('adjBase').value = p.base; $('adjSalaryDays').value = p.salaryDays; $('adjLeaves').value = p.leaves; $('adjSecurity').value = p.security; $('adjLate').value = p.lateCount; $('adjBonus').value = p.bonus; $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
     let s = staff.find(x => x.staffId === p.staffId), hint = $('adjJoinHint');
     if(s && s.joining && s.joining > monthStart(p.month) && s.joining <= monthEnd(p.month)) { hint.innerText = `${p.name} joined on ${fmtDate(s.joining)} — adjust the base salary if this month should be pro-rata.`; hint.classList.remove('hidden'); } else hint.classList.add('hidden');
     calcAdj(); openModal('adjModal');
 }
-function adjVals() { return { base: parseFloat($('adjBase').value) || 0, salaryDays: parseFloat($('adjSalaryDays').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
+function adjVals() { return { base: parseFloat($('adjBase').value) || 0, salaryDays: parseFloat($('adjSalaryDays').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, security: parseFloat($('adjSecurity').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
 function calcAdj() {
-    let v = adjVals(), p = payById[adjId], r = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv, p ? p.lateCount : 0, v.salaryDays);
+    let v = adjVals(), p = payById[adjId], r = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv, p ? p.lateCount : 0, v.salaryDays, v.security);
     $('bdBase').innerText = fmt(v.base); $('bdLeave').innerText = '− ' + fmt(r.ded);
     $('bdLeaveLbl').innerText = `Leave deduction (${fmt(r.billable)} day${r.billable === 1 ? '' : 's'} × ${fmt(Math.round(r.daily))})`;
     $('bdLate').innerText = '− ' + fmt(r.lateDed);
     $('bdLateLbl').innerText = `Late deduction (${p ? p.lateCount : 0} late mark(s), one day per 3)`;
+    $('bdSecurity').innerText = '− ' + fmt(v.security);
     $('bdBonus').innerText = '+ ' + fmt(v.bonus); $('bdFine').innerText = '− ' + fmt(v.fine + v.adv); $('bdNet').innerText = 'PKR ' + fmt(r.net);
     return r;
 }
@@ -1332,17 +1571,39 @@ async function saveAdjust() {
     if(!Number.isInteger(v.leaves) || v.leaves < 0 || v.leaves > PAYROLL_DIVISOR || v.leaves > v.salaryDays) {
         toast('Deductible leave days must be a whole number no greater than salary days.', false); return;
     }
-    if((v.salaryDays !== p.salaryDays || v.leaves !== p.leaves) && !notes) {
-        toast('Enter a reason when changing salary days or leave deduction.', false); return;
+    if(!Number.isFinite(v.security) || v.security < 0) {
+        toast('Security deduction must be zero or a positive amount.', false); return;
+    }
+    if(Math.round(v.security * 100) / 100 !== v.security) {
+        toast('Security deduction must have at most two decimal places.', false); return;
+    }
+    const beforeSecurity = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv, p.lateCount, v.salaryDays);
+    if(v.security > beforeSecurity.beforeSecurity) {
+        toast(`Security deduction cannot exceed salary payable before security (PKR ${fmt(beforeSecurity.beforeSecurity)}).`, false); return;
+    }
+    if((v.salaryDays !== p.salaryDays || v.leaves !== p.leaves || v.security !== p.security) && !notes) {
+        toast('Enter a reason when changing salary days, leave deduction, or security deduction.', false); return;
     }
     showLoading('Saving...');
+    let rollbackSecurity = null;
     try {
         let c = getSupabaseConfig();
+        rollbackSecurity = await saveSecurityDeduction(p, v.security, monthEnd(p.month), notes || p.notes);
         let res = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }),
-            body: JSON.stringify({ base_salary: v.base, leaves: v.leaves, absence_count: p.absenceCount, excused_leaves: p.excusedLeaves, leave_deduction: r.ded, working_days: PAYROLL_DIVISOR, salary_days: v.salaryDays, late_count: p.lateCount, excused_lates: p.excusedLates, late_deduction: r.lateDed, attendance_days: p.attendanceDays, bonus: v.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: notes || null }) });
-        if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
+            body: JSON.stringify({ base_salary: v.base, leaves: v.leaves, absence_count: p.absenceCount, excused_leaves: p.excusedLeaves, leave_deduction: r.ded, working_days: PAYROLL_DIVISOR, salary_days: v.salaryDays, security_deduction: v.security, late_count: p.lateCount, excused_lates: p.excusedLates, late_deduction: r.lateDed, attendance_days: p.attendanceDays, bonus: v.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: notes || null }) });
+        if(!res.ok) {
+            await rollbackSecurity();
+            rollbackSecurity = null;
+            hideLoading(); toast('Could not save: ' + await res.text(), false); return;
+        }
         closeModal('adjModal'); toast('Salary updated.'); await initStaff(); showTab('payroll');
-    } catch (e) { hideLoading(); toast('Could not connect to the database.', false); }
+    } catch (e) {
+        if(rollbackSecurity) {
+            try { await rollbackSecurity(); }
+            catch(rollbackError) { console.error(rollbackError); }
+        }
+        hideLoading(); toast(e.message || 'Could not save salary and security payable.', false);
+    }
 }
 
 // rules
@@ -1353,23 +1614,96 @@ function openPay(target) {
     let rows = target === 'ALL' ? monthRows(curMonth()).filter(p => p.status === 'Unpaid') : [payById[target]].filter(p => p && p.status === 'Unpaid');
     if(!rows.length) { toast(target === 'ALL' ? 'No unpaid salaries for this month.' : 'This salary is already paid.', false); return; }
     payTarget = rows.map(p => p.id);
-    let total = rows.reduce((s, p) => s + p.net, 0);
     $('payTitle').innerText = target === 'ALL' ? 'Pay all unpaid salaries' : 'Pay salary';
     $('paySub').innerText = target === 'ALL' ? monthLabel(curMonth()) : `${rows[0].name} · ${monthLabel(rows[0].month)}`;
-    $('payAmount').innerText = 'PKR ' + fmt(total); $('payCount').innerText = rows.length > 1 ? `${rows.length} staff members (one voucher each)` : '';
+    $('payCount').innerText = rows.length > 1 ? `${rows.length} staff members (separate salary and refund vouchers)` : '';
+    $('paySecurityRows').innerHTML = securityOk ? rows.filter(p => securityBalance(p.staffId) > 0).map(p => `
+        <label class="block rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs">
+            <span class="font-semibold text-amber-900">${esc(p.name)}</span>
+            <span class="text-amber-800"> · outstanding security PKR ${fmt(securityBalance(p.staffId))}</span>
+            <span class="mt-2 block text-slate-600">Refund now (optional, PKR)</span>
+            <input data-security-refund="${esc(String(p.id))}" type="number" min="0" max="${securityBalance(p.staffId)}" step="0.01" value="0" oninput="updatePaymentPreview()" class="mt-1 w-full border rounded-lg p-2 text-sm bg-white">
+        </label>`).join('') : '';
+    if(!rows.some(p => securityBalance(p.staffId) > 0))
+        $('paySecurityRows').innerHTML = '<p class="text-[11px] text-slate-500">No outstanding security refund is available for the selected staff.</p>';
+    updatePaymentPreview();
     $('payDate').value = todayStr(); $('payNotes').value = '';
     openModal('payModal');
 }
-async function paySalary(p, date, wallet, notes) {
+function refundAmountFor(id) {
+    const input = [...document.querySelectorAll('[data-security-refund]')].find(node => node.dataset.securityRefund === String(id));
+    return input ? Number(input.value) : 0;
+}
+function updatePaymentPreview() {
+    const rows = (payTarget || []).map(id => payById[id]).filter(Boolean);
+    const refunds = rows.reduce((sum, p) => sum + refundAmountFor(p.id), 0);
+    $('payAmount').innerText = 'PKR ' + fmt(rows.reduce((sum, p) => sum + p.net, 0) + refunds);
+}
+async function postSecurityRefund(p, amount, date, wallet, notes) {
+    if(amount <= 0) return null;
+    const c = getSupabaseConfig(), key = `refund:${p.id}`;
+    if(await findSecurityEvent(key))
+        throw new Error(`${p.name} already has a security refund recorded for this payroll. Undo or reconcile that payment before retrying.`);
+    const voucher = 'PV-' + Math.floor(100000 + Math.random() * 900000);
+    const voucherResponse = await fetch(`${c.url}/rest/v1/accounts`, {
+        method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+        body: JSON.stringify([{
+            voucher_id: voucher, from_account: wallet, to_account: 'Staff Security Payable',
+            description: `Staff security refund: ${p.name} (${monthLabel(p.month)})`,
+            amount_in: 0, amount_out: amount, date, remarks: notes || null
+        }])
+    });
+    if(!voucherResponse.ok) throw new Error('Security refund Accounts voucher: ' + await voucherResponse.text());
+    const ledgerResponse = await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
+        method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+        body: JSON.stringify({
+            staff_id: p.staffId, staff_name: p.name, entry_type: 'refund', amount,
+            transaction_date: date, salary_month: p.month, payroll_id: p.id, voucher_id: voucher,
+            source_key: key, notes: notes || null
+        })
+    });
+    if(!ledgerResponse.ok) {
+        const reason = await ledgerResponse.text();
+        const rollback = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(voucher)}`, {
+            method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
+        });
+        if(!rollback.ok) throw new Error(`Could not post refund liability (${reason}); refund voucher ${voucher} could not be rolled back. Reconcile it in Accounts before retrying.`);
+        throw new Error('Could not post refund liability: ' + reason);
+    }
+    return { voucher, sourceKey: key };
+}
+async function paySalary(p, date, wallet, notes, refund) {
     let c = getSupabaseConfig();
     let voucher = 'PV-' + Math.floor(100000 + Math.random() * 900000);
     let acc = { voucher_id: voucher, from_account: wallet, to_account: 'Salaries', description: `Salary: ${p.name} (${monthLabel(p.month)})`, amount_in: 0, amount_out: p.net, date, remarks: notes };
     let r1 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify(acc) });
     if(!r1.ok) throw new Error('Accounts: ' + await r1.text());
-    let r2 = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify({ status: 'Paid', paid_date: date, payment_mode: wallet, voucher_no: voucher }) });
-    if(!r2.ok) {
-        await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(voucher)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });   // roll back
-        throw new Error('Payroll: ' + await r2.text());
+    let refundResult = null;
+    try {
+        if(refund > 0) refundResult = await postSecurityRefund(p, refund, date, wallet, notes);
+        const payrollResponse = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, {
+            method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+            body: JSON.stringify({ status: 'Paid', paid_date: date, payment_mode: wallet, voucher_no: voucher })
+        });
+        if(!payrollResponse.ok) throw new Error('Payroll: ' + await payrollResponse.text());
+    } catch(error) {
+        const rollbackErrors = [];
+        if(refundResult) {
+            const ledgerRollback = await fetch(`${c.url}/rest/v1/staff_security_ledger?source_key=eq.${encodeURIComponent(refundResult.sourceKey)}`, {
+                method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
+            });
+            if(!ledgerRollback.ok) rollbackErrors.push(`refund ledger ${refundResult.voucher}: ${await ledgerRollback.text()}`);
+            const refundVoucherRollback = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(refundResult.voucher)}`, {
+                method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
+            });
+            if(!refundVoucherRollback.ok) rollbackErrors.push(`refund voucher ${refundResult.voucher}: ${await refundVoucherRollback.text()}`);
+        }
+        const salaryRollback = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(voucher)}`, {
+            method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
+        });
+        if(!salaryRollback.ok) rollbackErrors.push(`salary voucher ${voucher}: ${await salaryRollback.text()}`);
+        if(rollbackErrors.length) throw new Error(`${error.message} Rollback was incomplete (${rollbackErrors.join('; ')}); reconcile before retrying.`);
+        throw error;
     }
 }
 async function confirmPay() {
@@ -1377,29 +1711,97 @@ async function confirmPay() {
     if(!date) { toast('Please select the payment date.', false); return; }
     let rows = (payTarget || []).map(id => payById[id]).filter(p => p && p.status === 'Unpaid');
     if(!rows.length) { closeModal('payModal'); return; }
+    const refunds = new Map();
+    for(const p of rows) {
+        const amount = refundAmountFor(p.id);
+        if(!Number.isFinite(amount) || amount < 0 || Math.round(amount * 100) / 100 !== amount) {
+            toast(`${p.name}: refund must be non-negative with at most two decimal places.`, false); return;
+        }
+        if(amount > 0 && !securityOk) { toast('Run the staff security setup SQL before recording a refund.', false); return; }
+        if(amount > securityBalance(p.staffId)) { toast(`${p.name}: refund exceeds outstanding security of PKR ${fmt(securityBalance(p.staffId))}.`, false); return; }
+        refunds.set(p.id, amount);
+    }
     closeModal('payModal');
     let done = 0;
     try {
-        for(let p of rows) { showLoading(`Paying ${done + 1} of ${rows.length}...`); await paySalary(p, date, wallet, notes); done++; }
+        for(let p of rows) {
+            showLoading(`Paying ${done + 1} of ${rows.length}...`);
+            const refund = refunds.get(p.id) || 0;
+            if(refund > 0) {
+                const c = getSupabaseConfig();
+                const response = await sbFetchAll('staff_security_ledger', `select=entry_type,amount&staff_id=eq.${encodeURIComponent(p.staffId)}`);
+                if(!response.ok) throw new Error('Could not verify the current security balance: ' + await response.text());
+                const entries = await response.json();
+                const current = Math.round(entries.reduce((sum, entry) => sum + (entry.entry_type === 'refund' ? -1 : 1) * (Number(entry.amount) || 0), 0) * 100) / 100;
+                if(refund > current) throw new Error(`${p.name}: security balance changed to PKR ${fmt(current)}. Refresh payroll and enter a new refund amount.`);
+            }
+            await paySalary(p, date, wallet, notes, refund); done++;
+        }
         toast(`${done} salary payment${done > 1 ? 's' : ''} recorded in Accounts.`);
     } catch (e) { console.error(e); toast(`Stopped after ${done} payment(s): ${e.message}`, false); }
     await initStaff(); showTab('payroll');
 }
 function undoPay(id) {
     let p = payById[id]; if(!p || p.status !== 'Paid') return;
-    confirmBox(`Undo the salary payment of PKR ${fmt(p.net)} to ${p.name} (${monthLabel(p.month)})?\n\nThe linked voucher in Accounts will be deleted and the salary becomes Unpaid again.`, 'Yes, undo', async () => {
+    if(!p.voucher) { toast('This paid salary has no linked voucher number; reconcile it in Accounts before undoing.', false); return; }
+    confirmBox(`Undo the salary payment of PKR ${fmt(p.net)} to ${p.name} (${monthLabel(p.month)})?\n\nThe linked salary voucher and any security refund voucher/liability will be removed, and the salary becomes Unpaid again.`, 'Yes, undo', async () => {
         showLoading('Reverting payment...');
+        const c = getSupabaseConfig(), removedAccounts = [], removedLedger = [];
         try {
-            let c = getSupabaseConfig();
-            let r = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify({ status: 'Unpaid', paid_date: null, payment_mode: null, voucher_no: null }) });
-            if(!r.ok) { hideLoading(); toast('Could not undo: ' + await r.text(), false); return; }
+            const refundResponse = await fetch(`${c.url}/rest/v1/staff_security_ledger?select=*&source_key=eq.${encodeURIComponent(`refund:${p.id}`)}`, { headers: sbHeaders() });
+            if(!refundResponse.ok) throw new Error('Could not check for a linked security refund: ' + await refundResponse.text());
+            const refundRows = await refundResponse.json();
+            if(Array.isArray(refundRows) && refundRows.length) {
+                const refund = refundRows[0];
+                if(!refund.voucher_id) throw new Error('The linked security refund has no Accounts voucher number; reconcile it before undoing.');
+                const ledgerResponse = await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(refund.id)}`, {
+                    method: 'DELETE', headers: sbHeaders({ Prefer: 'return=representation' })
+                });
+                if(!ledgerResponse.ok) throw new Error('Could not remove linked security refund: ' + await ledgerResponse.text());
+                const deletedLedger = await ledgerResponse.json();
+                if(!Array.isArray(deletedLedger) || !deletedLedger.length) throw new Error('Security refund was not removed; check Accounts Delete/Edit and Staff Edit permissions.');
+                removedLedger.push(...deletedLedger);
+                if(refund.voucher_id) {
+                    const refundVoucherResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(refund.voucher_id)}`, {
+                        method: 'DELETE', headers: sbHeaders({ Prefer: 'return=representation' })
+                    });
+                    if(!refundVoucherResponse.ok) throw new Error('Could not remove security refund voucher: ' + await refundVoucherResponse.text());
+                    removedAccounts.push(...await refundVoucherResponse.json());
+                }
+            }
             if(p.voucher) {
-                let d = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(p.voucher)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
-                if(!d.ok) toast(`Salary marked unpaid, but voucher ${p.voucher} could not be deleted from Accounts — please delete it there.`, false);
-                else toast('Payment reverted.');
-            } else toast('Payment reverted.');
+                const salaryResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(p.voucher)}`, {
+                    method: 'DELETE', headers: sbHeaders({ Prefer: 'return=representation' })
+                });
+                if(!salaryResponse.ok) throw new Error('Could not remove salary voucher: ' + await salaryResponse.text());
+                const salaryRows = await salaryResponse.json();
+                if(!Array.isArray(salaryRows) || !salaryRows.length) throw new Error(`Salary voucher ${p.voucher} was not found; payroll was not changed.`);
+                removedAccounts.push(...salaryRows);
+            }
+            const payrollResponse = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, {
+                method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+                body: JSON.stringify({ status: 'Unpaid', paid_date: null, payment_mode: null, voucher_no: null })
+            });
+            if(!payrollResponse.ok) throw new Error('Could not return payroll to Unpaid: ' + await payrollResponse.text());
+            toast('Payment and linked security refund reverted.');
             await initStaff(); showTab('payroll');
-        } catch (e) { hideLoading(); toast('Connection error.', false); }
+        } catch (e) {
+            const restoreErrors = [];
+            if(removedAccounts.length) {
+                const restore = await fetch(`${c.url}/rest/v1/accounts`, {
+                    method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(removedAccounts)
+                });
+                if(!restore.ok) restoreErrors.push('Accounts vouchers: ' + await restore.text());
+            }
+            if(removedLedger.length) {
+                const restore = await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
+                    method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(removedLedger)
+                });
+                if(!restore.ok) restoreErrors.push('security refund ledger: ' + await restore.text());
+            }
+            toast(restoreErrors.length ? `${e.message} Rollback incomplete (${restoreErrors.join('; ')}); reconcile before retrying.` : e.message || 'Could not undo payment.', false);
+            hideLoading();
+        }
     });
 }
 function removePayrollRow(id) {
@@ -1443,7 +1845,7 @@ function exportCsv(name, header, rows) {
     a.download = `${name}-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function exportStaffCsv() { let l = staffList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('staff', ['Staff ID', 'Name', 'Designation', 'Joining date', 'Phone', 'Base salary', 'Status'], l.map(s => [s.staffId, s.name, s.designation, s.joining, s.phone, s.base, s.status])); }
-function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Salary divisor', 'Attendance days', 'Absent days', 'Excused absences', 'Deductible absences', 'Absence deduction', 'Late marks', 'Excused lates', 'Deductible late marks', 'Late deduction', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.attendanceDays, p.absenceCount, p.excusedLeaves, p.leaves, p.leaveDed, p.lateCount + p.excusedLates, p.excusedLates, p.lateCount, p.lateDed, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
+function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Salary divisor', 'Attendance days', 'Absent days', 'Excused absences', 'Deductible absences', 'Absence deduction', 'Late marks', 'Excused lates', 'Deductible late marks', 'Late deduction', 'Security withheld', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.attendanceDays, p.absenceCount, p.excusedLeaves, p.leaves, p.leaveDed, p.lateCount + p.excusedLates, p.excusedLates, p.lateCount, p.lateDed, p.security, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
 function exportHistoryCsv() { let l = historyList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('salary-payments', ['Paid on', 'Salary month', 'Staff', 'Net paid', 'Account', 'Voucher'], l.map(p => [p.paidDate, p.month, p.name, p.net, p.mode, p.voucher])); }
 
 function printSlip(id) {
@@ -1468,6 +1870,7 @@ function printSlip(id) {
       ${row('Late arrivals (including excused)', fmt(p.lateCount + p.excusedLates))}
       ${row('Excused late marks', fmt(p.excusedLates))}
       ${row('Late deduction', '− PKR ' + fmt(p.lateDed), 'neg')}
+      ${row('Security withheld (payable)', '− PKR ' + fmt(p.security), 'neg')}
       ${row('Bonus', '+ PKR ' + fmt(p.bonus), 'pos')}
       ${row('Fine', '− PKR ' + fmt(p.fine), 'neg')}
       ${row('Advance recovered', '− PKR ' + fmt(p.advance), 'neg')}
