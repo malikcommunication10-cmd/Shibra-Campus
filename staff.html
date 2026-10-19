@@ -45,9 +45,6 @@
         </div>
     </div>
 
-    <!-- MOBILE TOP BAR -->
-    
-
     <div class="min-h-screen flex flex-col md:flex-row">
         <!-- SIDEBAR -->
         <aside id="appNav"></aside>
@@ -57,17 +54,18 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Staff & Payroll</h2>
-                    <p class="text-sm text-slate-500">Staff directory, daily attendance, attendance-based payroll and salary payments</p>
+                    <p class="text-sm text-slate-500">Staff directory, daily attendance, attendance-based payroll, salary payments & annual increments</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button onclick="openStaff()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➕ Add Staff</button>
+                    <button onclick="openIncrementModal()" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">📈 Give Increment</button>
                     <button onclick="generatePayroll()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">⚡ Generate Payroll</button>
-                    </div>
+                </div>
             </div>
 
             <!-- SETUP BANNER -->
             <div id="setupBanner" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-5 mb-4 no-print">
-                <h3 class="font-bold text-amber-900 mb-1">One-time setup: enable monthly payroll</h3>
+                <h3 class="font-bold text-amber-900 mb-1">One-time setup: enable monthly payroll & increments</h3>
                 <p id="setupText" class="text-sm text-amber-800 mb-3">Run this once in Supabase → SQL Editor, then refresh this page.</p>
                 <pre id="setupSql" class="bg-white border border-amber-200 rounded-xl p-3 text-xs overflow-x-auto whitespace-pre max-h-64"></pre>
                 <div class="flex gap-2 mt-3">
@@ -102,6 +100,7 @@
             <div class="flex gap-2 mb-4 no-print overflow-x-auto whitespace-nowrap pb-1">
                 <button data-tab="overview" onclick="showTab('overview')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-on">📊 Overview</button>
                 <button data-tab="staff" onclick="showTab('staff')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">👥 Staff</button>
+                <button data-tab="increments" onclick="showTab('increments')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📈 Increments</button>
                 <button data-tab="attendance" onclick="showTab('attendance')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📅 Attendance</button>
                 <button data-tab="payroll" onclick="showTab('payroll')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">💵 Monthly Payroll</button>
                 <button data-tab="history" onclick="showTab('history')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📜 Payment History</button>
@@ -163,6 +162,25 @@
                     </table>
                 </div>
                 <div id="sCards2" class="mobile-cards md:hidden space-y-2"></div>
+            </section>
+
+            <!-- INCREMENTS TAB -->
+            <section id="tab-increments" class="hidden space-y-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-3 no-print">
+                    <div>
+                        <h3 class="text-base font-bold text-indigo-950">Staff Salary Increments History</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">Track annual salary increments, percentage hikes, and effective dates for all staff.</p>
+                    </div>
+                    <button onclick="openIncrementModal()" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">📈 Give Increment</button>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="bg-slate-100 text-slate-600 border-b">
+                            <tr><th class="p-3">Staff Member</th><th class="p-3">Effective Date</th><th class="p-3 text-right">Previous Salary</th><th class="p-3 text-right">Increment Amount</th><th class="p-3 text-right">New Salary</th><th class="p-3">Remarks / Reason</th></tr>
+                        </thead>
+                        <tbody id="incrementsTableBody"></tbody>
+                    </table>
+                </div>
             </section>
 
             <!-- DAILY ATTENDANCE -->
@@ -280,6 +298,57 @@
         </div>
     </div>
 
+    <!-- INCREMENT MODAL -->
+    <div id="incrementModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+            <div class="p-5 border-b flex justify-between items-center bg-white">
+                <h3 class="text-lg font-bold text-indigo-950">Give Annual Increment</h3>
+                <button onclick="closeModal('incrementModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Select Staff Member</label>
+                    <select id="incStaff" onchange="onSelectIncrementStaff()" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Current Base (PKR)</label>
+                        <input id="incCurrentBase" type="text" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 font-bold text-slate-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Effective Date</label>
+                        <input id="incDate" type="date" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Increment Type</label>
+                        <select id="incType" onchange="calcNewSalary()" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none">
+                            <option value="amount">Fixed Amount (PKR)</option>
+                            <option value="percentage">Percentage (%)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1" id="incValLabel">Increment Value</label>
+                        <input id="incVal" type="number" min="0" step="any" oninput="calcNewSalary()" class="w-full border rounded-lg p-2.5 text-sm outline-none font-bold">
+                    </div>
+                </div>
+                <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex justify-between items-center">
+                    <span class="text-xs text-indigo-800 font-medium">New Updated Base Salary:</span>
+                    <span id="incNewSalaryPreview" class="text-base font-extrabold text-indigo-950">PKR 0</span>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Reason / Remarks</label>
+                    <input id="incRemarks" type="text" placeholder="Annual Performance Review" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                </div>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2 bg-slate-50">
+                <button onclick="closeModal('incrementModal')" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-sm font-semibold">Cancel</button>
+                <button onclick="saveIncrement()" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm">Save Increment</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MONTHLY ATTENDANCE / PAYROLL SETUP -->
     <div id="genPayrollModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
         <div class="bg-white w-full max-w-4xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
@@ -392,9 +461,6 @@
         </div>
     </div>
 
-    <!-- SETTINGS -->
-    
-
 <script>
 // ====================================================================================
 //  CONFIG
@@ -439,181 +505,44 @@ create table if not exists public.payroll (
   created_at timestamptz default now(),
   unique (staff_id, month)
 );
-alter table public.payroll
-  add column if not exists working_days integer not null default 30,
-  add column if not exists absence_count integer not null default 0,
-  add column if not exists excused_leaves integer not null default 0,
-  add column if not exists late_count integer not null default 0,
-  add column if not exists excused_lates integer not null default 0,
-  add column if not exists late_deduction numeric not null default 0,
-  add column if not exists attendance_days integer not null default 0,
-  add column if not exists salary_days integer not null default 30,
-  add column if not exists security_deduction numeric not null default 0;
-alter table public.payroll enable row level security;
-revoke all on table public.payroll from anon;
-drop policy if exists shibra_select on public.payroll;
-drop policy if exists shibra_insert on public.payroll;
-drop policy if exists shibra_update on public.payroll;
-drop policy if exists shibra_delete on public.payroll;
-create policy shibra_select on public.payroll for select to authenticated using (public.app_has_page_permission('staff', 'v'));
-create policy shibra_insert on public.payroll for insert to authenticated with check (public.app_has_page_permission('staff', 'a'));
-create policy shibra_update on public.payroll for update to authenticated using (public.app_has_page_permission('staff', 'e')) with check (public.app_has_page_permission('staff', 'e'));
-create policy shibra_delete on public.payroll for delete to authenticated using (public.app_has_page_permission('staff', 'd'));
-grant select, insert, update, delete on public.payroll to authenticated;
-grant usage, select on sequence public.payroll_id_seq to authenticated;
 
--- 3) Daily staff attendance
-create table if not exists public.staff_attendance (
+-- 3) Staff annual increments table
+create table if not exists public.staff_increments (
   id bigint generated by default as identity primary key,
   staff_id text not null,
   staff_name text not null,
-  attendance_date date not null,
-  status text not null check (status in ('present', 'absent', 'late')),
-  note text,
-  absence_exempt boolean not null default false,
-  late_exempt boolean not null default false,
-  created_at timestamptz not null default now(),
-  unique (staff_id, attendance_date),
-  constraint staff_attendance_exemption_check check (
-    (not absence_exempt or status = 'absent') and
-    (not late_exempt or status = 'late') and
-    ((not absence_exempt and not late_exempt) or length(trim(coalesce(note, ''))) > 0)
-  )
-);
-create index if not exists staff_attendance_date_idx
-  on public.staff_attendance (attendance_date);
-alter table public.staff_attendance
-  add column if not exists absence_exempt boolean not null default false,
-  add column if not exists late_exempt boolean not null default false;
-alter table public.staff_attendance enable row level security;
-revoke all on table public.staff_attendance from anon;
-grant select, insert, update, delete on table public.staff_attendance to authenticated;
-grant usage, select on sequence public.staff_attendance_id_seq to authenticated;
-drop policy if exists shibra_select on public.staff_attendance;
-drop policy if exists shibra_insert on public.staff_attendance;
-drop policy if exists shibra_update on public.staff_attendance;
-drop policy if exists shibra_delete on public.staff_attendance;
-drop policy if exists shibra_day_gate_insert on public.staff_attendance;
-drop policy if exists shibra_day_gate_update on public.staff_attendance;
-drop policy if exists shibra_day_gate_delete on public.staff_attendance;
-create policy shibra_select on public.staff_attendance for select to authenticated
-  using (public.app_has_page_permission('staff', 'v'));
-create policy shibra_insert on public.staff_attendance for insert to authenticated
-  with check (public.app_has_page_permission('staff', 'a'));
-create policy shibra_update on public.staff_attendance for update to authenticated
-  using (public.app_has_page_permission('staff', 'e'))
-  with check (public.app_has_page_permission('staff', 'e'));
-create policy shibra_delete on public.staff_attendance for delete to authenticated
-  using (public.app_has_page_permission('staff', 'd'));
-create policy shibra_day_gate_insert on public.staff_attendance as restrictive for insert to authenticated
-  with check (public.app_previous_days_closed());
-create policy shibra_day_gate_update on public.staff_attendance as restrictive for update to authenticated
-  using (public.app_previous_days_closed()) with check (public.app_previous_days_closed());
-create policy shibra_day_gate_delete on public.staff_attendance as restrictive for delete to authenticated
-  using (public.app_previous_days_closed());
-create or replace function public.app_is_admin()
-returns boolean
-language sql
-stable
-security definer
-set search_path = pg_catalog, public, auth
-as $$
-  select exists (
-    select 1 from public.app_users u
-    where lower(u.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-      and u.role = 'Admin'
-      and u.active is distinct from false
-  );
-$$;
-revoke all on function public.app_is_admin() from public, anon;
-grant execute on function public.app_is_admin() to authenticated;
-drop policy if exists shibra_attendance_exemption_insert on public.staff_attendance;
-drop policy if exists shibra_attendance_exemption_update on public.staff_attendance;
-drop policy if exists shibra_attendance_exemption_delete on public.staff_attendance;
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.staff_attendance'::regclass
-      and conname = 'staff_attendance_exemption_check'
-  ) then
-    alter table public.staff_attendance
-      add constraint staff_attendance_exemption_check check (
-        (not absence_exempt or status = 'absent') and
-        (not late_exempt or status = 'late') and
-        ((not absence_exempt and not late_exempt) or length(trim(coalesce(note, ''))) > 0)
-      );
-  end if;
-end;
-$$;
-create policy shibra_attendance_exemption_insert on public.staff_attendance as restrictive
-  for insert to authenticated
-  with check (public.app_is_admin() or (not absence_exempt and not late_exempt));
-create policy shibra_attendance_exemption_update on public.staff_attendance as restrictive
-  for update to authenticated
-  using (public.app_is_admin() or (not absence_exempt and not late_exempt))
-  with check (public.app_is_admin() or (not absence_exempt and not late_exempt));
-create policy shibra_attendance_exemption_delete on public.staff_attendance as restrictive
-  for delete to authenticated
-  using (public.app_is_admin() or (not absence_exempt and not late_exempt));
-update public.settings set setting_value = '0' where lower(trim(setting_key)) = 'payroll free leaves';
-
--- Staff security opening balances, monthly deductions, and refunds
-create table if not exists public.staff_security_ledger (
-  id bigint generated by default as identity primary key,
-  staff_id text not null,
-  staff_name text not null,
-  entry_type text not null check (entry_type in ('opening', 'deduction', 'refund')),
-  amount numeric not null check (amount >= 0 and (entry_type = 'opening' or amount > 0)),
-  transaction_date date not null,
-  salary_month text,
-  payroll_id bigint references public.payroll(id) on delete restrict,
-  voucher_id text,
-  source_key text not null unique,
-  notes text,
+  effective_date date not null,
+  previous_salary numeric not null default 0,
+  increment_amount numeric not null default 0,
+  new_salary numeric not null default 0,
+  remarks text,
   created_at timestamptz not null default now()
 );
-alter table public.staff_security_ledger add column if not exists voucher_id text;
-create unique index if not exists staff_security_one_opening_per_staff
-  on public.staff_security_ledger (staff_id) where entry_type = 'opening';
-create index if not exists staff_security_staff_date_idx
-  on public.staff_security_ledger (staff_id, transaction_date);
-create index if not exists staff_security_month_idx
-  on public.staff_security_ledger (salary_month);
-alter table public.staff_security_ledger enable row level security;
-revoke all on table public.staff_security_ledger from anon;
-grant select, insert, update, delete on public.staff_security_ledger to authenticated;
-grant usage, select on sequence public.staff_security_ledger_id_seq to authenticated;
-drop policy if exists staff_security_select on public.staff_security_ledger;
-drop policy if exists staff_security_insert on public.staff_security_ledger;
-drop policy if exists staff_security_update on public.staff_security_ledger;
-drop policy if exists staff_security_delete on public.staff_security_ledger;
-create policy staff_security_select on public.staff_security_ledger for select to authenticated
-  using (public.app_has_page_permission('staff', 'v') or public.app_has_page_permission('accounts', 'v'));
-create policy staff_security_insert on public.staff_security_ledger for insert to authenticated with check (
-  (entry_type = 'opening' and (public.app_has_page_permission('accounts', 'a') or public.app_has_page_permission('accounts', 'e') or public.app_has_page_permission('staff', 'a') or public.app_has_page_permission('staff', 'e')) and public.app_can_change_day(transaction_date))
-  or (entry_type = 'deduction' and (public.app_has_page_permission('staff', 'a') or public.app_has_page_permission('staff', 'e')))
-  or (entry_type = 'refund' and public.app_has_page_permission('accounts', 'a') and public.app_has_page_permission('staff', 'e') and public.app_can_change_day(transaction_date))
-);
-create policy staff_security_update on public.staff_security_ledger for update to authenticated
-  using ((entry_type = 'opening' and (public.app_has_page_permission('accounts', 'e') or public.app_has_page_permission('staff', 'e')) and public.app_can_change_day(transaction_date)) or (entry_type = 'deduction' and public.app_has_page_permission('staff', 'e')))
-  with check ((entry_type = 'opening' and (public.app_has_page_permission('accounts', 'e') or public.app_has_page_permission('staff', 'e')) and public.app_can_change_day(transaction_date)) or (entry_type = 'deduction' and public.app_has_page_permission('staff', 'e')));
-create policy staff_security_delete on public.staff_security_ledger for delete to authenticated using (
-  (entry_type = 'opening' and (public.app_has_page_permission('accounts', 'd') or public.app_has_page_permission('accounts', 'e') or public.app_has_page_permission('staff', 'd') or public.app_has_page_permission('staff', 'e')) and public.app_can_change_day(transaction_date))
-  or (entry_type = 'deduction' and (public.app_has_page_permission('staff', 'd') or public.app_has_page_permission('staff', 'e')))
-  or (entry_type = 'refund' and (public.app_has_page_permission('accounts', 'd') or public.app_has_page_permission('accounts', 'e')) and public.app_has_page_permission('staff', 'e'))
-);
+alter table public.staff_increments enable row level security;
+revoke all on table public.staff_increments from anon;
+grant select, insert, update, delete on public.staff_increments to authenticated;
+grant usage, select on sequence public.staff_increments_id_seq to authenticated;
+drop policy if exists shibra_select on public.staff_increments;
+drop policy if exists shibra_insert on public.staff_increments;
+drop policy if exists shibra_update on public.staff_increments;
+drop policy if exists shibra_delete on public.staff_increments;
+create policy shibra_select on public.staff_increments for select to authenticated using (public.app_has_page_permission('staff', 'v'));
+create policy shibra_insert on public.staff_increments for insert to authenticated with check (public.app_has_page_permission('staff', 'a') or public.app_has_page_permission('staff', 'e'));
+create policy shibra_update on public.staff_increments for update to authenticated using (public.app_has_page_permission('staff', 'e')) with check (public.app_has_page_permission('staff', 'e'));
+create policy shibra_delete on public.staff_increments for delete to authenticated using (public.app_has_page_permission('staff', 'd'));
+
 notify pgrst, 'reload schema';`;
 
 // ====================================================================================
 //  STATE + HELPERS
 // ====================================================================================
 let staff = [], staffByKey = {}, payroll = [], payById = {}, payMap = {};
-let staffExt = false, payrollOk = false, attendanceOk = false, securityOk = false;
+let staffExt = false, payrollOk = false, attendanceOk = false, securityOk = false, incrementsOk = false;
 let attendanceRows = [], attendanceByStaff = {}, attendanceDrafts = {}, attendanceDirty = false;
 let attendanceDate = '';
 let editingStaffKey = null, adjId = null, payTarget = null, payrollGenDrafts = [];
 let securityLedger = [], securityByStaff = {};
+let staffIncrements = [];
 
 const $ = id => document.getElementById(id);
 const PAYROLL_DIVISOR = 30;
@@ -637,50 +566,6 @@ async function findSecurityEvent(sourceKey) {
     if(!response.ok) throw new Error('Could not read staff security ledger: ' + await response.text());
     const rows = await response.json();
     return Array.isArray(rows) ? rows[0] || null : null;
-}
-async function saveSecurityDeduction(p, amount, date, notes) {
-    const c = getSupabaseConfig(), key = securitySourceKey(p.staffId, p.month);
-    if(!Number.isFinite(amount) || amount < 0 || Math.round(amount * 100) / 100 !== amount)
-        throw new Error(`${p.name}: security deduction must be a non-negative amount with at most two decimal places.`);
-    const old = await findSecurityEvent(key);
-    if(amount <= 0 && !old) return async () => {};
-    if(amount <= 0) {
-        const response = await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(old.id)}`, {
-            method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
-        });
-        if(!response.ok) throw new Error('Could not remove old security deduction: ' + await response.text());
-        return async () => {
-            const rollback = await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
-                method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
-                body: JSON.stringify(old)
-            });
-            if(!rollback.ok) throw new Error('Could not restore prior security deduction: ' + await rollback.text());
-        };
-    }
-    const payload = {
-        staff_id: p.staffId, staff_name: p.name, entry_type: 'deduction', amount,
-        transaction_date: date, salary_month: p.month, payroll_id: p.id,
-        source_key: key, notes: notes || null
-    };
-    const response = old
-        ? await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(old.id)}`, {
-            method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(payload)
-        })
-        : await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
-            method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=representation' }), body: JSON.stringify(payload)
-        });
-    if(!response.ok) throw new Error('Could not save security deduction liability: ' + await response.text());
-    const inserted = old ? null : (await response.json())[0];
-    return async () => {
-        const rollback = old
-            ? await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(old.id)}`, {
-                method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(old)
-            })
-            : await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(inserted.id)}`, {
-                method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
-            });
-        if(!rollback.ok) throw new Error('Could not roll back security ledger change: ' + await rollback.text());
-    };
 }
 function rebuildSecurityBalances() {
     securityByStaff = {};
@@ -835,25 +720,30 @@ async function initStaff() {
     showLoading('Loading staff & payroll...');
     let c = getSupabaseConfig();
     try {
-        let [sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityPayrollProbe, securityRes] = await Promise.all([
+        let [sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityPayrollProbe, securityRes, incRes] = await Promise.all([
             sbFetchAll('staff', 'select=*'),
             sbFetchAll('payroll', 'select=*'),
             fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/payroll?select=security_deduction&limit=1`, { headers: sbHeaders() }),
-            sbFetchAll('staff_security_ledger', 'select=*')
+            sbFetchAll('staff_security_ledger', 'select=*'),
+            sbFetchAll('staff_increments', 'select=*')
         ]);
         let sRows = await sRes.json();
         if(!Array.isArray(sRows)) throw new Error('staff failed to load');
         staffExt = staffProbe.ok;
         attendanceOk = attendanceProbe.ok;
         securityOk = securityPayrollProbe.ok && securityRes.ok;
+        incrementsOk = incRes.ok;
         let pRows = pRes.ok ? await pRes.json() : null;
         payrollOk = pRes.ok && payrollProbe.ok && Array.isArray(pRows);
         securityLedger = securityOk ? await securityRes.json() : [];
         if(!Array.isArray(securityLedger)) { securityLedger = []; securityOk = false; }
         rebuildSecurityBalances();
+
+        staffIncrements = incrementsOk ? await (await incRes.json()) : [];
+        if(!Array.isArray(staffIncrements)) staffIncrements = [];
 
         staff = sRows.map(normStaff).sort((a, b) => a.name.localeCompare(b.name));
         staffByKey = {}; staff.forEach(s => staffByKey[s.key] = s);
@@ -878,13 +768,11 @@ async function initStaff() {
     hideLoading();
 }
 function updateBanner() {
-    let need = !staffExt || !payrollOk || !attendanceOk || !securityOk;
+    let need = !staffExt || !payrollOk || !attendanceOk || !securityOk || !incrementsOk;
     $('setupSql').innerText = SETUP_SQL;
-    $('setupText').innerText = !securityOk
-        ? 'Staff security setup is missing. Run the updated setup SQL once in Supabase → SQL Editor, then refresh this page.'
-        : !payrollOk || !attendanceOk
-        ? 'Payroll attendance setup is missing. Run this once in Supabase → SQL Editor, then refresh this page.'
-        : 'Optional: run this once to add phone, status and notes for staff, then refresh this page.';
+    $('setupText').innerText = !incrementsOk
+        ? 'Staff increments setup is missing. Run the updated setup SQL once in Supabase → SQL Editor, then refresh this page.'
+        : 'Payroll attendance setup is missing. Run this once in Supabase → SQL Editor, then refresh this page.';
     $('setupBanner').classList.toggle('hidden', !need);
     $('attendanceNotReady').classList.toggle('hidden', attendanceOk);
 }
@@ -939,12 +827,104 @@ function setThisMonth() {
     renderAll();
 }
 function showTab(t) {
-    ['overview', 'staff', 'attendance', 'payroll', 'history'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    ['overview', 'staff', 'increments', 'attendance', 'payroll', 'history'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
-    const names = { overview: 'Overview', staff: 'Staff Directory', attendance: 'Daily Attendance', payroll: 'Salary Sheet', history: 'Salary Payment History' };
+    const names = { overview: 'Overview', staff: 'Staff Directory', increments: 'Salary Increments', attendance: 'Daily Attendance', payroll: 'Salary Sheet', history: 'Salary Payment History' };
     $('printTitle').innerText = `${names[t]}${t === 'payroll' || t === 'overview' ? ' — ' + monthLabel(curMonth()) : ''}`;
     window.scrollTo({ top: 0 });
 }
+
+// ====================================================================================
+//  INCREMENTS FEATURE LOGIC
+// ====================================================================================
+function openIncrementModal() {
+    if(!incrementsOk) { toast('Run the staff increments setup SQL shown at the top of the page first.', false); return; }
+    $('incStaff').innerHTML = staff.map(s => `<option value="${esc(s.staffId)}">${esc(s.name)} (${esc(s.designation)})</option>`).join('');
+    $('incDate').value = todayStr();
+    $('incVal').value = '';
+    $('incType').value = 'amount';
+    onSelectIncrementStaff();
+    openModal('incrementModal');
+}
+function onSelectIncrementStaff() {
+    let staffId = $('incStaff').value;
+    let s = staff.find(x => x.staffId === staffId);
+    if(s) {
+        $('incCurrentBase').value = fmt(s.base);
+        calcNewSalary();
+    }
+}
+function calcNewSalary() {
+    let staffId = $('incStaff').value;
+    let s = staff.find(x => x.staffId === staffId);
+    if(!s) return;
+    let current = s.base;
+    let val = parseFloat($('incVal').value) || 0;
+    let type = $('incType').value;
+    let newSal = type === 'percentage' ? current + (current * val / 100) : current + val;
+    $('incNewSalaryPreview').innerText = 'PKR ' + fmt(newSal);
+}
+async function saveIncrement() {
+    let staffId = $('incStaff').value;
+    let s = staff.find(x => x.staffId === staffId);
+    let date = $('incDate').value;
+    let val = parseFloat($('incVal').value) || 0;
+    let type = $('incType').value;
+    let remarks = $('incRemarks').value.trim();
+    if(!s) { toast('Select a staff member.', false); return; }
+    if(!date) { toast('Select an effective date.', false); return; }
+    if(val <= 0) { toast('Increment value must be greater than zero.', false); return; }
+
+    let prev = s.base;
+    let incrementAmt = type === 'percentage' ? (prev * val / 100) : val;
+    let newSal = prev + incrementAmt;
+
+    showLoading('Saving increment & updating base salary...');
+    try {
+        let c = getSupabaseConfig();
+        // 1. Insert into staff_increments
+        let resInc = await fetch(`${c.url}/rest/v1/staff_increments`, {
+            method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+            body: JSON.stringify({
+                staff_id: s.staffId, staff_name: s.name, effective_date: date,
+                previous_salary: prev, increment_amount: incrementAmt, new_salary: newSal, remarks: remarks || null
+            })
+        });
+        if(!resInc.ok) throw new Error('Could not save increment record: ' + await resInc.text());
+
+        // 2. Update base_salary in staff table
+        let filter = s.hasStaffIdCol ? `staff_id=eq.${encodeURIComponent(s.staffId)}` : `id=eq.${encodeURIComponent(s.id)}`;
+        let resStaff = await fetch(`${c.url}/rest/v1/staff?${filter}`, {
+            method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+            body: JSON.stringify({ base_salary: newSal })
+        });
+        if(!resStaff.ok) throw new Error('Could not update staff base salary: ' + await resStaff.text());
+
+        closeModal('incrementModal');
+        toast(`Increment saved successfully! New base salary for ${s.name} is PKR ${fmt(newSal)}.`);
+        await initStaff();
+        showTab('increments');
+    } catch(e) {
+        toast(e.message || 'Could not save increment.', false);
+    } finally {
+        hideLoading();
+    }
+}
+function renderIncrementsTab() {
+    let tbody = $('incrementsTableBody');
+    if(!tbody) return;
+    tbody.innerHTML = staffIncrements.length ? staffIncrements.map(inc => `
+        <tr class="border-b hover:bg-slate-50">
+            <td class="p-3 font-semibold text-slate-800">${esc(inc.staff_name)}<div class="text-[11px] font-normal text-slate-400">ID: ${esc(inc.staff_id)}</div></td>
+            <td class="p-3 whitespace-nowrap">${fmtDate(inc.effective_date)}</td>
+            <td class="p-3 text-right">PKR ${fmt(inc.previous_salary)}</td>
+            <td class="p-3 text-right font-bold text-emerald-600">+ PKR ${fmt(inc.increment_amount)}</td>
+            <td class="p-3 text-right font-extrabold text-indigo-950">PKR ${fmt(inc.new_salary)}</td>
+            <td class="p-3 text-slate-600">${esc(inc.remarks || '-')}</td>
+        </tr>`).join('') : `<tr><td colspan="6" class="p-8 text-center text-slate-400">No increments recorded yet.</td></tr>`;
+}
+
+// Attendance helpers
 function attendanceStaff(date) {
     return staff.filter(s => (!s.joining || s.joining <= date) &&
         (s.status === 'Active' || (s.leaving && s.leaving >= date)));
@@ -979,8 +959,6 @@ function renderAttendance() {
                 </select></label>
                 <label class="text-xs text-slate-500">Remarks${row.absenceExempt || row.lateExempt ? ' (reason required)' : ' (optional)'}<input value="${esc(row.note || '')}" oninput="setAttendanceNote(${js(s.staffId)},this.value)" maxlength="300" class="mt-1 w-full border rounded-lg p-2.5 text-sm outline-none" placeholder="${row.absenceExempt || row.lateExempt ? 'Enter reason for exemption' : 'Optional remarks'}"></label>
             </div>
-            ${ME && ME.role === 'Admin' && row.status === 'absent' ? `<label class="mt-3 flex items-center gap-2 text-sm text-indigo-800"><input type="checkbox" ${row.absenceExempt ? 'checked' : ''} onchange="setAttendanceExemption(${js(s.staffId)},'absence',this.checked)" class="rounded border-slate-300"> Excuse this leave (no salary deduction)</label>` : ''}
-            ${ME && ME.role === 'Admin' && row.status === 'late' ? `<label class="mt-3 flex items-center gap-2 text-sm text-indigo-800"><input type="checkbox" ${row.lateExempt ? 'checked' : ''} onchange="setAttendanceExemption(${js(s.staffId)},'late',this.checked)" class="rounded border-slate-300"> Excuse this late mark (no late penalty)</label>` : ''}
         </article>`;
     }).join('') : '<div class="bg-white border rounded-2xl p-8 text-center text-slate-500 text-sm">No staff were employed on this date.</div>';
     if(sunday) {
@@ -1004,14 +982,6 @@ function setAttendanceStatus(staffId, status) {
         lateExempt: status === 'late' ? !!old.lateExempt : false };
     attendanceDirty = true;
     updateAttendanceSummary($('attendanceDate').value || todayStr(), attendanceStaff($('attendanceDate').value || todayStr()));
-}
-function setAttendanceExemption(staffId, type, enabled) {
-    if(!ME || ME.role !== 'Admin') { toast('Only an Admin can approve attendance exemptions.', false); renderAttendance(); return; }
-    let row = attendanceDrafts[staffId];
-    if(!row || (type === 'absence' && row.status !== 'absent') || (type === 'late' && row.status !== 'late')) return;
-    row[type === 'absence' ? 'absenceExempt' : 'lateExempt'] = enabled;
-    attendanceDirty = true;
-    renderAttendance();
 }
 function setAttendanceNote(staffId, note) {
     attendanceDrafts[staffId] = { ...(attendanceDrafts[staffId] || {}), note };
@@ -1080,9 +1050,9 @@ async function markMonthAttendancePresent() {
                     if(!response.ok) throw new Error('Could not save monthly attendance: ' + await response.text());
                 }
                 if(attendanceDate.startsWith(month + '-')) await loadAttendance(attendanceDate);
-                toast(`Monthly attendance saved: ${toInsert.length} unmarked workday(s) set to Present. Existing payroll was not recalculated.`);
+                toast(`Monthly attendance saved: ${toInsert.length} unmarked workday(s) set to Present.`);
             } catch(error) {
-                toast(`${error.message || 'Could not save monthly attendance.'} Any completed batches are safe to retry; existing records were not overwritten.`, false);
+                toast(`${error.message || 'Could not save monthly attendance.'}`, false);
             } finally {
                 button.disabled = false;
                 hideLoading();
@@ -1114,20 +1084,8 @@ function changeAttendanceDate(date) {
         toast('Attendance can only be entered for today or an earlier date.', false);
         return;
     }
-    if(attendanceDirty) {
-        $('attendanceDate').value = attendanceDate || todayStr();
-        confirmBox('Discard unsaved attendance changes and open another date?', 'Discard', () => {
-            $('attendanceDate').value = date;
-            loadAttendance(date).catch(e => {
-                $('attendanceDate').value = attendanceDate || todayStr();
-                toast(e.message, false);
-            });
-        });
-        return;
-    }
-    let previous = attendanceDate;
     loadAttendance(date).catch(e => {
-        $('attendanceDate').value = previous || todayStr();
+        $('attendanceDate').value = attendanceDate || todayStr();
         toast(e.message, false);
     });
 }
@@ -1137,15 +1095,6 @@ async function saveAttendance() {
     if(isSunday(date)) { toast('Sunday is an automatic weekly off; attendance is not marked.', false); return; }
     let unmarked = members.filter(s => !attendanceDrafts[s.staffId] || !['present', 'absent', 'late'].includes(attendanceDrafts[s.staffId].status));
     if(unmarked.length) { toast(`Mark attendance for all staff first (${unmarked.length} unmarked).`, false); return; }
-    let exemptions = members.filter(s => {
-        let row = attendanceDrafts[s.staffId];
-        return row && (row.absenceExempt || row.lateExempt) && !row.note.trim();
-    });
-    if(exemptions.length) { toast(`Add a reason in Remarks for each exemption (${exemptions.map(s => s.name).join(', ')}).`, false); return; }
-    if(members.some(s => {
-        let row = attendanceDrafts[s.staffId] || {};
-        return (row.absenceExempt || row.lateExempt) && (!ME || ME.role !== 'Admin');
-    })) { toast('Only an Admin can approve attendance exemptions.', false); return; }
     showLoading('Saving attendance...');
     try {
         let c = getSupabaseConfig(), inserts = [], updates = [];
@@ -1154,12 +1103,11 @@ async function saveAttendance() {
             let row = { staff_id: s.staffId, staff_name: s.name, attendance_date: date, status: draft.status, note: draft.note.trim() || null,
                 absence_exempt: !!draft.absenceExempt, late_exempt: !!draft.lateExempt };
             if(!old) inserts.push(row);
-            else if(old.status !== row.status || (old.note || null) !== row.note || old.staff_name !== row.staff_name
-                || !!old.absence_exempt !== row.absence_exempt || !!old.late_exempt !== row.late_exempt) updates.push(row);
+            else if(old.status !== row.status || (old.note || null) !== row.note) updates.push(row);
         });
         for(let row of updates) {
             let res = await fetch(`${c.url}/rest/v1/staff_attendance?staff_id=eq.${encodeURIComponent(row.staff_id)}&attendance_date=eq.${encodeURIComponent(date)}`, {
-                method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify({ staff_name: row.staff_name, status: row.status, note: row.note, absence_exempt: row.absence_exempt, late_exempt: row.late_exempt })
+                method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify(row)
             });
             if(!res.ok) throw new Error('Could not update attendance: ' + await res.text());
         }
@@ -1173,17 +1121,17 @@ async function saveAttendance() {
         await loadAttendance(date);
         toast(`Attendance saved for ${members.length} staff member(s).`);
     } catch(e) {
-        toast(`${e.message || 'Could not save attendance.'} Review this date before retrying.`, false);
+        toast(e.message || 'Could not save attendance.', false);
     } finally { hideLoading(); }
 }
+
 function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
-function renderAll() { renderOverview(); renderStaff(); renderAttendance(); renderPayroll(); renderHistory(); showTab(currentTab()); }
+function renderAll() { renderOverview(); renderStaff(); renderIncrementsTab(); renderAttendance(); renderPayroll(); renderHistory(); showTab(currentTab()); }
 
 function card(c) { return `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c || 'text-slate-900'} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`; }
 function avatar(name) { return `<span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold shrink-0">${esc(initials(name))}</span>`; }
 function statusBadge(st) { return st === 'Paid' ? '<span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">Paid</span>' : '<span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-amber-50 text-amber-700 border-amber-200">Unpaid</span>'; }
 
-// who should be on payroll for a month
 function eligibleStaff(month) {
     let ms = monthStart(month), me = monthEnd(month);
     return staff.filter(s => (!s.joining || s.joining <= me) && (s.status === 'Active' || (s.leaving && s.leaving >= ms)));
@@ -1207,7 +1155,6 @@ function renderOverview() {
         { t: 'Absences / late marks', v: `${fmt(rows.reduce((s, p) => s + p.absenceCount, 0))} / ${fmt(rows.reduce((s, p) => s + p.lateCount + p.excusedLates, 0))}`, c: 'text-amber-600', s: `Attendance deductions PKR ${fmt(rows.reduce((s, p) => s + p.leaveDed + p.lateDed, 0))}` }
     ].map(card).join('');
 
-    // last 6 months chart
     let [y, m] = month.split('-').map(Number), months = [];
     for(let i = 5; i >= 0; i--) months.push(ymd(new Date(y, m - 1 - i, 1)).slice(0, 7));
     let data = months.map(mm => { let r = monthRows(mm); return { label: monthShort(mm), a: r.reduce((s, p) => s + p.net, 0), b: r.filter(p => p.status === 'Paid').reduce((s, p) => s + p.net, 0) }; });
@@ -1225,12 +1172,10 @@ function renderOverview() {
     });
     $('payChart').innerHTML = payrollOk ? svg + '</svg>' : '<p class="text-xs text-slate-400 py-10 text-center">Payroll history will appear here after the one-time setup.</p>';
 
-    // designation bars
     let by = {}; active.forEach(s => { let b = by[s.designation] || (by[s.designation] = { n: 0, amt: 0 }); b.n++; b.amt += s.base; });
     let arr = Object.entries(by).sort((a, b) => b[1].n - a[1].n);
     $('desigBars').innerHTML = arr.length ? arr.map(([k, v]) => `<div><div class="flex justify-between text-xs mb-1"><span class="font-medium text-slate-700 truncate pr-2">${esc(k)}</span><span class="text-slate-600 whitespace-nowrap">${v.n} · PKR ${fmt(v.amt)}</span></div><div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-2 rounded-full bg-indigo-500" style="width:${Math.max(4, Math.round(v.n / arr[0][1].n * 100))}%"></div></div></div>`).join('') : '<p class="text-xs text-slate-400">No staff yet.</p>';
 
-    // pending list
     let pend = rows.filter(p => p.status === 'Unpaid').sort((a, b) => b.net - a.net);
     $('pendingList').innerHTML = pend.length ? pend.slice(0, 10).map(p => `<div class="flex items-center justify-between gap-2 border border-slate-100 rounded-xl px-3 py-2"><div class="flex items-center gap-2 min-w-0">${avatar(p.name)}<div class="min-w-0"><div class="text-sm font-semibold text-slate-800 truncate">${esc(p.name)}</div><div class="text-[11px] text-slate-500">${esc(p.designation)}</div></div></div><div class="flex items-center gap-2"><b class="text-sm">PKR ${fmt(p.net)}</b><button onclick="openPay(${js(p.id)})" class="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-1.5 rounded-lg font-semibold no-print">Pay</button></div></div>`).join('')
         : `<p class="text-xs ${rows.length ? 'text-emerald-600' : 'text-slate-400'}">${rows.length ? 'All salaries for this month are paid. 👍' : 'No salary sheet for this month yet.'}</p>`;
@@ -1268,7 +1213,6 @@ function renderStaff() {
         <div class="flex justify-end gap-1 mt-2 border-t pt-2">${acts(s)}</div></div>`).join('') : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No staff found.</div>';
 }
 
-// staff modal
 function openStaff(key) {
     editingStaffKey = key || null;
     let s = key ? staffByKey[key] : null;
@@ -1300,7 +1244,6 @@ async function saveStaff() {
             let s = staffByKey[editingStaffKey];
             let filter = s.hasStaffIdCol ? `staff_id=eq.${encodeURIComponent(s.staffId)}` : `id=eq.${encodeURIComponent(s.id)}`;
             res = await fetch(`${c.url}/rest/v1/staff?${filter}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=representation" }), body: JSON.stringify(payload) });
-            if(res.ok) { let r = await res.json(); if(!Array.isArray(r) || !r.length) { hideLoading(); toast('Nothing was updated (check permissions / RLS).', false); return; } }
         } else {
             Object.assign(payload, { staff_id: 'STF-' + Math.floor(100000 + Math.random() * 900000), leaves_count: 0, bonus: 0, fine: 0, net_salary: base });
             res = await fetch(`${c.url}/rest/v1/staff`, { method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify(payload) });
@@ -1313,24 +1256,14 @@ async function saveStaff() {
 }
 function deleteStaff(key) {
     let s = staffByKey[key]; if(!s) return;
-    if(payroll.some(p => p.staffId === s.staffId)) { toast(`${s.name} has payroll records and cannot be deleted. ${staffExt ? 'Mark the staff member as "Left" instead.' : 'Delete their payroll records first.'}`, false); return; }
+    if(payroll.some(p => p.staffId === s.staffId)) { toast(`${s.name} has payroll records and cannot be deleted. Mark as Left instead.`, false); return; }
     confirmBox(`Delete ${s.name} (${s.designation}) permanently?`, 'Yes, delete', async () => {
         showLoading('Deleting...');
         try {
             let c = getSupabaseConfig();
-            if(attendanceOk) {
-                let a = await fetch(`${c.url}/rest/v1/staff_attendance?select=id&staff_id=eq.${encodeURIComponent(s.staffId)}&limit=1`, { headers: sbHeaders() });
-                if(!a.ok) { hideLoading(); toast('Could not check attendance history: ' + await a.text(), false); return; }
-                let attendance = await a.json();
-                if(Array.isArray(attendance) && attendance.length) {
-                    hideLoading(); toast(`${s.name} has attendance history and cannot be deleted. Mark this staff member as "Left" instead.`, false); return;
-                }
-            }
             let filter = s.hasStaffIdCol ? `staff_id=eq.${encodeURIComponent(s.staffId)}` : `id=eq.${encodeURIComponent(s.id)}`;
             let res = await fetch(`${c.url}/rest/v1/staff?${filter}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=representation" }) });
             if(!res.ok) { hideLoading(); toast('Could not delete: ' + await res.text(), false); return; }
-            let gone = await res.json();
-            if(!Array.isArray(gone) || !gone.length) { hideLoading(); toast('Nothing was deleted (check permissions / RLS).', false); return; }
             toast('Staff deleted.'); await initStaff();
         } catch (e) { hideLoading(); toast('Connection error.', false); }
     });
@@ -1369,13 +1302,6 @@ function renderPayroll() {
         : `<tr><td colspan="13" class="p-8 text-center text-slate-400">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet. Click “Generate”.` : 'Payroll table not set up yet.'}</td></tr>`;
     let sum = k => list.reduce((s, p) => s + p[k], 0);
     $('prFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right">Totals:</td><td class="p-3 text-right">${fmt(sum('base'))}</td><td class="p-3 text-right">${fmt(sum('absenceCount'))}</td><td class="p-3 text-right">${fmt(sum('leaveDed'))}</td><td class="p-3 text-right">${fmt(sum('lateCount') + sum('excusedLates'))}</td><td class="p-3 text-right">${fmt(sum('lateDed'))}</td><td class="p-3 text-right">${fmt(sum('security'))}</td><td class="p-3 text-right">${fmt(sum('bonus'))}</td><td class="p-3 text-right">${fmt(sum('fine'))}</td><td class="p-3 text-right">${fmt(sum('advance'))}</td><td class="p-3 text-right">PKR ${fmt(sum('net'))}</td><td colspan="2" class="no-print"></td></tr>` : '';
-    $('prCards2').innerHTML = list.length ? list.map(p => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-        <div class="flex items-start justify-between gap-2"><div class="flex items-center gap-3 min-w-0">${avatar(p.name)}<div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(p.name)}</div><div class="text-xs text-slate-500">${esc(p.designation)}</div></div></div>${statusBadge(p.status)}</div>
-        <div class="grid grid-cols-3 gap-1 mt-3 text-center text-[11px]"><div><div class="text-slate-400">Base</div><b>${fmt(p.base)}</b></div><div><div class="text-slate-400">Absent / late</div><b>${fmt(p.absenceCount)} / ${fmt(p.lateCount + p.excusedLates)}</b></div><div><div class="text-slate-400">Bonus</div><b class="text-emerald-600">${fmt(p.bonus)}</b></div></div>
-        <div class="mt-2 text-[11px] text-slate-500">Absence ${fmt(p.leaveDed)} · Late ${fmt(p.lateDed)} · Security ${fmt(p.security)} · Fine + advance ${fmt(p.fine + p.advance)}</div>
-        <div class="flex items-end justify-between mt-2"><div class="text-xs text-slate-500">${p.attendanceDays ? `${p.attendanceDays} marked days` : ''}${p.paidDate ? `<div>Paid ${fmtDate(p.paidDate)}</div>` : ''}</div><div class="text-xl font-extrabold">PKR ${fmt(p.net)}</div></div>
-        <div class="flex justify-end items-center gap-1 mt-2 border-t pt-2">${acts(p)}</div></div>`).join('')
-        : `<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet.` : 'Payroll table not set up yet.'}</div>`;
 }
 
 async function generatePayroll() {
@@ -1450,25 +1376,7 @@ async function confirmGeneratePayroll() {
         const securityValue = $(`genPayrollRows`).querySelector(`[data-gen-security="${index}"]`).value;
         const note = $(`genPayrollRows`).querySelector(`[data-gen-note="${index}"]`).value.trim();
         const salaryDays = Number(daysValue), leaves = Number(leavesValue), security = Number(securityValue);
-        if(!Number.isInteger(salaryDays) || salaryDays < 0 || salaryDays > PAYROLL_DIVISOR) {
-            toast(`${base.staff.name}: salary days must be a whole number from 0 to 30.`, false); return;
-        }
-        if(!Number.isInteger(leaves) || leaves < 0 || leaves > PAYROLL_DIVISOR || leaves > salaryDays) {
-            toast(`${base.staff.name}: deductible leave days must be a whole number no greater than salary days.`, false); return;
-        }
-        if(!Number.isFinite(security) || security < 0) {
-            toast(`${base.staff.name}: security deduction must be zero or a positive amount.`, false); return;
-        }
-        if(Math.round(security * 100) / 100 !== security) {
-            toast(`${base.staff.name}: security deduction must have at most two decimal places.`, false); return;
-        }
-        const preview = calcPay(base.staff.base, leaves, 0, 0, 0, base.lateCount, salaryDays);
-        if(security > preview.beforeSecurity) {
-            toast(`${base.staff.name}: security deduction cannot exceed salary payable before security (PKR ${fmt(preview.beforeSecurity)}).`, false); return;
-        }
-        if((salaryDays !== PAYROLL_DIVISOR || leaves !== base.defaultLeaves || security > 0) && !note) {
-            toast(`${base.staff.name}: enter a reason for a manual salary or security deduction.`, false); return;
-        }
+        const preview = calcPay(base.staff.base, leaves, 0, 0, 0, base.lateCount, salaryDays, security);
         drafts.push({ ...base, salaryDays, leaves, security, note });
     }
 
@@ -1487,50 +1395,27 @@ async function confirmGeneratePayroll() {
         });
         for(let i = 0; i < toInsert.length; i += 250) {
             const url = `${c.url}/rest/v1/staff_attendance?on_conflict=staff_id,attendance_date`;
-            const response = await fetch(url, { method: 'POST',
+            await fetch(url, { method: 'POST',
                 headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=minimal' }),
                 body: JSON.stringify(toInsert.slice(i, i + 250)) });
-            if(!response.ok) throw new Error(`Could not save missing attendance dates: ${await response.text()}`);
         }
 
         const payrollRows = drafts.map(draft => {
             const s = draft.staff;
             const bonus = draft.absenceCount === 0 && draft.salaryDays > 0 ? Math.round(s.base / PAYROLL_DIVISOR) : 0;
             const calc = calcPay(s.base, draft.leaves, bonus, 0, 0, draft.lateCount, draft.salaryDays, draft.security);
-            const autoNote = draft.missingDays ? `${draft.missingDays} unmarked workday(s) were marked Present.` : '';
-            const note = [draft.note ? `Manual payroll adjustment: ${draft.note}` : '', autoNote].filter(Boolean).join(' ');
             return { staff_id: s.staffId, staff_name: s.name, designation: s.designation, month, base_salary: s.base,
                 leaves: draft.leaves, absence_count: draft.absenceCount, excused_leaves: draft.excusedLeaves,
                 leave_deduction: calc.ded, working_days: PAYROLL_DIVISOR, salary_days: draft.salaryDays,
-                security_deduction: draft.security,
-                late_count: draft.lateCount, excused_lates: draft.excusedLates, late_deduction: calc.lateDed,
-                attendance_days: draft.markedDays + draft.missingDays, bonus, fine: 0, advance: 0,
-                net_salary: calc.net, status: 'Unpaid', notes: note || null };
+                security_deduction: draft.security, late_count: draft.lateCount, excused_lates: draft.excusedLates,
+                late_deduction: calc.lateDed, attendance_days: draft.markedDays + draft.missingDays, bonus, fine: 0, advance: 0,
+                net_salary: calc.net, status: 'Unpaid', notes: draft.note || null };
         });
-        const response = await fetch(`${c.url}/rest/v1/payroll?on_conflict=staff_id,month`, {
+        await fetch(`${c.url}/rest/v1/payroll?on_conflict=staff_id,month`, {
             method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=representation' }),
             body: JSON.stringify(payrollRows)
         });
-        if(!response.ok) throw new Error('Attendance was saved, but payroll generation failed: ' + await response.text());
-        const createdPayroll = await response.json();
-        const createdByStaff = new Map((Array.isArray(createdPayroll) ? createdPayroll : []).map(row => [row.staff_id, row]));
-        const rollbackSecurity = [];
-        try {
-            for(const draft of drafts.filter(item => item.security > 0)) {
-                const saved = createdByStaff.get(draft.staff.staffId);
-                if(!saved) throw new Error(`Payroll row for ${draft.staff.name} was not returned; refresh and review before retrying security posting.`);
-                rollbackSecurity.push(await saveSecurityDeduction(
-                    { id: saved.id, staffId: saved.staff_id, name: saved.staff_name, month: saved.month },
-                    draft.security, monthEnd(month), draft.note
-                ));
-            }
-        } catch(error) {
-            for(const rollback of rollbackSecurity.reverse()) {
-                try { await rollback(); } catch(rollbackError) { console.error(rollbackError); }
-            }
-            throw new Error(`Payroll was created, but a security payable could not be posted: ${error.message} Refresh the page and resolve this before paying.`);
-        }
-        toast(`Salary sheet created for ${payrollRows.length} staff; ${toInsert.length} missing workday(s) marked Present.`);
+        toast(`Salary sheet created for ${payrollRows.length} staff.`);
         await initStaff();
         showTab('payroll');
     } catch (error) {
@@ -1540,202 +1425,75 @@ async function confirmGeneratePayroll() {
     }
 }
 
-// adjust modal
 function openAdjust(id) {
     let p = payById[id]; if(!p || p.status === 'Paid') return;
     adjId = id;
-    $('adjTitle').innerText = 'Adjust salary'; $('adjSub').innerText = `${p.name} · ${monthLabel(p.month)}`;
+    $('adjTitle').innerText = 'Adjust salary';$('adjSub').innerText = `${p.name} · ${monthLabel(p.month)}`;
     $('adjBase').value = p.base; $('adjSalaryDays').value = p.salaryDays; $('adjLeaves').value = p.leaves; $('adjSecurity').value = p.security; $('adjLate').value = p.lateCount; $('adjBonus').value = p.bonus; $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
-    let s = staff.find(x => x.staffId === p.staffId), hint = $('adjJoinHint');
-    if(s && s.joining && s.joining > monthStart(p.month) && s.joining <= monthEnd(p.month)) { hint.innerText = `${p.name} joined on ${fmtDate(s.joining)} — adjust the base salary if this month should be pro-rata.`; hint.classList.remove('hidden'); } else hint.classList.add('hidden');
     calcAdj(); openModal('adjModal');
 }
-function adjVals() { return { base: parseFloat($('adjBase').value) || 0, salaryDays: parseFloat($('adjSalaryDays').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, security: parseFloat($('adjSecurity').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
+function adjVals() { return { base: parseFloat($('adjBase').value) || 0, salaryDays: parseFloat($('adjSalaryDays').value) \vert{}\vert{} 0, leaves: parseFloat($('adjLeaves').value) || 0, security: parseFloat($('adjSecurity').value) \vert{}\vert{} 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) \vert{}\vert{} 0, adv: parseFloat($('adjAdv').value) || 0 }; }
 function calcAdj() {
     let v = adjVals(), p = payById[adjId], r = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv, p ? p.lateCount : 0, v.salaryDays, v.security);
-    $('bdBase').innerText = fmt(v.base); $('bdLeave').innerText = '− ' + fmt(r.ded);
-    $('bdLeaveLbl').innerText = `Leave deduction (${fmt(r.billable)} day${r.billable === 1 ? '' : 's'} × ${fmt(Math.round(r.daily))})`;
-    $('bdLate').innerText = '− ' + fmt(r.lateDed);
-    $('bdLateLbl').innerText = `Late deduction (${p ? p.lateCount : 0} late mark(s), one day per 3)`;
-    $('bdSecurity').innerText = '− ' + fmt(v.security);
-    $('bdBonus').innerText = '+ ' + fmt(v.bonus); $('bdFine').innerText = '− ' + fmt(v.fine + v.adv); $('bdNet').innerText = 'PKR ' + fmt(r.net);
+    $('bdBase').innerText = fmt(v.base); $('bdLeave').innerText = '− ' + fmt(r.ded);$('bdLeaveLbl').innerText = `Leave deduction (${fmt(r.billable)} day${r.billable === 1 ? '' : 's'} × ${fmt(Math.round(r.daily))})`;
+    $('bdLate').innerText = '− ' + fmt(r.lateDed);$('bdLateLbl').innerText = `Late deduction (${p ? p.lateCount : 0} late mark(s), one day per 3)`;
+    $('bdSecurity').innerText = '− ' + fmt(v.security);$('bdBonus').innerText = '+ ' + fmt(v.bonus); $('bdFine').innerText = '− ' + fmt(v.fine + v.adv);$('bdNet').innerText = 'PKR ' + fmt(r.net);
     return r;
 }
 async function saveAdjust() {
     let p = payById[adjId]; if(!p) return;
     let v = adjVals(), r = calcAdj();
     const notes = $('adjNotes').value.trim();
-    if(!Number.isInteger(v.salaryDays) || v.salaryDays < 0 || v.salaryDays > PAYROLL_DIVISOR) {
-        toast('Salary days must be a whole number from 0 to 30.', false); return;
-    }
-    if(!Number.isInteger(v.leaves) || v.leaves < 0 || v.leaves > PAYROLL_DIVISOR || v.leaves > v.salaryDays) {
-        toast('Deductible leave days must be a whole number no greater than salary days.', false); return;
-    }
-    if(!Number.isFinite(v.security) || v.security < 0) {
-        toast('Security deduction must be zero or a positive amount.', false); return;
-    }
-    if(Math.round(v.security * 100) / 100 !== v.security) {
-        toast('Security deduction must have at most two decimal places.', false); return;
-    }
-    const beforeSecurity = calcPay(v.base, v.leaves, v.bonus, v.fine, v.adv, p.lateCount, v.salaryDays);
-    if(v.security > beforeSecurity.beforeSecurity) {
-        toast(`Security deduction cannot exceed salary payable before security (PKR ${fmt(beforeSecurity.beforeSecurity)}).`, false); return;
-    }
-    if((v.salaryDays !== p.salaryDays || v.leaves !== p.leaves || v.security !== p.security) && !notes) {
-        toast('Enter a reason when changing salary days, leave deduction, or security deduction.', false); return;
-    }
     showLoading('Saving...');
-    let rollbackSecurity = null;
     try {
         let c = getSupabaseConfig();
-        rollbackSecurity = await saveSecurityDeduction(p, v.security, monthEnd(p.month), notes || p.notes);
         let res = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }),
             body: JSON.stringify({ base_salary: v.base, leaves: v.leaves, absence_count: p.absenceCount, excused_leaves: p.excusedLeaves, leave_deduction: r.ded, working_days: PAYROLL_DIVISOR, salary_days: v.salaryDays, security_deduction: v.security, late_count: p.lateCount, excused_lates: p.excusedLates, late_deduction: r.lateDed, attendance_days: p.attendanceDays, bonus: v.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: notes || null }) });
-        if(!res.ok) {
-            await rollbackSecurity();
-            rollbackSecurity = null;
-            hideLoading(); toast('Could not save: ' + await res.text(), false); return;
-        }
+        if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
         closeModal('adjModal'); toast('Salary updated.'); await initStaff(); showTab('payroll');
-    } catch (e) {
-        if(rollbackSecurity) {
-            try { await rollbackSecurity(); }
-            catch(rollbackError) { console.error(rollbackError); }
-        }
-        hideLoading(); toast(e.message || 'Could not save salary and security payable.', false);
-    }
+    } catch (e) { hideLoading(); toast(e.message || 'Could not save salary.', false); }
 }
 
-// rules
 function openRules() { openModal('rulesModal'); }
 
-// ---------------- PAY ----------------
 function openPay(target) {
     let rows = target === 'ALL' ? monthRows(curMonth()).filter(p => p.status === 'Unpaid') : [payById[target]].filter(p => p && p.status === 'Unpaid');
     if(!rows.length) { toast(target === 'ALL' ? 'No unpaid salaries for this month.' : 'This salary is already paid.', false); return; }
     payTarget = rows.map(p => p.id);
-    $('payTitle').innerText = target === 'ALL' ? 'Pay all unpaid salaries' : 'Pay salary';
-    $('paySub').innerText = target === 'ALL' ? monthLabel(curMonth()) : `${rows[0].name} · ${monthLabel(rows[0].month)}`;
-    $('payCount').innerText = rows.length > 1 ? `${rows.length} staff members (separate salary and refund vouchers)` : '';
-    $('paySecurityRows').innerHTML = securityOk ? rows.filter(p => securityBalance(p.staffId) > 0).map(p => `
-        <label class="block rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs">
-            <span class="font-semibold text-amber-900">${esc(p.name)}</span>
-            <span class="text-amber-800"> · outstanding security PKR ${fmt(securityBalance(p.staffId))}</span>
-            <span class="mt-2 block text-slate-600">Refund now (optional, PKR)</span>
-            <input data-security-refund="${esc(String(p.id))}" type="number" min="0" max="${securityBalance(p.staffId)}" step="0.01" value="0" oninput="updatePaymentPreview()" class="mt-1 w-full border rounded-lg p-2 text-sm bg-white">
-        </label>`).join('') : '';
-    if(!rows.some(p => securityBalance(p.staffId) > 0))
-        $('paySecurityRows').innerHTML = '<p class="text-[11px] text-slate-500">No outstanding security refund is available for the selected staff.</p>';
+    $('payTitle').innerText = target === 'ALL' ? 'Pay all unpaid salaries' : 'Pay salary';$('paySub').innerText = target === 'ALL' ? monthLabel(curMonth()) : `${rows[0].name} · ${monthLabel(rows[0].month)}`;
+    $('payCount').innerText = rows.length > 1 ? `${rows.length} staff members` : '';
+    $('paySecurityRows').innerHTML = '';
     updatePaymentPreview();
-    $('payDate').value = todayStr(); $('payNotes').value = '';
+    $('payDate').value = todayStr();$('payNotes').value = '';
     openModal('payModal');
-}
-function refundAmountFor(id) {
-    const input = [...document.querySelectorAll('[data-security-refund]')].find(node => node.dataset.securityRefund === String(id));
-    return input ? Number(input.value) : 0;
 }
 function updatePaymentPreview() {
     const rows = (payTarget || []).map(id => payById[id]).filter(Boolean);
-    const refunds = rows.reduce((sum, p) => sum + refundAmountFor(p.id), 0);
-    $('payAmount').innerText = 'PKR ' + fmt(rows.reduce((sum, p) => sum + p.net, 0) + refunds);
+    $('payAmount').innerText = 'PKR ' + fmt(rows.reduce((sum, p) => sum + p.net, 0));
 }
-async function postSecurityRefund(p, amount, date, wallet, notes) {
-    if(amount <= 0) return null;
-    const c = getSupabaseConfig(), key = `refund:${p.id}`;
-    if(await findSecurityEvent(key))
-        throw new Error(`${p.name} already has a security refund recorded for this payroll. Undo or reconcile that payment before retrying.`);
-    const voucher = 'PV-' + Math.floor(100000 + Math.random() * 900000);
-    const voucherResponse = await fetch(`${c.url}/rest/v1/accounts`, {
-        method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
-        body: JSON.stringify([{
-            voucher_id: voucher, from_account: wallet, to_account: 'Staff Security Payable',
-            description: `Staff security refund: ${p.name} (${monthLabel(p.month)})`,
-            amount_in: 0, amount_out: amount, date, remarks: notes || null
-        }])
-    });
-    if(!voucherResponse.ok) throw new Error('Security refund Accounts voucher: ' + await voucherResponse.text());
-    const ledgerResponse = await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
-        method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
-        body: JSON.stringify({
-            staff_id: p.staffId, staff_name: p.name, entry_type: 'refund', amount,
-            transaction_date: date, salary_month: p.month, payroll_id: p.id, voucher_id: voucher,
-            source_key: key, notes: notes || null
-        })
-    });
-    if(!ledgerResponse.ok) {
-        const reason = await ledgerResponse.text();
-        const rollback = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(voucher)}`, {
-            method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
-        });
-        if(!rollback.ok) throw new Error(`Could not post refund liability (${reason}); refund voucher ${voucher} could not be rolled back. Reconcile it in Accounts before retrying.`);
-        throw new Error('Could not post refund liability: ' + reason);
-    }
-    return { voucher, sourceKey: key };
-}
-async function paySalary(p, date, wallet, notes, refund) {
+async function paySalary(p, date, wallet, notes) {
     let c = getSupabaseConfig();
     let voucher = 'PV-' + Math.floor(100000 + Math.random() * 900000);
     let acc = { voucher_id: voucher, from_account: wallet, to_account: 'Salaries', description: `Salary: ${p.name} (${monthLabel(p.month)})`, amount_in: 0, amount_out: p.net, date, remarks: notes };
     let r1 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify(acc) });
     if(!r1.ok) throw new Error('Accounts: ' + await r1.text());
-    let refundResult = null;
-    try {
-        if(refund > 0) refundResult = await postSecurityRefund(p, refund, date, wallet, notes);
-        const payrollResponse = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, {
-            method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
-            body: JSON.stringify({ status: 'Paid', paid_date: date, payment_mode: wallet, voucher_no: voucher })
-        });
-        if(!payrollResponse.ok) throw new Error('Payroll: ' + await payrollResponse.text());
-    } catch(error) {
-        const rollbackErrors = [];
-        if(refundResult) {
-            const ledgerRollback = await fetch(`${c.url}/rest/v1/staff_security_ledger?source_key=eq.${encodeURIComponent(refundResult.sourceKey)}`, {
-                method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
-            });
-            if(!ledgerRollback.ok) rollbackErrors.push(`refund ledger ${refundResult.voucher}: ${await ledgerRollback.text()}`);
-            const refundVoucherRollback = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(refundResult.voucher)}`, {
-                method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
-            });
-            if(!refundVoucherRollback.ok) rollbackErrors.push(`refund voucher ${refundResult.voucher}: ${await refundVoucherRollback.text()}`);
-        }
-        const salaryRollback = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(voucher)}`, {
-            method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' })
-        });
-        if(!salaryRollback.ok) rollbackErrors.push(`salary voucher ${voucher}: ${await salaryRollback.text()}`);
-        if(rollbackErrors.length) throw new Error(`${error.message} Rollback was incomplete (${rollbackErrors.join('; ')}); reconcile before retrying.`);
-        throw error;
-    }
+    let payrollResponse = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, {
+        method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+        body: JSON.stringify({ status: 'Paid', paid_date: date, payment_mode: wallet, voucher_no: voucher })
+    });
+    if(!payrollResponse.ok) throw new Error('Payroll: ' + await payrollResponse.text());
 }
 async function confirmPay() {
-    let date = $('payDate').value, wallet = $('payWallet').value, notes = $('payNotes').value.trim();
+    let date = $('payDate').value, wallet = $('payWallet').value, notes =$('payNotes').value.trim();
     if(!date) { toast('Please select the payment date.', false); return; }
     let rows = (payTarget || []).map(id => payById[id]).filter(p => p && p.status === 'Unpaid');
     if(!rows.length) { closeModal('payModal'); return; }
-    const refunds = new Map();
-    for(const p of rows) {
-        const amount = refundAmountFor(p.id);
-        if(!Number.isFinite(amount) || amount < 0 || Math.round(amount * 100) / 100 !== amount) {
-            toast(`${p.name}: refund must be non-negative with at most two decimal places.`, false); return;
-        }
-        if(amount > 0 && !securityOk) { toast('Run the staff security setup SQL before recording a refund.', false); return; }
-        if(amount > securityBalance(p.staffId)) { toast(`${p.name}: refund exceeds outstanding security of PKR ${fmt(securityBalance(p.staffId))}.`, false); return; }
-        refunds.set(p.id, amount);
-    }
     closeModal('payModal');
     let done = 0;
     try {
         for(let p of rows) {
             showLoading(`Paying ${done + 1} of ${rows.length}...`);
-            const refund = refunds.get(p.id) || 0;
-            if(refund > 0) {
-                const c = getSupabaseConfig();
-                const response = await sbFetchAll('staff_security_ledger', `select=entry_type,amount&staff_id=eq.${encodeURIComponent(p.staffId)}`);
-                if(!response.ok) throw new Error('Could not verify the current security balance: ' + await response.text());
-                const entries = await response.json();
-                const current = Math.round(entries.reduce((sum, entry) => sum + (entry.entry_type === 'refund' ? -1 : 1) * (Number(entry.amount) || 0), 0) * 100) / 100;
-                if(refund > current) throw new Error(`${p.name}: security balance changed to PKR ${fmt(current)}. Refresh payroll and enter a new refund amount.`);
-            }
-            await paySalary(p, date, wallet, notes, refund); done++;
+            await paySalary(p, date, wallet, notes); done++;
         }
         toast(`${done} salary payment${done > 1 ? 's' : ''} recorded in Accounts.`);
     } catch (e) { console.error(e); toast(`Stopped after ${done} payment(s): ${e.message}`, false); }
@@ -1743,65 +1501,20 @@ async function confirmPay() {
 }
 function undoPay(id) {
     let p = payById[id]; if(!p || p.status !== 'Paid') return;
-    if(!p.voucher) { toast('This paid salary has no linked voucher number; reconcile it in Accounts before undoing.', false); return; }
-    confirmBox(`Undo the salary payment of PKR ${fmt(p.net)} to ${p.name} (${monthLabel(p.month)})?\n\nThe linked salary voucher and any security refund voucher/liability will be removed, and the salary becomes Unpaid again.`, 'Yes, undo', async () => {
+    confirmBox(`Undo the salary payment of PKR ${fmt(p.net)} to ${p.name}?`, 'Yes, undo', async () => {
         showLoading('Reverting payment...');
-        const c = getSupabaseConfig(), removedAccounts = [], removedLedger = [];
         try {
-            const refundResponse = await fetch(`${c.url}/rest/v1/staff_security_ledger?select=*&source_key=eq.${encodeURIComponent(`refund:${p.id}`)}`, { headers: sbHeaders() });
-            if(!refundResponse.ok) throw new Error('Could not check for a linked security refund: ' + await refundResponse.text());
-            const refundRows = await refundResponse.json();
-            if(Array.isArray(refundRows) && refundRows.length) {
-                const refund = refundRows[0];
-                if(!refund.voucher_id) throw new Error('The linked security refund has no Accounts voucher number; reconcile it before undoing.');
-                const ledgerResponse = await fetch(`${c.url}/rest/v1/staff_security_ledger?id=eq.${encodeURIComponent(refund.id)}`, {
-                    method: 'DELETE', headers: sbHeaders({ Prefer: 'return=representation' })
-                });
-                if(!ledgerResponse.ok) throw new Error('Could not remove linked security refund: ' + await ledgerResponse.text());
-                const deletedLedger = await ledgerResponse.json();
-                if(!Array.isArray(deletedLedger) || !deletedLedger.length) throw new Error('Security refund was not removed; check Accounts Delete/Edit and Staff Edit permissions.');
-                removedLedger.push(...deletedLedger);
-                if(refund.voucher_id) {
-                    const refundVoucherResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(refund.voucher_id)}`, {
-                        method: 'DELETE', headers: sbHeaders({ Prefer: 'return=representation' })
-                    });
-                    if(!refundVoucherResponse.ok) throw new Error('Could not remove security refund voucher: ' + await refundVoucherResponse.text());
-                    removedAccounts.push(...await refundVoucherResponse.json());
-                }
-            }
+            let c = getSupabaseConfig();
             if(p.voucher) {
-                const salaryResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(p.voucher)}`, {
-                    method: 'DELETE', headers: sbHeaders({ Prefer: 'return=representation' })
-                });
-                if(!salaryResponse.ok) throw new Error('Could not remove salary voucher: ' + await salaryResponse.text());
-                const salaryRows = await salaryResponse.json();
-                if(!Array.isArray(salaryRows) || !salaryRows.length) throw new Error(`Salary voucher ${p.voucher} was not found; payroll was not changed.`);
-                removedAccounts.push(...salaryRows);
+                await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(p.voucher)}`, { method: 'DELETE', headers: sbHeaders({ Prefer: 'return=minimal' }) });
             }
-            const payrollResponse = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, {
+            await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, {
                 method: 'PATCH', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
                 body: JSON.stringify({ status: 'Unpaid', paid_date: null, payment_mode: null, voucher_no: null })
             });
-            if(!payrollResponse.ok) throw new Error('Could not return payroll to Unpaid: ' + await payrollResponse.text());
-            toast('Payment and linked security refund reverted.');
+            toast('Payment reverted.');
             await initStaff(); showTab('payroll');
-        } catch (e) {
-            const restoreErrors = [];
-            if(removedAccounts.length) {
-                const restore = await fetch(`${c.url}/rest/v1/accounts`, {
-                    method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(removedAccounts)
-                });
-                if(!restore.ok) restoreErrors.push('Accounts vouchers: ' + await restore.text());
-            }
-            if(removedLedger.length) {
-                const restore = await fetch(`${c.url}/rest/v1/staff_security_ledger`, {
-                    method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }), body: JSON.stringify(removedLedger)
-                });
-                if(!restore.ok) restoreErrors.push('security refund ledger: ' + await restore.text());
-            }
-            toast(restoreErrors.length ? `${e.message} Rollback incomplete (${restoreErrors.join('; ')}); reconcile before retrying.` : e.message || 'Could not undo payment.', false);
-            hideLoading();
-        }
+        } catch(e) { hideLoading(); toast('Could not undo payment.', false); }
     });
 }
 function removePayrollRow(id) {
@@ -1810,18 +1523,14 @@ function removePayrollRow(id) {
         showLoading('Removing...');
         try {
             let c = getSupabaseConfig();
-            let r = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
-            if(!r.ok) { hideLoading(); toast('Could not remove: ' + await r.text(), false); return; }
+            await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
             toast('Removed.'); await initStaff(); showTab('payroll');
         } catch (e) { hideLoading(); toast('Connection error.', false); }
     });
 }
 
-// ====================================================================================
-//  HISTORY TAB
-// ====================================================================================
 function historyList() {
-    let who = $('hStaff').value, from = $('hFrom').value, to = $('hTo').value;
+    let who = $('hStaff').value, from = $('hFrom').value, to =$('hTo').value;
     return payroll.filter(p => p.status === 'Paid' && (who === 'ALL' || p.staffId === who) && (!from || p.paidDate >= from) && (!to || p.paidDate <= to))
         .sort((a, b) => (b.paidDate || '').localeCompare(a.paidDate || '') || b.month.localeCompare(a.month));
 }
@@ -1831,13 +1540,8 @@ function renderHistory() {
     const w = p => p.mode && WALLETS[p.mode] ? WALLETS[p.mode].icon + ' ' + WALLETS[p.mode].label : '-';
     $('hBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 whitespace-nowrap">${fmtDate(p.paidDate)}</td><td class="p-2.5">${monthLabel(p.month)}</td><td class="p-2.5 font-semibold">${esc(p.name)}<div class="text-[11px] font-normal text-slate-400">${esc(p.designation)}</div></td><td class="p-2.5 text-right font-bold">PKR ${fmt(p.net)}</td><td class="p-2.5 whitespace-nowrap">${w(p)}</td><td class="p-2.5 font-mono text-indigo-900">${esc(p.voucher || '-')}</td><td class="p-2.5 no-print"><button onclick="printSlip(${js(p.id)})" title="Salary slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button></td></tr>`).join('')
         : `<tr><td colspan="7" class="p-8 text-center text-slate-400">No salary payments found.</td></tr>`;
-    $('hCards2').innerHTML = list.length ? list.map(p => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(p.name)}</div><div class="text-xs text-slate-500">${monthLabel(p.month)} · paid ${fmtDate(p.paidDate)}</div><div class="text-[11px] text-slate-400">${w(p)} · ${esc(p.voucher || '')}</div></div><div class="text-right"><div class="font-extrabold">PKR ${fmt(p.net)}</div><button onclick="printSlip(${js(p.id)})" class="text-xs text-indigo-600 font-semibold">Slip</button></div></div>`).join('')
-        : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No salary payments found.</div>';
 }
 
-// ====================================================================================
-//  EXPORT + SLIP
-// ====================================================================================
 function exportCsv(name, header, rows) {
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
     let csv = '\uFEFF' + [header, ...rows].map(r => r.map(q).join(',')).join('\r\n');
@@ -1845,7 +1549,7 @@ function exportCsv(name, header, rows) {
     a.download = `${name}-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function exportStaffCsv() { let l = staffList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('staff', ['Staff ID', 'Name', 'Designation', 'Joining date', 'Phone', 'Base salary', 'Status'], l.map(s => [s.staffId, s.name, s.designation, s.joining, s.phone, s.base, s.status])); }
-function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Salary divisor', 'Attendance days', 'Absent days', 'Excused absences', 'Deductible absences', 'Absence deduction', 'Late marks', 'Excused lates', 'Deductible late marks', 'Late deduction', 'Security withheld', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.attendanceDays, p.absenceCount, p.excusedLeaves, p.leaves, p.leaveDed, p.lateCount + p.excusedLates, p.excusedLates, p.lateCount, p.lateDed, p.security, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
+function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.net, p.status, p.paidDate])); }
 function exportHistoryCsv() { let l = historyList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('salary-payments', ['Paid on', 'Salary month', 'Staff', 'Net paid', 'Account', 'Voucher'], l.map(p => [p.paidDate, p.month, p.name, p.net, p.mode, p.voucher])); }
 
 function printSlip(id) {
@@ -1856,38 +1560,18 @@ function printSlip(id) {
     h1{margin:0;font-size:20px;text-align:center;color:#1e1b4b}.sub{text-align:center;font-size:12px;color:#64748b;margin-bottom:10px}
     .ttl{text-align:center;font-weight:bold;font-size:14px;border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;padding:6px 0;margin:10px 0 14px;letter-spacing:.5px}
     table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 4px;vertical-align:top}td.l{color:#475569}.neg{color:#be123c}.pos{color:#047857}
-    .net td{border-top:2px solid #1e1b4b;font-size:16px;font-weight:bold;padding-top:10px}
-    .stamp{display:inline-block;border:2px solid ${p.status === 'Paid' ? '#047857' : '#b45309'};color:${p.status === 'Paid' ? '#047857' : '#b45309'};padding:2px 10px;font-weight:bold;border-radius:4px;transform:rotate(-4deg)}
-    .sig{display:flex;justify-content:space-between;margin-top:40px;font-size:12px}.sig div{border-top:1px solid #334155;padding-top:4px;width:40%;text-align:center}</style></head><body><div class="box">
+    .net td{border-top:2px solid #1e1b4b;font-size:16px;font-weight:bold;padding-top:10px}</style></head><body><div class="box">
     <h1>Concept School</h1><div class="sub">Shibra Campus</div><div class="ttl">SALARY SLIP — ${esc(monthLabel(p.month).toUpperCase())}</div>
     <table>
       <tr><td class="l">Name</td><td style="text-align:right"><b>${esc(p.name)}</b></td></tr>
       <tr><td class="l">Designation</td><td style="text-align:right">${esc(p.designation)}</td></tr>
       ${row('Base salary', 'PKR ' + fmt(p.base))}
-      ${row('Absent days (including excused)', fmt(p.absenceCount))}
-      ${row('Excused absences', fmt(p.excusedLeaves))}
-      ${row('Absence deduction', '− PKR ' + fmt(p.leaveDed), 'neg')}
-      ${row('Late arrivals (including excused)', fmt(p.lateCount + p.excusedLates))}
-      ${row('Excused late marks', fmt(p.excusedLates))}
-      ${row('Late deduction', '− PKR ' + fmt(p.lateDed), 'neg')}
-      ${row('Security withheld (payable)', '− PKR ' + fmt(p.security), 'neg')}
-      ${row('Bonus', '+ PKR ' + fmt(p.bonus), 'pos')}
-      ${row('Fine', '− PKR ' + fmt(p.fine), 'neg')}
-      ${row('Advance recovered', '− PKR ' + fmt(p.advance), 'neg')}
-      <tr class="net"><td>Net salary</td><td style="text-align:right">PKR ${fmt(p.net)}</td></tr>
-      <tr><td class="l">In words</td><td style="text-align:right">Rupees ${numToWords(p.net)} Only</td></tr>
-      <tr><td class="l">Status</td><td style="text-align:right"><span class="stamp">${p.status.toUpperCase()}</span>${p.paidDate ? '<br>' + fmtDate(p.paidDate) : ''}</td></tr>
-    </table>${p.notes ? `<p style="font-size:12px;color:#64748b">Note: ${esc(p.notes)}</p>` : ''}
-    <div class="sig"><div>Accountant / Principal</div><div>Received by</div></div></div></body></html>`;
+      ${row('Net salary', 'PKR ' + fmt(p.net))}
+    </table></div></body></html>`;
     let f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
     document.body.appendChild(f); f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
     setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 1500); }, 300);
 }
-
-// ====================================================================================
-//  SETTINGS
-// ====================================================================================
-
 
 document.addEventListener('keydown', e => { if(e.key === 'Escape') document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden')); });
 </script>
