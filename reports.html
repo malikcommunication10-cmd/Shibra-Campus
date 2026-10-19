@@ -14,14 +14,17 @@
         .report-table th{background-color:#f8fafc;color:#475569;font-size:.7rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase}
         .report-table tbody tr:hover{background-color:#f8fafc}
         .report-table td:last-child,.report-table th:last-child{text-align:right;font-variant-numeric:tabular-nums}
-        .report-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;align-items:end}
+        .report-filters{display:grid;grid-template-columns:repeat(1,minmax(0,1fr));gap:1rem;align-items:end}
         .report-filters-note{grid-column:1/-1}
         #kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
         .report-section-content { display: none; }
         .report-section-content.active { display: block; }
         .sidebar-nav-btn { transition: all 0.2s ease; }
         .sidebar-nav-btn.active { background-color: #4f46e5; color: white; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); }
-        @media(min-width:1024px){.report-filters{grid-template-columns:repeat(5,minmax(0,1fr))}.report-filters-note{grid-column:auto}}
+        .date-quick-btn { transition: all 0.15s ease; }
+        .date-quick-btn:hover { background-color: #e0e7ff; color: #3730a3; }
+        @media(min-width:768px){.report-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+        @media(min-width:1024px){.report-filters{grid-template-columns:2fr 1.5fr 1.5fr auto}.report-filters-note{grid-column:1/-1}}
         @media(min-width:1280px){#kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
         @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print,aside.internal-sidebar{display:none!important}}
     </style>
@@ -42,28 +45,29 @@
             </div>
         </header>
 
-        <section class="report-filters bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm no-print">
-            <div>
-                <label for="preset" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Period Preset</label>
-                <select id="preset" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
-                    <option value="today">Today</option>
-                    <option value="month">This month</option>
-                    <option value="last_month">Last month</option>
-                    <option value="year">This year</option>
-                    <option value="last_year">Last year</option>
-                    <option value="custom">Custom Range</option>
-                </select>
+        <!-- Improved Easy Date Selection Filter Box -->
+        <section class="report-filters bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm no-print">
+            <div class="space-y-1.5">
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Quick Select Range</label>
+                <div class="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                    <button type="button" onclick="quickSelect('today')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">Today</button>
+                    <button type="button" onclick="quickSelect('month')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">This Month</button>
+                    <button type="button" onclick="quickSelect('last_month')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">Last Month</button>
+                    <button type="button" onclick="quickSelect('year')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">This Year</button>
+                </div>
             </div>
             <div>
-                <label for="fromDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">From Date</label>
-                <input id="fromDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                <label for="fromDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">From Date (Start)</label>
+                <input id="fromDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition cursor-pointer">
             </div>
             <div>
-                <label for="toDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">To Date</label>
-                <input id="toDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                <label for="toDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">To Date (End)</label>
+                <input id="toDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition cursor-pointer">
             </div>
-            <p class="report-filters-note text-xs text-slate-500 font-medium">Transactions follow selected period. Active student and staff counts reflect live snapshots.</p>
-            <button id="applyReport" class="w-full md:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Filters</button>
+            <div class="flex items-end">
+                <button id="applyReport" class="w-full px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Range</button>
+            </div>
+            <p class="report-filters-note text-xs text-slate-500 font-medium pt-1">Tip: Click on any date box to open the calendar picker directly, or use quick buttons above.</p>
         </section>
 
         <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm font-medium" role="status"></div>
@@ -91,7 +95,7 @@
 
             <!-- Right Content Area where selected section opens -->
             <div class="lg:col-span-3 space-y-6">
-                <!-- Tab 1: Overview (All KPIs & Summary) -->
+                <!-- Tab 1: Overview -->
                 <div id="tab-overview" class="report-section-content active space-y-6">
                     <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                         <h2 class="text-lg font-black text-indigo-950">Welcome to Campus Audit & Business Reports</h2>
@@ -151,7 +155,7 @@
                     <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
                 </div>
 
-                <!-- Tab 6: Receivables (Tuition & Annual Fund) -->
+                <!-- Tab 6: Receivables -->
                 <div id="tab-receivables" class="report-section-content space-y-6">
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Account Receivable · Tuition Fee</div>
@@ -214,7 +218,13 @@ function periodDates(preset) {
     if (preset === 'last_year') return [iso(utc(y - 1, 1, 1)), iso(utc(y - 1, 12, 31))];
     return [iso(utc(y, m, 1)), iso(utc(y, m, d))];
 }
-function setPreset(value) { const dates = periodDates(value); $('fromDate').value = dates[0];$('toDate').value = dates[1]; }
+
+function quickSelect(preset) {
+    const dates = periodDates(preset);
+    $('fromDate').value = dates[0];$('toDate').value = dates[1];
+    load();
+}
+
 function status(message, ok) {
     const box = $('reportStatus'); box.textContent = message;
     box.className = `rounded-xl border px-4 py-3 text-sm font-medium ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`;
@@ -336,19 +346,11 @@ async function load() {
         if (requestId === reportRequestId) $('applyReport').disabled =$('refreshReport').disabled = false;
     }
 }
-function applyReportFiltersSoon() {
-    clearTimeout(reportFilterTimer);
-    reportFilterTimer = setTimeout(load, 250);
-}
-$('preset').onchange = () => {
-    if ($('preset').value !== 'custom') setPreset($('preset').value);
-    applyReportFiltersSoon();
-};
-['fromDate','toDate'].forEach(id => $(id).onchange = () => {$('preset').value = 'custom'; applyReportFiltersSoon(); });
 $('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print();$('exportReport').onclick = exportReport;
 if (!flag('export')) $('exportReport').disabled = true;
 window.addEventListener('DOMContentLoaded', () => {
-    setPreset('month');
+    const dates = periodDates('month');
+    $('fromDate').value = dates[0];$('toDate').value = dates[1];
     load();
 });
 </script>
