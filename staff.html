@@ -190,7 +190,10 @@
                     <div class="flex flex-wrap items-end gap-3">
                         <div class="flex-1 min-w-[220px]">
                             <label for="attendanceReportFile" class="block text-[11px] font-medium text-slate-500 mb-1">Fingerprint attendance report (.xls / .xlsx)</label>
-                            <input id="attendanceReportFile" type="file" accept=".xls,.xlsx" onchange="resetAttendanceReportPreview()" class="w-full border rounded-lg px-3 py-2 text-sm bg-slate-50">
+                            <div class="flex items-center gap-2">
+                                <input id="attendanceReportFile" type="file" accept=".xls,.xlsx" onchange="resetAttendanceReportPreview()" class="min-w-0 flex-1 border rounded-lg px-3 py-2 text-sm bg-slate-50">
+                                <button id="clearAttendanceReportFile" type="button" onclick="clearAttendanceReportFile()" title="Remove selected file" aria-label="Remove selected attendance report" class="hidden h-9 w-9 shrink-0 rounded-full border border-rose-200 bg-rose-50 text-lg font-bold leading-none text-rose-600 hover:bg-rose-100">×</button>
+                            </div>
                         </div>
                         <button onclick="previewAttendanceReport()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">📥 Read & preview report</button>
                         <button id="importAttendanceConfirm" onclick="confirmAttendanceReportImport()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">Import unmarked dates</button>
@@ -1108,6 +1111,11 @@ function resetAttendanceReportPreview() {
     $('attendanceReportPreview').classList.add('hidden');
     $('attendanceReportPreview').innerHTML = '';
     $('importAttendanceConfirm').classList.add('hidden');
+    $('clearAttendanceReportFile').classList.toggle('hidden', !$('attendanceReportFile').files.length);
+}
+function clearAttendanceReportFile() {
+    $('attendanceReportFile').value = '';
+    resetAttendanceReportPreview();
 }
 function reportText(rows, row, column) {
     return String(rows[row] && rows[row][column] !== undefined ? rows[row][column] : '').trim();
@@ -1349,8 +1357,8 @@ async function confirmAttendanceReportImport() {
                 }
                 if(attendanceDate.startsWith(plan.month + '-')) await loadAttendance(attendanceDate);
                 toast(`Imported ${rows.length} attendance rows for ${monthLabel(plan.month)}. Existing saved dates were preserved.`);
-                resetAttendanceReportPreview();
                 $('attendanceReportFile').value = '';
+                resetAttendanceReportPreview();
             } catch(error) {
                 toast(`${error.message || 'Could not import the fingerprint report.'} Completed batches are safe to retry; existing attendance was not overwritten.`, false);
             } finally { hideLoading(); updateAttendanceReportPreview(); }
