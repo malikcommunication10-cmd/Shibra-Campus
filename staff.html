@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
     <script src="nav.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -184,6 +185,18 @@
                         </div>
                         <button id="markMonthPresentBtn" onclick="markMonthAttendancePresent()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">✅ Mark missing days Present for month</button>
                     </div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div class="flex-1 min-w-[220px]">
+                            <label for="attendanceReportFile" class="block text-[11px] font-medium text-slate-500 mb-1">Fingerprint attendance report (.xls / .xlsx)</label>
+                            <input id="attendanceReportFile" type="file" accept=".xls,.xlsx" onchange="resetAttendanceReportPreview()" class="w-full border rounded-lg px-3 py-2 text-sm bg-slate-50">
+                        </div>
+                        <button onclick="previewAttendanceReport()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">📥 Read & preview report</button>
+                        <button id="importAttendanceConfirm" onclick="confirmAttendanceReportImport()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">Import unmarked dates</button>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-2">Imports scheduled dates only: no punch = Absent, late minutes = Late, business trip = Present. Existing attendance is kept unchanged. Closed-day and role permissions still apply.</p>
+                    <div id="attendanceReportPreview" class="hidden mt-3"></div>
                 </div>
                 <div id="attendanceNotReady" class="hidden bg-white rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Attendance setup is required. Run the one-time SQL shown at the top of the page, then refresh.</div>
                 <div id="attendanceList" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
@@ -610,7 +623,7 @@ notify pgrst, 'reload schema';`;
 // ====================================================================================
 let staff = [], staffByKey = {}, payroll = [], payById = {}, payMap = {};
 let staffExt = false, payrollOk = false, attendanceOk = false, securityOk = false;
-let attendanceRows = [], attendanceByStaff = {}, attendanceDrafts = {}, attendanceDirty = false;
+let attendanceRows = [], attendanceByStaff = {}, attendanceDrafts = {}, attendanceDirty = false, attendanceImportPlan = null;
 let attendanceDate = '';
 let editingStaffKey = null, adjId = null, payTarget = null, payrollGenDrafts = [];
 let securityLedger = [], securityByStaff = {};
@@ -1087,6 +1100,260 @@ async function markMonthAttendancePresent() {
                 button.disabled = false;
                 hideLoading();
             }
+        }
+    );
+}
+function resetAttendanceReportPreview() {
+    attendanceImportPlan = null;
+    $('attendanceReportPreview').classList.add('hidden');
+    $('attendanceReportPreview').innerHTML = '';
+    $('importAttendanceConfirm').classList.add('hidden');
+}
+function reportText(rows, row, column) {
+    return String(rows[row] && rows[row][column] !== undefined ? rows[row][column] : '').trim();
+}
+function reportCode(value) {
+    const text = String(value || '').trim();
+    if(!text || text === '0') return 0;
+    const number = Number(text);
+    return Number.isInteger(number) ? number : null;
+}
+function reportDateRange(rows) {
+    for(const row of rows) {
+        for(const value of row) {
+            const match = String(value || '').match(/(\d{4})-(\d{2})-(\d{2})\s*~\s*(\d{4})-(\d{2})-(\d{2})/);
+            if(match) return { from: `${match[1]}-${match[2]}-${match[3]}`, to: `${match[4]}-${match[5]}-${match[6]}` };
+        }
+    }
+    return null;
+}
+function parseAttendanceReport(workbook) {
+    const logSheet = workbook.Sheets['Attendance Logs'], scheduleSheet = workbook.Sheets['Schedule information sheet'],
+        abnormalSheet = workbook.Sheets['Abnormal'];
+    if(!logSheet || !scheduleSheet) throw new Error('This file does not contain the expected "Attendance Logs" and "Schedule information sheet" tabs.');
+    const logs = XLSX.utils.sheet_to_json(logSheet, { header: 1, defval: '', raw: false });
+    const schedule = XLSX.utils.sheet_to_json(scheduleSheet, { header: 1, defval: '', raw: false });
+    const abnormal = abnormalSheet ? XLSX.utils.sheet_to_json(abnormalSheet, { header: 1, defval: '', raw: false }) : [];
+    const range = reportDateRange(logs) || reportDateRange(schedule);
+    if(!range) throw new Error('Could not find the attendance month in the report.');
+    const [year, monthNumber] = range.from.slice(0, 7).split('-').map(Number);
+    const expectedEnd = new Date(Date.UTC(year, monthNumber, 0)).toISOString().slice(0, 10);
+    if(range.to !== expectedEnd || range.from.slice(8, 10) !== '01')
+        throw new Error('The report must cover one complete calendar month.');
+    const reportMonth = range.from.slice(0, 7);
+    const dayCount = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+    const scheduleHeader = schedule.findIndex(row => reportText([row], 0, 0).toUpperCase() === 'ID' &&
+        reportText([row], 0, 1).toLowerCase() === 'name' && reportText([row], 0, 2).toLowerCase().startsWith('dept'));
+    if(scheduleHeader < 0) throw new Error('Could not find staff shift schedule in the report.');
+    const scheduleById = new Map();
+    for(let rowIndex = scheduleHeader + 1; rowIndex < schedule.length; rowIndex++) {
+        const id = reportText(schedule, rowIndex, 0), name = reportText(schedule, rowIndex, 1);
+        if(!id || !name) continue;
+        const shifts = new Map();
+        for(let day = 1; day <= dayCount; day++) {
+            const code = reportCode(reportText(schedule, rowIndex, day + 2));
+            if(code !== null) shifts.set(day, code);
+        }
+        scheduleById.set(id, { shifts });
+    }
+    const lateMinutesByIdDate = new Map();
+    for(let rowIndex = 0; rowIndex < abnormal.length; rowIndex++) {
+        if(reportText(abnormal, rowIndex, 0).toUpperCase() !== 'ID' ||
+           reportText(abnormal, rowIndex, 1).toLowerCase() !== 'name' ||
+           reportText(abnormal, rowIndex, 3).toLowerCase() !== 'date') continue;
+        for(let dataIndex = rowIndex + 2; dataIndex < abnormal.length; dataIndex++) {
+            const id = reportText(abnormal, dataIndex, 0), date = reportText(abnormal, dataIndex, 3);
+            if(!id || !date) {
+                if(abnormal[dataIndex].some(value => String(value || '').trim())) break;
+                continue;
+            }
+            if(!/^\d{4}-\d{2}-\d{2}$/.test(date) || !date.startsWith(reportMonth)) break;
+            const value = reportText(abnormal, dataIndex, 8);
+            const clock = value.match(/^(\d+):(\d{1,2})$/);
+            const minutes = clock ? Number(clock[1]) * 60 + Number(clock[2]) : (Number(value.replace(/[^\d.-]/g, '')) || 0);
+            const key = `${id}|${date}`;
+            lateMinutesByIdDate.set(key, Math.max(lateMinutesByIdDate.get(key) || 0, minutes));
+        }
+    }
+    const reportStaff = [];
+    for(let rowIndex = 0; rowIndex < logs.length; rowIndex++) {
+        if(reportText(logs, rowIndex, 0).toUpperCase() !== 'ID' ||
+           reportText(logs, rowIndex, 9).toLowerCase() !== 'name') continue;
+        const deviceId = reportText(logs, rowIndex, 2), name = reportText(logs, rowIndex, 11);
+        if(!deviceId || !name) continue;
+        const scheduled = scheduleById.get(deviceId);
+        if(!scheduled) throw new Error(`No shift schedule was found for device ID ${deviceId} (${name}).`);
+        const daysRow = logs[rowIndex + 1] || [];
+        const punchRow = logs[rowIndex + 3] || [];
+        const days = [];
+        for(let column = 0; column < daysRow.length; column++) {
+            const day = Number(String(daysRow[column] || '').trim());
+            if(!Number.isInteger(day) || day < 1 || day > dayCount) continue;
+            const date = `${reportMonth}-${String(day).padStart(2, '0')}`;
+            const shift = scheduled.shifts.get(day);
+            if(!shift || isSunday(date)) continue;
+            if(date > todayStr()) continue;
+            if(shift === 25) { days.push({ date, status: null, reason: 'Leave on shift schedule (review manually)' }); continue; }
+            const punches = String(punchRow[column] || '').match(/\b\d{1,2}:\d{2}\b/g) || [];
+            if(shift === 26) days.push({ date, status: 'present', reason: 'Business trip on shift schedule' });
+            else if(punches.length) {
+                const late = lateMinutesByIdDate.get(`${deviceId}|${date}`) || 0;
+                days.push({ date, status: late > 0 ? 'late' : 'present', reason: late > 0 ? `Fingerprint report: ${late} late minute(s)` : 'Fingerprint report: punch recorded' });
+            } else days.push({ date, status: 'absent', reason: 'Fingerprint report: no punch on scheduled shift' });
+        }
+        reportStaff.push({ deviceId, name, days });
+    }
+    if(!reportStaff.length) throw new Error('No staff attendance blocks were found in the Attendance Logs sheet.');
+    return { month: reportMonth, reportStaff };
+}
+function staffEmployedOnDate(member, date) {
+    return (!member.joining || member.joining <= date) &&
+        (member.status === 'Active' || (member.leaving && member.leaving >= date));
+}
+async function previewAttendanceReport() {
+    if(!attendanceOk) { toast('Run the staff attendance setup SQL first.', false); return; }
+    if(attendanceDirty) { toast('Save or discard unsaved daily attendance changes before importing a report.', false); return; }
+    const file = $('attendanceReportFile').files[0];
+    if(!file) { toast('Choose the fingerprint attendance report first.', false); return; }
+    if(typeof XLSX === 'undefined') { toast('Excel reader did not load. Check your internet connection and reload the page.', false); return; }
+    showLoading('Reading fingerprint attendance report...');
+    try {
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+        const parsed = parseAttendanceReport(workbook);
+        const response = await sbFetchAll('staff_attendance',
+            `select=staff_id,attendance_date&attendance_date=gte.${monthStart(parsed.month)}&attendance_date=lte.${monthEnd(parsed.month)}`);
+        if(!response.ok) throw new Error('Could not check existing attendance: ' + await response.text());
+        const existingRows = await response.json();
+        if(!Array.isArray(existingRows)) throw new Error('Supabase returned invalid existing attendance data.');
+        const existing = new Set(existingRows.map(row => `${row.staff_id}|${String(row.attendance_date).slice(0, 10)}`));
+        const staffByName = new Map();
+        staff.forEach(member => {
+            const key = norm(member.name);
+            staffByName.set(key, [...(staffByName.get(key) || []), member]);
+        });
+        parsed.reportStaff.forEach(person => {
+            const matches = staffByName.get(norm(person.name)) || [];
+            person.mappedStaffId = matches.length === 1 ? matches[0].staffId : '';
+            person.matchProblem = matches.length > 1 ? 'More than one staff member has this name' : '';
+        });
+        parsed.reportStaff.forEach(person => {
+            if(person.mappedStaffId && parsed.reportStaff.some(other => other !== person && other.mappedStaffId === person.mappedStaffId)) {
+                person.matchProblem = 'Multiple device IDs matched this staff member';
+                person.mappedStaffId = '';
+            }
+        });
+        const counters = { planned: 0, already: 0, leave: 0, unmapped: 0, notEmployed: 0 };
+        parsed.reportStaff.forEach(person => {
+            if(!person.mappedStaffId) { counters.unmapped++; return; }
+            const member = staff.find(item => item.staffId === person.mappedStaffId);
+            person.days.forEach(day => {
+                if(!member || !staffEmployedOnDate(member, day.date)) { counters.notEmployed++; return; }
+                if(!day.status) counters.leave++;
+                else if(existing.has(`${person.mappedStaffId}|${day.date}`)) counters.already++;
+                else counters.planned++;
+            });
+        });
+        attendanceImportPlan = { ...parsed, existing, counters, fileName: file.name };
+        const mappingRows = parsed.reportStaff.filter(person => !person.mappedStaffId || person.matchProblem);
+        const mappingHtml = mappingRows.length ? `
+            <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p class="font-semibold text-amber-900">Some report names need manual matching. Select the matching staff member, or leave unmatched to skip that person.</p>
+                <div class="mt-2 space-y-2">${mappingRows.map(person => `<label class="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-2 items-center text-xs">
+                    <span>${esc(person.name)} · device ID ${esc(person.deviceId)}${person.matchProblem ? ` — ${esc(person.matchProblem)}` : ''}</span>
+                    <select data-attendance-device="${esc(person.deviceId)}" onchange="updateAttendanceReportPreview()" class="border rounded-lg p-2 text-sm bg-white">
+                        <option value="">Do not import this person</option>${staff.map(member => `<option value="${esc(member.staffId)}" ${person.mappedStaffId === member.staffId ? 'selected' : ''}>${esc(member.name)} · ${esc(member.staffId)}</option>`).join('')}
+                    </select>
+                </label>`).join('')}</div>
+            </div>` : '';
+        $('attendanceReportPreview').innerHTML = `${mappingHtml}<div id="attendanceReportCounts" class="rounded-lg border bg-slate-50 p-3 text-xs"></div><div id="attendanceReportSample" class="mt-2 max-h-64 overflow-auto"></div>`;
+        $('attendanceReportPreview').classList.remove('hidden');
+        updateAttendanceReportPreview();
+    } catch(error) {
+        attendanceImportPlan = null;
+        resetAttendanceReportPreview();
+        toast(error.message || 'Could not read this attendance report.', false);
+    } finally { hideLoading(); }
+}
+function updateAttendanceReportPreview() {
+    if(!attendanceImportPlan) return;
+    const plan = attendanceImportPlan, mappings = new Map();
+    document.querySelectorAll('[data-attendance-device]').forEach(select => mappings.set(select.dataset.attendanceDevice, select.value));
+    plan.reportStaff.forEach(person => { if(mappings.has(person.deviceId)) person.mappedStaffId = mappings.get(person.deviceId); });
+    const assigned = new Map();
+    plan.reportStaff.forEach(person => {
+        if(!person.mappedStaffId) return;
+        assigned.set(person.mappedStaffId, (assigned.get(person.mappedStaffId) || 0) + 1);
+    });
+    const duplicates = [...assigned.values()].some(count => count > 1);
+    plan.hasDuplicateMappings = duplicates;
+    const counts = { planned: 0, already: 0, leave: 0, unmapped: 0, notEmployed: 0 };
+    const sample = [];
+    plan.reportStaff.forEach(person => {
+        if(!person.mappedStaffId) { counts.unmapped++; return; }
+        const member = staff.find(item => item.staffId === person.mappedStaffId);
+        person.days.forEach(day => {
+            if(!member || !staffEmployedOnDate(member, day.date)) { counts.notEmployed++; return; }
+            if(!day.status) { counts.leave++; return; }
+            if(plan.existing.has(`${person.mappedStaffId}|${day.date}`)) { counts.already++; return; }
+            counts.planned++;
+            if(sample.length < 15) {
+                const member = staff.find(item => item.staffId === person.mappedStaffId);
+                sample.push({ name: member ? member.name : person.name, date: day.date, status: day.status, reason: day.reason });
+            }
+        });
+    });
+    plan.counters = counts;
+    $('attendanceReportCounts').innerHTML = `<b>${esc(monthLabel(plan.month))}</b> · ${esc(plan.fileName)}<br>
+        To import: <b>${counts.planned}</b> · Already saved (preserved): ${counts.already} · Scheduled leave for manual review: ${counts.leave} · Outside employment dates: ${counts.notEmployed} · Unmatched / skipped staff: ${counts.unmapped}
+        ${duplicates ? '<p class="mt-2 font-bold text-rose-700">A staff member is mapped to multiple device IDs. Fix duplicate mappings before importing.</p>' : ''}
+        ${counts.planned && monthEnd(plan.month) > todayStr() ? '<p class="mt-2 font-bold text-rose-700">This report contains future dates. Import is blocked until the month has ended.</p>' : ''}`;
+    $('attendanceReportSample').innerHTML = sample.length ? `<div class="text-xs font-semibold text-slate-600 mb-1">First ${sample.length} rows to import</div><table class="w-full text-left text-xs"><thead><tr class="border-b"><th class="p-2">Staff</th><th class="p-2">Date</th><th class="p-2">Status</th><th class="p-2">Why</th></tr></thead><tbody>${sample.map(row => `<tr class="border-b"><td class="p-2">${esc(row.name)}</td><td class="p-2">${esc(row.date)}</td><td class="p-2 font-semibold">${esc(row.status)}</td><td class="p-2">${esc(row.reason)}</td></tr>`).join('')}</tbody></table>` : '<p class="text-xs text-slate-500">No new attendance rows to import for the current mapping.</p>';
+    const blocked = duplicates || !counts.planned || monthEnd(plan.month) > todayStr();
+    $('importAttendanceConfirm').classList.toggle('hidden', blocked);
+    $('importAttendanceConfirm').disabled = blocked;
+}
+async function confirmAttendanceReportImport() {
+    const plan = attendanceImportPlan;
+    if(!plan || attendanceDirty) { toast('Preview the report again after saving or discarding attendance edits.', false); return; }
+    updateAttendanceReportPreview();
+    if(!plan.counters.planned || plan.hasDuplicateMappings || monthEnd(plan.month) > todayStr()) return;
+    const rows = [];
+    plan.reportStaff.forEach(person => {
+        if(!person.mappedStaffId) return;
+        const member = staff.find(item => item.staffId === person.mappedStaffId);
+        if(!member) return;
+        person.days.forEach(day => {
+            if(!staffEmployedOnDate(member, day.date)) return;
+            if(!day.status || plan.existing.has(`${person.mappedStaffId}|${day.date}`)) return;
+            rows.push({ staff_id: member.staffId, staff_name: member.name, attendance_date: day.date, status: day.status,
+                note: day.reason, absence_exempt: false, late_exempt: false });
+        });
+    });
+    if(!rows.length) { toast('There are no new attendance rows to import.', false); return; }
+    confirmBox(
+        `Import ${rows.length} attendance record(s) for ${monthLabel(plan.month)}? Existing attendance will not be overwritten. Scheduled leave days and unmatched staff will be skipped.`,
+        'Import attendance',
+        async () => {
+            const button = $('importAttendanceConfirm');
+            button.disabled = true;
+            showLoading(`Importing ${rows.length} attendance rows...`);
+            try {
+                const c = getSupabaseConfig();
+                for(let index = 0; index < rows.length; index += 200) {
+                    const response = await fetch(`${c.url}/rest/v1/staff_attendance?on_conflict=staff_id,attendance_date`, {
+                        method: 'POST',
+                        headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=minimal' }),
+                        body: JSON.stringify(rows.slice(index, index + 200))
+                    });
+                    if(!response.ok) throw new Error(`Could not import attendance batch ${Math.floor(index / 200) + 1}: ${await response.text()}`);
+                }
+                if(attendanceDate.startsWith(plan.month + '-')) await loadAttendance(attendanceDate);
+                toast(`Imported ${rows.length} attendance rows for ${monthLabel(plan.month)}. Existing saved dates were preserved.`);
+                resetAttendanceReportPreview();
+                $('attendanceReportFile').value = '';
+            } catch(error) {
+                toast(`${error.message || 'Could not import the fingerprint report.'} Completed batches are safe to retry; existing attendance was not overwritten.`, false);
+            } finally { hideLoading(); updateAttendanceReportPreview(); }
         }
     );
 }
