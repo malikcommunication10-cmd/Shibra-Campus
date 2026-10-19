@@ -10,71 +10,129 @@
     <script src="nav.js"></script>
     <style>
         .report-table{width:100%;border-collapse:collapse}
-        .report-table th,.report-table td{padding:.6rem .75rem;border-bottom:1px solid #e2e8f0;text-align:left;font-size:.8rem}
-        .report-table th{color:#64748b;font-size:.7rem;text-transform:uppercase}
+        .report-table th,.report-table td{padding:.75rem 1rem;border-bottom:1px solid #f1f5f9;text-align:left;font-size:.85rem}
+        .report-table th{background-color:#f8fafc;color:#475569;font-size:.7rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase}
+        .report-table tbody tr:hover{background-color:#f8fafc}
         .report-table td:last-child,.report-table th:last-child{text-align:right;font-variant-numeric:tabular-nums}
-        .report-card-toggle::after{content:"⌄";display:inline-block;font-size:1rem;transition:transform .15s}
+        .report-card-toggle::after{content:"⌄";display:inline-block;font-size:1.1rem;transition:transform .2s ease;color:#6366f1}
         .report-card-toggle[aria-expanded="true"]::after{transform:rotate(180deg)}
-        .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem}
-        .report-kpi{min-width:0}
-        .report-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;align-items:end}
+        .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:1.25rem}
+        .report-kpi{min-width:0;transition:all .2s ease}
+        .report-kpi:hover{transform:translateY(-2px);box-shadow:0 10px 15px -3px rgba(0,0,0,0.05)}
+        .report-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;align-items:end}
         .report-filters-note{grid-column:1/-1}
-        #kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+        #kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
         @media(min-width:1024px){.report-filters{grid-template-columns:repeat(5,minmax(0,1fr))}.report-filters-note{grid-column:auto}}
         @media(min-width:1280px){#kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
         @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print{display:none!important}.report-grid{grid-template-columns:1fr 1fr}}
     </style>
 </head>
-<body class="bg-slate-100 text-slate-800 font-sans">
+<body class="bg-slate-50 text-slate-800 font-sans antialiased">
 <div class="min-h-screen flex flex-col md:flex-row">
     <aside id="appNav"></aside>
-    <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
-        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div><h1 class="text-xl md:text-2xl font-extrabold text-indigo-950">Business Reports</h1><p class="text-sm text-slate-500">School-wide operational and financial overview</p></div>
-            <div class="flex flex-wrap gap-2 no-print"><button id="expandAllReports" class="px-3 py-2 rounded-xl border bg-white text-sm font-semibold">Expand all</button><button id="collapseAllReports" class="px-3 py-2 rounded-xl border bg-white text-sm font-semibold">Collapse all</button><button id="printReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Print</button><button id="exportReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Export CSV</button><button id="refreshReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Refresh</button></div>
+    <main class="flex-1 min-w-0 p-4 md:p-8 space-y-6">
+        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black tracking-tight text-indigo-950">Business Reports</h1>
+                <p class="text-sm text-slate-500 mt-0.5">School-wide operational and financial executive overview</p>
+            </div>
+            <div class="flex flex-wrap gap-2 no-print">
+                <button id="expandAllReports" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition">Expand all</button>
+                <button id="collapseAllReports" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition">Collapse all</button>
+                <button id="printReport" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition flex items-center gap-1.5">Print</button>
+                <button id="exportReport" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition flex items-center gap-1.5">Export CSV</button>
+                <button id="refreshReport" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition">Refresh</button>
+            </div>
         </header>
-        <section class="report-filters bg-white p-3 md:p-4 rounded-2xl border border-slate-200 no-print">
-            <div><label for="preset" class="block text-xs font-semibold text-slate-600 mb-1">Period</label><select id="preset" class="w-full border rounded-lg p-2 text-sm"><option value="today">Today</option><option value="month">This month</option><option value="last_month">Last month</option><option value="year">This year</option><option value="last_year">Last year</option><option value="custom">Custom</option></select></div>
-            <div><label for="fromDate" class="block text-xs font-semibold text-slate-600 mb-1">From</label><input id="fromDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
-            <div><label for="toDate" class="block text-xs font-semibold text-slate-600 mb-1">To</label><input id="toDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
-            <p class="report-filters-note text-[11px] text-slate-500">Transactions follow the selected period. Student and staff counts are current snapshots.</p>
-            <button id="applyReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Apply</button>
+
+        <section class="report-filters bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm no-print">
+            <div>
+                <label for="preset" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Period Preset</label>
+                <select id="preset" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                    <option value="today">Today</option>
+                    <option value="month">This month</option>
+                    <option value="last_month">Last month</option>
+                    <option value="year">This year</option>
+                    <option value="last_year">Last year</option>
+                    <option value="custom">Custom Range</option>
+                </select>
+            </div>
+            <div>
+                <label for="fromDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">From Date</label>
+                <input id="fromDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+            </div>
+            <div>
+                <label for="toDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">To Date</label>
+                <input id="toDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+            </div>
+            <p class="report-filters-note text-xs text-slate-500 font-medium">Transactions follow the selected period. Student and staff counts reflect live active snapshots.</p>
+            <button id="applyReport" class="w-full md:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Filters</button>
         </section>
-        <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm" role="status"></div>
-        <p id="periodLabel" class="text-xs text-slate-500"></p>
-        <section id="kpis" class="grid grid-cols-2 gap-3"></section>
+
+        <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm font-medium" role="status"></div>
+        <div class="flex items-center justify-between">
+            <p id="periodLabel" class="text-xs font-semibold text-slate-500 bg-slate-200/60 px-3 py-1 rounded-lg inline-block"></p>
+        </div>
+
+        <section id="kpis" class="grid grid-cols-2 gap-4"></section>
+
         <section class="report-grid">
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="classContent">Students by class</button><div id="classContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active students</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="classContent">Students by Class</button>
+                <div id="classContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
             </article>
+
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="tuitionContent">Students by monthly tuition fee</button>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="tuitionContent">Students by Monthly Tuition Fee</button>
                 <div id="tuitionContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Monthly tuition fee</th><th>Students</th></tr></thead><tbody id="tuitionRows"></tbody>
-                    <tfoot><tr class="font-bold bg-indigo-50"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
+                    <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
             </article>
+
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden lg:col-span-2">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="feeContent">Fees Breakdown by Type</button>
+                <div id="feeContent" class="report-card-content overflow-x-auto">
+                    <table class="report-table min-w-[1200px]">
+                        <thead>
+                            <tr><th rowspan="2" class="bg-slate-100">Fee type</th><th colspan="4" class="text-center bg-indigo-50/50 text-indigo-900 border-x">Active students</th><th colspan="4" class="text-center bg-rose-50/50 text-rose-900 border-x">Left students</th><th colspan="4" class="text-center bg-slate-100 text-slate-900 border-x">All records</th></tr>
+                            <tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr>
+                        </thead>
+                        <tbody id="feeRows"></tbody>
+                        <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot>
+                    </table>
+                </div>
+            </article>
+
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="feeContent">Fees by type</button><div id="feeContent" class="report-card-content overflow-x-auto"><table class="report-table min-w-[1200px]"><thead><tr><th rowspan="2">Fee type</th><th colspan="4" class="text-center">Active students</th><th colspan="4" class="text-center">Left students</th><th colspan="4" class="text-center">All records</th></tr><tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr></thead><tbody id="feeRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="accountContent">Account Activity</button>
+                <div id="accountContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
             </article>
+
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="accountContent">Account activity</button><div id="accountContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="tuitionReceivableContent">Receivable · Tuition Fee</button>
+                <div id="tuitionReceivableContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="tuitionReceivableRows"></tbody></table></div>
             </article>
+
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="tuitionReceivableContent">Account Receivable · Tuition Fee</button><div id="tuitionReceivableContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="tuitionReceivableRows"></tbody></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="annualFundContent">Receivable · Annual Fund</button>
+                <div id="annualFundContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="annualFundRows"></tbody></table></div>
             </article>
+
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="annualFundContent">Account Receivable · Annual Fund</button><div id="annualFundContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="annualFundRows"></tbody></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="attendanceContent">Staff Attendance</button>
+                <div id="attendanceContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
             </article>
+
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="attendanceContent">Staff attendance</button><div id="attendanceContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="followupContent">Follow-up Outcomes</button>
+                <div id="followupContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
             </article>
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="followupContent">Follow-up outcomes</button><div id="followupContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
-            </article>
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="booksContent">Books & increments</button><div id="booksContent" class="report-card-content space-y-2"><div id="booksSummary" class="text-sm text-slate-600"></div><div id="incrementSummary" class="text-sm text-slate-600"></div></div>
+
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-3">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 text-left font-bold text-indigo-950" aria-expanded="true" aria-controls="booksContent">Books & Salary Increments</button>
+                <div id="booksContent" class="report-card-content space-y-2.5 pt-2 border-t border-slate-100"><div id="booksSummary" class="text-sm text-slate-600 font-medium"></div><div id="incrementSummary" class="text-sm text-slate-600 font-medium"></div></div>
             </article>
         </section>
-        <p class="text-[11px] text-slate-500">Generated from saved records. Student/staff counts and monthly tuition-fee distribution are current snapshots; monthly fee and payroll records are included when their month overlaps the selected range. Account inflow/outflow uses all dated account entries in range. Books without a saved date cannot be period-filtered.</p>
+        <p class="text-xs text-slate-400 pb-6">Generated securely from system database records. Student/staff counts and monthly tuition-fee distribution reflect current live snapshots; monthly fee and payroll entries correspond to overlapping selected periods.</p>
     </main>
 </div>
 <script>
@@ -93,16 +151,16 @@ function periodDates(preset) {
     if (preset === 'last_year') return [iso(utc(y - 1, 1, 1)), iso(utc(y - 1, 12, 31))];
     return [iso(utc(y, m, 1)), iso(utc(y, m, d))];
 }
-function setPreset(value) { const dates = periodDates(value); $('fromDate').value = dates[0]; $('toDate').value = dates[1]; }
+function setPreset(value) { const dates = periodDates(value); $('fromDate').value = dates[0];$('toDate').value = dates[1]; }
 function status(message, ok) {
     const box = $('reportStatus'); box.textContent = message;
-    box.className = `rounded-xl border px-4 py-3 text-sm ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`;
+    box.className = `rounded-xl border px-4 py-3 text-sm font-medium ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`;
     box.classList.toggle('hidden', !message);
 }
 function rows(id, data, columns) {
     const list = Array.isArray(data) ? data : [];
     $(id).innerHTML = list.length ? list.map(row => `<tr>${columns.map(col => `<td>${esc(col(row))}</td>`).join('')}</tr>`).join('')
-        : `<tr><td colspan="${columns.length}" class="text-slate-500">No records for this period</td></tr>`;
+        : `<tr><td colspan="${columns.length}" class="text-slate-400 italic py-3 text-center">No records for this period</td></tr>`;
 }
 function renderAccountRows(data) {
     const list = Array.isArray(data) ? data : [];
@@ -111,31 +169,30 @@ function renderAccountRows(data) {
     const receivableRows = [...tuitionRows, ...annualFundRows];
     const otherRows = list.filter(row => !receivableRows.includes(row));
     const rowMarkup = row => `<tr><td>${esc(row.label)}</td><td>${fmt(row.money_in)}</td><td>${fmt(row.money_out)}</td></tr>`;
-    $('accountRows').innerHTML = otherRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No other account activity for this period</td></tr>';
-    $('tuitionReceivableRows').innerHTML = tuitionRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No tuition-fee account activity for this period</td></tr>';
-    $('annualFundRows').innerHTML = annualFundRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No annual-fund account activity for this period</td></tr>';
+    $('accountRows').innerHTML = otherRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-400 italic">No other account activity</td></tr>';
+    $('tuitionReceivableRows').innerHTML = tuitionRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-400 italic">No tuition-fee account activity</td></tr>';
+    $('annualFundRows').innerHTML = annualFundRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-400 italic">No annual-fund account activity</td></tr>';
 }
 function card(label, value, note) {
-    return `<article class="report-kpi bg-white p-4 rounded-2xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500">${esc(label)}</p><p class="text-xl font-extrabold text-indigo-950 mt-1 break-words">${esc(value)}</p><p class="text-[11px] text-slate-400 mt-1">${esc(note || '')}</p></article>`;
+    return `<article class="report-kpi bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider">${esc(label)}</p><p class="text-2xl font-black text-indigo-950 mt-2 break-words">${esc(value)}</p><p class="text-xs text-slate-500 font-medium mt-2 pt-2 border-t border-slate-100">${esc(note || '')}</p></article>`;
 }
 function render(data) {
     reportData = data;
     const st = data.students || {}, fees = data.fees || {}, accounts = data.accounts || {}, staff = data.staff || {}, followups = data.followups || {};
-    $('periodLabel').textContent = `Activity from ${data.from} through ${data.to} · generated ${new Date(data.generated_at).toLocaleString()}`;
+    $('periodLabel').textContent = `Activity: ${data.from} to ${data.to} · Generated ${new Date(data.generated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
     $('kpis').innerHTML = [
-        card('Students enrolled', fmt(st.total), `${fmt(st.active)} active now`),
-        card('Net fees payable', `Rs ${fmt(fees.payable)}`, `${fmt(fees.fee_rows)} fee rows · discounts Rs ${fmt(fees.discounts)} · collected Rs ${fmt(fees.collected_to_selected_vouchers)} · outstanding est. Rs ${fmt(fees.estimated_outstanding)}`),
-        card('Account inflow', `Rs ${fmt(accounts.money_in)}`, `${fmt(accounts.entries)} account entries`),
-        card('Account outflow', `Rs ${fmt(accounts.money_out)}`, 'All recorded account outflow'),
-        card('Staff', fmt(staff.total), `${fmt(staff.active)} active now`),
-        card('Payroll paid', `Rs ${fmt(staff.payroll_paid)}`, `${fmt(staff.payroll_rows)} payroll rows in period`),
-        card('Payroll unpaid', `Rs ${fmt(staff.payroll_unpaid)}`, 'Saved payroll marked unpaid'),
-        card('Follow-up calls', fmt(followups.calls), `Promises logged at those calls: Rs ${fmt(followups.promised_amount)}`)
+        card('Students enrolled', fmt(st.total), `${fmt(st.active)} active students`),
+        card('Net fees payable', `Rs ${fmt(fees.payable)}`, `${fmt(fees.fee_rows)} fee rows · Disc: ${fmt(fees.discounts)}`),
+        card('Account inflow', `Rs ${fmt(accounts.money_in)}`, `${fmt(accounts.entries)} total entries`),
+        card('Account outflow', `Rs ${fmt(accounts.money_out)}`, 'Recorded campus expenses'),
+        card('Staff count', fmt(staff.total), `${fmt(staff.active)} active personnel`),
+        card('Payroll paid', `Rs ${fmt(staff.payroll_paid)}`, `${fmt(staff.payroll_rows)} payroll entries`),
+        card('Payroll unpaid', `Rs ${fmt(staff.payroll_unpaid)}`, 'Marked pending disbursement'),
+        card('Follow-up calls', fmt(followups.calls), `Promised: Rs ${fmt(followups.promised_amount)}`)
     ].join('');
     rows('classRows', st.by_class, [row => row.label, row => fmt(row.count), row => fmt(row.left_count), row => fmt(row.net_count)]);
     $('classTotal').textContent = fmt(st.total);
-    $('classLeftTotal').textContent = fmt(st.left);
-    $('classNetTotal').textContent = fmt(st.active);
+    $('classLeftTotal').textContent = fmt(st.left);$('classNetTotal').textContent = fmt(st.active);
     rows('tuitionRows', st.by_tuition_fee, [row => `Rs ${fmt(row.label)}`, row => fmt(row.count)]);
     $('averageTuitionFee').textContent = `Rs ${fmt(st.average_tuition_fee)}`;
     const feeTypes = Array.isArray(fees.by_type) ? fees.by_type : [];
@@ -162,11 +219,11 @@ function render(data) {
     renderAccountRows(accounts.by_account);
     rows('attendanceRows', staff.attendance, [row => row.label, row => fmt(row.count)]);
     rows('followupRows', followups.by_outcome, [row => row.label, row => fmt(row.count)]);
-    $('booksSummary').textContent = `Books: ${fmt(data.books && data.books.records)} saved records · ${fmt(data.books && data.books.transactions)} dated transactions in period · ${fmt(data.books && data.books.units)} units`;
-    $('incrementSummary').textContent = `Increments (all saved records): ${fmt(data.increments && data.increments.records)} · Rs ${fmt(data.increments && data.increments.amount)} in the selected period`;
+    $('booksSummary').textContent = `Books inventory: ${fmt(data.books && data.books.records)} saved records · ${fmt(data.books && data.books.transactions)} dated transactions · ${fmt(data.books && data.books.units)} units`;
+    $('incrementSummary').textContent = `Salary Increments: ${fmt(data.increments && data.increments.records)} records · Rs ${fmt(data.increments && data.increments.amount)} applied in range`;
 }
 function exportReport() {
-    if (!flag('export')) { deny('Export permission is required to download reports.'); return; }
+    if (!flag('export')) { status('Export permission is required.', false); return; }
     if (!reportData) { status('Load a report before exporting.', false); return; }
     const result = reportData, flat = [];
     const add = (section, label, value) => flat.push({period_from:result.from, period_to:result.to, section, label, value});
@@ -185,19 +242,19 @@ function exportReport() {
     };
     const content = [columns.map(quote).join(','), ...flat.map(row => columns.map(key => quote(row[key])).join(','))].join('\r\n');
     const url = URL.createObjectURL(new Blob([content], {type:'text/csv;charset=utf-8'}));
-    const link = document.createElement('a'); link.href = url; link.download = `school_reports_${result.from}_${result.to}.csv`; link.click();
+    const link = document.createElement('a'); link.href = url; link.download = `campus_reports_${result.from}_${result.to}.csv`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function load() {
     const requestId = ++reportRequestId;
     reportData = null;
-    const from = $('fromDate').value, to = $('toDate').value;
+    const from = $('fromDate').value, to =$('toDate').value;
     if (!from || !to || from > to) {
-        $('applyReport').disabled = $('refreshReport').disabled = false;
+        $('applyReport').disabled =$('refreshReport').disabled = false;
         status('Choose a valid date range; From must be on or before To.', false);
         return;
     }
-    $('applyReport').disabled = $('refreshReport').disabled = true; status('', true);
+    $('applyReport').disabled =$('refreshReport').disabled = true; status('', true);
     try {
         const response = await fetch(`${SB_URL}/rest/v1/rpc/app_business_reports`, {
             method: 'POST', headers: {'Content-Type':'application/json'},
@@ -205,15 +262,15 @@ async function load() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || data.details || `Request failed (${response.status})`);
-        if (!data || !data.students || !data.fees) throw new Error('The report service returned an unexpected response.');
+        if (!data || !data.students || !data.fees) throw new Error('Unexpected response structure from report service.');
         if (requestId !== reportRequestId) return;
         render(data);
     } catch (error) {
         if (requestId !== reportRequestId) return;
         status(`Could not load business reports: ${error.message}`, false);
-        console.error('Could not load business reports:', error);
+        console.error(error);
     } finally {
-        if (requestId === reportRequestId) $('applyReport').disabled = $('refreshReport').disabled = false;
+        if (requestId === reportRequestId) $('applyReport').disabled =$('refreshReport').disabled = false;
     }
 }
 function applyReportFiltersSoon() {
@@ -224,8 +281,8 @@ $('preset').onchange = () => {
     if ($('preset').value !== 'custom') setPreset($('preset').value);
     applyReportFiltersSoon();
 };
-['fromDate','toDate'].forEach(id => $(id).onchange = () => { $('preset').value = 'custom'; applyReportFiltersSoon(); });
-$('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print(); $('exportReport').onclick = exportReport;
+['fromDate','toDate'].forEach(id => $(id).onchange = () => {$('preset').value = 'custom'; applyReportFiltersSoon(); });
+$('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print();$('exportReport').onclick = exportReport;
 const reportCards = () => Array.from(document.querySelectorAll('.report-card'));
 const setReportCardExpanded = (button, expanded) => {
     button.setAttribute('aria-expanded', String(expanded));
@@ -235,8 +292,7 @@ const setReportCardExpanded = (button, expanded) => {
 document.querySelectorAll('.report-card-toggle').forEach(button => {
     button.onclick = () => setReportCardExpanded(button, button.getAttribute('aria-expanded') !== 'true');
 });
-$('expandAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), true));
-$('collapseAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), false));
+$('expandAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), true));$('collapseAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), false));
 if (!flag('export')) $('exportReport').disabled = true;
 window.addEventListener('DOMContentLoaded', () => {
     setPreset('month');
