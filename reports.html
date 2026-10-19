@@ -45,7 +45,7 @@
             </div>
         </header>
 
-        <!-- Easy Month & Year Dropdown Selectors -->
+        <!-- Easy Month & Year Picker Section -->
         <section class="report-filters bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm no-print">
             <div class="space-y-1.5">
                 <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Quick Presets</label>
@@ -57,24 +57,15 @@
                 </div>
             </div>
             <div class="space-y-1.5">
-                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Select Month & Year Directly</label>
-                <div class="grid grid-cols-2 gap-2">
-                    <select id="selectMonth" class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
-                        <option value="0">January</option><option value="1">February</option><option value="2">March</option><option value="3">April</option>
-                        <option value="4">May</option><option value="5">June</option><option value="6">July</option><option value="7">August</option>
-                        <option value="8">September</option><option value="9">October</option><option value="10">November</option><option value="11">December</option>
-                    </select>
-                    <select id="selectYear" class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
-                        <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option>
-                    </select>
-                </div>
+                <label for="monthPicker" class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Select Month & Year</label>
+                <input id="monthPicker" type="month" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition cursor-pointer">
             </div>
             <div class="flex items-end">
-                <button id="applyReport" class="w-full px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Selected Month</button>
+                <button id="applyReport" class="w-full px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Report</button>
             </div>
-            <!-- Hidden inputs to keep code logic intact -->
+            <!-- Hidden inputs -->
             <input id="fromDate" type="hidden"><input id="toDate" type="hidden">
-            <p class="report-filters-note text-xs text-slate-500 font-medium pt-1">Aap direct mahina aur saal select karke foran report dekh sakte hain baghair kisi mushkil calendar ke.</p>
+            <p class="report-filters-note text-xs text-slate-500 font-medium pt-1">Aap asani se mahina aur saal select kar sakte hain.</p>
         </section>
 
         <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm font-medium" role="status"></div>
@@ -91,9 +82,10 @@
                 <button onclick="switchTab('overview')" id="nav-overview" class="sidebar-nav-btn active w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📊 Executive Overview</span></button>
                 <button onclick="switchTab('students')" id="nav-students" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>🎓 Students by Class</span></button>
                 <button onclick="switchTab('tuition')" id="nav-tuition" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>💰 Tuition Fee Distribution</span></button>
+                <button onclick="switchTab('tuitionFeeReport')" id="nav-tuitionFeeReport" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📑 Tuition Fee Report (All)</span></button>
+                <button onclick="switchTab('annualFundReport')" id="nav-annualFundReport" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📂 Annual Fund Report (All)</span></button>
                 <button onclick="switchTab('fees')" id="nav-fees" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📑 Fees Breakdown by Type</span></button>
                 <button onclick="switchTab('accounts')" id="nav-accounts" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>🏦 Account Activity</span></button>
-                <button onclick="switchTab('receivables')" id="nav-receivables" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📂 Receivables (Tuition/Fund)</span></button>
                 <button onclick="switchTab('staff')" id="nav-staff" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>👥 Staff Attendance & Payroll</span></button>
                 <button onclick="switchTab('followups')" id="nav-followups" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📞 Follow-up Outcomes</span></button>
                 <button onclick="switchTab('books')" id="nav-books" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📚 Books & Increments</span></button>
@@ -104,7 +96,7 @@
                 <div id="tab-overview" class="report-section-content active space-y-6">
                     <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                         <h2 class="text-lg font-black text-indigo-950">Welcome to Campus Audit & Business Reports</h2>
-                        <p class="text-sm text-slate-600 leading-relaxed">Select any specific section from the left sidebar to dive deep into class stats, fee collections, ledger accounts, staff payroll, and follow-up activities instantly.</p>
+                        <p class="text-sm text-slate-600 leading-relaxed">Select any specific section from the left sidebar to view reports instantly.</p>
                     </div>
                 </div>
 
@@ -121,7 +113,35 @@
                         <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
                 </div>
 
-                <!-- Tab 4: Fees Breakdown by Type -->
+                <!-- Tab 4: Tuition Fee Report (All Students) -->
+                <div id="tab-tuitionFeeReport" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Tuition Fee Report (All Students)</div>
+                    <div class="overflow-x-auto">
+                        <table class="report-table">
+                            <thead>
+                                <tr><th>Account / Student</th><th>Total Students / Count</th><th>Amount (Gross)</th><th>Discount</th><th>Paid</th><th>Pending Balance</th></tr>
+                            </thead>
+                            <tbody id="tuitionFeeReportRows"></tbody>
+                            <tfoot id="tuitionFeeReportFooter"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab 5: Annual Fund Report (All Students) -->
+                <div id="tab-annualFundReport" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Annual Fund Report (All Students)</div>
+                    <div class="overflow-x-auto">
+                        <table class="report-table">
+                            <thead>
+                                <tr><th>Account / Student</th><th>Total Students / Count</th><th>Amount (Gross)</th><th>Discount</th><th>Paid</th><th>Pending Balance</th></tr>
+                            </thead>
+                            <tbody id="annualFundReportRows"></tbody>
+                            <tfoot id="annualFundReportFooter"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab 6: Fees Breakdown by Type -->
                 <div id="tab-fees" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Fees Breakdown by Type</div>
                     <div class="overflow-x-auto">
@@ -136,53 +156,25 @@
                     </div>
                 </div>
 
-                <!-- Tab 5: Account Activity -->
+                <!-- Tab 7: Account Activity -->
                 <div id="tab-accounts" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">General Account Activity</div>
                     <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
                 </div>
 
-                <!-- Tab 6: Receivables (Tuition & Annual Fund formatted as Total, Discount, Paid, Pending Balance + Totals at bottom) -->
-                <div id="tab-receivables" class="report-section-content space-y-6">
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Account Receivable · Tuition Fee</div>
-                        <div class="overflow-x-auto">
-                            <table class="report-table">
-                                <thead>
-                                    <tr><th>Account / Category</th><th>Total (Gross)</th><th>Discount</th><th>Paid</th><th>Pending Balance</th></tr>
-                                </thead>
-                                <tbody id="tuitionReceivableRowsCustom"></tbody>
-                                <tfoot id="tuitionReceivableFooter"></tfoot>
-                            </table>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Account Receivable · Annual Fund</div>
-                        <div class="overflow-x-auto">
-                            <table class="report-table">
-                                <thead>
-                                    <tr><th>Account / Category</th><th>Total (Gross)</th><th>Discount</th><th>Paid</th><th>Pending Balance</th></tr>
-                                </thead>
-                                <tbody id="annualFundRowsCustom"></tbody>
-                                <tfoot id="annualFundFooter"></tfoot>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tab 7: Staff Attendance & Payroll -->
+                <!-- Tab 8: Staff Attendance & Payroll -->
                 <div id="tab-staff" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Staff Attendance Summary</div>
                     <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
                 </div>
 
-                <!-- Tab 8: Follow-up Outcomes -->
+                <!-- Tab 9: Follow-up Outcomes -->
                 <div id="tab-followups" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Follow-up Call Outcomes</div>
                     <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
                 </div>
 
-                <!-- Tab 9: Books & Increments -->
+                <!-- Tab 10: Books & Increments -->
                 <div id="tab-books" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
                     <div class="font-bold text-indigo-950 text-base border-b pb-2">Books Inventory & Salary Increments</div>
                     <div id="booksSummary" class="text-sm text-slate-600 font-medium"></div>
@@ -211,11 +203,12 @@ function switchTab(tabId) {
     if (targetBtn) targetBtn.classList.add('active');
 }
 
-function updateHiddenDatesFromDropdowns() {
-    const year = $('selectYear').value;
-    const month = parseInt($('selectMonth').value, 10);
-    const firstDay = new Date(Date.UTC(year, month, 1));
-    const lastDay = new Date(Date.UTC(year, month + 1, 0));
+function updateHiddenDatesFromMonthPicker() {
+    const val = $('monthPicker').value; // format YYYY-MM
+    if (!val) return;
+    const [year, month] = val.split('-').map(Number);
+    const firstDay = new Date(Date.UTC(year, month - 1, 1));
+    const lastDay = new Date(Date.UTC(year, month, 0));
     $('fromDate').value = iso(firstDay);$('toDate').value = iso(lastDay);
 }
 
@@ -233,7 +226,9 @@ function quickSelect(preset) {
     const dates = periodDates(preset);
     $('fromDate').value = dates[0];$('toDate').value = dates[1];
     const dObj = new Date(dates[0]);
-    $('selectMonth').value = dObj.getUTCMonth();$('selectYear').value = dObj.getUTCFullYear();
+    const yr = dObj.getUTCFullYear();
+    const mo = String(dObj.getUTCMonth() + 1).padStart(2, '0');
+    $('monthPicker').value = `${yr}-${mo}`;
     load();
 }
 
@@ -249,28 +244,44 @@ function rows(id, data, columns) {
         : `<tr><td colspan="${columns.length}" class="text-slate-400 italic py-3 text-center">No records for this period</td></tr>`;
 }
 
-function renderReceivablesCustom(data) {
+function renderDedicatedReport(data, feeKeyword, tbodyId, footerId) {
     const list = Array.isArray(data) ? data : [];
-    const tuitionRows = list.filter(row => /(tuition|tution)\s*fee/i.test(String(row.label || '')));
-    const annualFundRows = list.filter(row => /annual\s*fund/i.test(String(row.label || '')));
+    const filteredRows = list.filter(row => new RegExp(feeKeyword, 'i').test(String(row.label || '')));
 
-    const processRows = (filteredList, tbodyId, footerId) => {
-        let totGross = 0, totDisc = 0, totPaid = 0, totBal = 0;
-        const html = filteredList.length ? filteredList.map(row => {
-            let gross = n(row.money_in || row.payable || 0);
-            let discount = n(row.discount || 0);
-            let paid = n(row.collected || row.paid || row.money_in || 0);
-            let balance = Math.max(0, gross - discount - paid);
-            totGross += gross; totDisc += discount; totPaid += paid; totBal += balance;
-            return `<tr><td>${esc(row.label)}</td><td>${fmt(gross)}</td><td>${fmt(discount)}</td><td>${fmt(paid)}</td><td>${fmt(balance)}</td></tr>`;
-        }).join('') : `<tr><td colspan="5" class="text-slate-400 italic py-3 text-center">No records found</td></tr>`;
-        
-        $(tbodyId).innerHTML = html;
-        $(footerId).innerHTML = `<tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Total</td><td>${fmt(totGross)}</td><td>${fmt(totDisc)}</td><td>${fmt(totPaid)}</td><td>${fmt(totBal)}</td></tr>`;
-    };
+    let totalStudentsCount = 0, totGross = 0, totDisc = 0, totPaid = 0, totBal = 0;
 
-    processRows(tuitionRows, 'tuitionReceivableRowsCustom', 'tuitionReceivableFooter');
-    processRows(annualFundRows, 'annualFundRowsCustom', 'annualFundFooter');
+    const html = filteredRows.length ? filteredRows.map(row => {
+        let studentsCount = n(row.count || row.active_count || 1);
+        let gross = n(row.money_in || row.payable || row.active_payable || 0);
+        let discount = n(row.discount || row.active_discount || 0);
+        let paid = n(row.collected || row.paid || row.money_in || 0);
+        let balance = Math.max(0, gross - discount - paid);
+
+        totalStudentsCount += studentsCount;
+        totGross += gross;
+        totDisc += discount;
+        totPaid += paid;
+        totBal += balance;
+
+        return `<tr>
+            <td>${esc(row.label)}</td>
+            <td>${fmt(studentsCount)}</td>
+            <td>${fmt(gross)}</td>
+            <td>${fmt(discount)}</td>
+            <td>${fmt(paid)}</td>
+            <td>${fmt(balance)}</td>
+        </tr>`;
+    }).join('') : `<tr><td colspan="6" class="text-slate-400 italic py-3 text-center">No records found</td></tr>`;
+
+    $(tbodyId).innerHTML = html;
+    $(footerId).innerHTML = `<tr class="font-bold bg-indigo-50/60 text-indigo-950">
+        <td>Total</td>
+        <td>${fmt(totalStudentsCount)}</td>
+        <td>${fmt(totGross)}</td>
+        <td>${fmt(totDisc)}</td>
+        <td>${fmt(totPaid)}</td>
+        <td>${fmt(totBal)}</td>
+    </tr>`;
 }
 
 function renderAccountRows(data) {
@@ -281,7 +292,10 @@ function renderAccountRows(data) {
     const otherRows = list.filter(row => !receivableRows.includes(row));
     const rowMarkup = row => `<tr><td>${esc(row.label)}</td><td>${fmt(row.money_in)}</td><td>${fmt(row.money_out)}</td></tr>`;
     $('accountRows').innerHTML = otherRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-400 italic">No other account activity</td></tr>';
-    renderReceivablesCustom(list);
+    
+    // Render dedicated tabs for Tuition Fee & Annual Fund with All Students & breakdown
+    renderDedicatedReport(list, '(tuition|tution)\\s*fee', 'tuitionFeeReportRows', 'tuitionFeeReportFooter');
+    renderDedicatedReport(list, 'annual\\s*fund', 'annualFundReportRows', 'annualFundReportFooter');
 }
 
 function card(label, value, note) {
@@ -360,7 +374,7 @@ function exportReport() {
 }
 
 async function load() {
-    updateHiddenDatesFromDropdowns();
+    updateHiddenDatesFromMonthPicker();
     const requestId = ++reportRequestId;
     reportData = null;
     const from = $('fromDate').value, to =$('toDate').value;
@@ -392,14 +406,15 @@ async function load() {
 $('applyReport').onclick = load; 
 $('refreshReport').onclick = load; 
 $('printReport').onclick = () => window.print();$('exportReport').onclick = exportReport;
-$('selectMonth').onchange = load;
-$('selectYear').onchange = load;
+$('monthPicker').onchange = load;
 
 if (!flag('export')) $('exportReport').disabled = true;
 
 window.addEventListener('DOMContentLoaded', () => {
     const now = new Date();
-    $('selectMonth').value = now.getUTCMonth();$('selectYear').value = now.getUTCFullYear();
+    const yr = now.getUTCFullYear();
+    const mo = String(now.getUTCMonth() + 1).padStart(2, '0');
+    $('monthPicker').value = `${yr}-${mo}`;
     load();
 });
 </script>
