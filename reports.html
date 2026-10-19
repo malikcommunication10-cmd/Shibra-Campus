@@ -14,17 +14,16 @@
         .report-table th{background-color:#f8fafc;color:#475569;font-size:.7rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase}
         .report-table tbody tr:hover{background-color:#f8fafc}
         .report-table td:last-child,.report-table th:last-child{text-align:right;font-variant-numeric:tabular-nums}
-        .report-card-toggle::after{content:"⌄";display:inline-block;font-size:1.1rem;transition:transform .2s ease;color:#6366f1}
-        .report-card-toggle[aria-expanded="true"]::after{transform:rotate(180deg)}
-        .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:1.25rem}
-        .report-kpi{min-width:0;transition:all .2s ease}
-        .report-kpi:hover{transform:translateY(-2px);box-shadow:0 10px 15px -3px rgba(0,0,0,0.05)}
         .report-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;align-items:end}
         .report-filters-note{grid-column:1/-1}
         #kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+        .report-section-content { display: none; }
+        .report-section-content.active { display: block; }
+        .sidebar-nav-btn { transition: all 0.2s ease; }
+        .sidebar-nav-btn.active { background-color: #4f46e5; color: white; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); }
         @media(min-width:1024px){.report-filters{grid-template-columns:repeat(5,minmax(0,1fr))}.report-filters-note{grid-column:auto}}
         @media(min-width:1280px){#kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
-        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print{display:none!important}.report-grid{grid-template-columns:1fr 1fr}}
+        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print,aside.internal-sidebar{display:none!important}}
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased">
@@ -33,12 +32,10 @@
     <main class="flex-1 min-w-0 p-4 md:p-8 space-y-6">
         <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
             <div>
-                <h1 class="text-2xl md:text-3xl font-black tracking-tight text-indigo-950">Business Reports</h1>
+                <h1 class="text-2xl md:text-3xl font-black tracking-tight text-indigo-950">Business Reports & Audit</h1>
                 <p class="text-sm text-slate-500 mt-0.5">School-wide operational and financial executive overview</p>
             </div>
             <div class="flex flex-wrap gap-2 no-print">
-                <button id="expandAllReports" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition">Expand all</button>
-                <button id="collapseAllReports" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition">Collapse all</button>
                 <button id="printReport" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition flex items-center gap-1.5">Print</button>
                 <button id="exportReport" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition flex items-center gap-1.5">Export CSV</button>
                 <button id="refreshReport" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition">Refresh</button>
@@ -65,7 +62,7 @@
                 <label for="toDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">To Date</label>
                 <input id="toDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
             </div>
-            <p class="report-filters-note text-xs text-slate-500 font-medium">Transactions follow the selected period. Student and staff counts reflect live active snapshots.</p>
+            <p class="report-filters-note text-xs text-slate-500 font-medium">Transactions follow selected period. Active student and staff counts reflect live snapshots.</p>
             <button id="applyReport" class="w-full md:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Filters</button>
         </section>
 
@@ -76,63 +73,118 @@
 
         <section id="kpis" class="grid grid-cols-2 gap-4"></section>
 
-        <section class="report-grid">
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="classContent">Students by Class</button>
-                <div id="classContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
-            </article>
+        <!-- Main Workspace Layout with Page Sidebar -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+            <!-- Page Internal Sidebar Navigation -->
+            <aside class="internal-sidebar bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-1.5 lg:sticky lg:top-4 no-print">
+                <div class="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Report Sections</div>
+                <button onclick="switchTab('overview')" id="nav-overview" class="sidebar-nav-btn active w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📊 Executive Overview</span></button>
+                <button onclick="switchTab('students')" id="nav-students" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>🎓 Students by Class</span></button>
+                <button onclick="switchTab('tuition')" id="nav-tuition" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>💰 Tuition Fee Distribution</span></button>
+                <button onclick="switchTab('fees')" id="nav-fees" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📑 Fees Breakdown by Type</span></button>
+                <button onclick="switchTab('accounts')" id="nav-accounts" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>🏦 Account Activity</span></button>
+                <button onclick="switchTab('receivables')" id="nav-receivables" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📂 Receivables (Tuition/Fund)</span></button>
+                <button onclick="switchTab('staff')" id="nav-staff" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>👥 Staff Attendance & Payroll</span></button>
+                <button onclick="switchTab('followups')" id="nav-followups" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📞 Follow-up Outcomes</span></button>
+                <button onclick="switchTab('books')" id="nav-books" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📚 Books & Increments</span></button>
+            </aside>
 
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="tuitionContent">Students by Monthly Tuition Fee</button>
-                <div id="tuitionContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Monthly tuition fee</th><th>Students</th></tr></thead><tbody id="tuitionRows"></tbody>
-                    <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
-            </article>
-
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden lg:col-span-2">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="feeContent">Fees Breakdown by Type</button>
-                <div id="feeContent" class="report-card-content overflow-x-auto">
-                    <table class="report-table min-w-[1200px]">
-                        <thead>
-                            <tr><th rowspan="2" class="bg-slate-100">Fee type</th><th colspan="4" class="text-center bg-indigo-50/50 text-indigo-900 border-x">Active students</th><th colspan="4" class="text-center bg-rose-50/50 text-rose-900 border-x">Left students</th><th colspan="4" class="text-center bg-slate-100 text-slate-900 border-x">All records</th></tr>
-                            <tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr>
-                        </thead>
-                        <tbody id="feeRows"></tbody>
-                        <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot>
-                    </table>
+            <!-- Right Content Area where selected section opens -->
+            <div class="lg:col-span-3 space-y-6">
+                <!-- Tab 1: Overview (All KPIs & Summary) -->
+                <div id="tab-overview" class="report-section-content active space-y-6">
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <h2 class="text-lg font-black text-indigo-950">Welcome to Campus Audit & Business Reports</h2>
+                        <p class="text-sm text-slate-600 leading-relaxed">Select any specific section from the left sidebar to dive deep into class stats, fee collections, ledger accounts, staff payroll, and follow-up activities instantly.</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                            <div onclick="switchTab('students')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 cursor-pointer transition bg-slate-50">
+                                <h3 class="font-bold text-sm text-indigo-900">🎓 Students Report</h3>
+                                <p class="text-xs text-slate-500 mt-1">Check active counts and class-wise breakdowns.</p>
+                            </div>
+                            <div onclick="switchTab('fees')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 cursor-pointer transition bg-slate-50">
+                                <h3 class="font-bold text-sm text-indigo-900">📑 Fee Breakdown</h3>
+                                <p class="text-xs text-slate-500 mt-1">Analyze gross, discounts, and net receivables.</p>
+                            </div>
+                            <div onclick="switchTab('accounts')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 cursor-pointer transition bg-slate-50">
+                                <h3 class="font-bold text-sm text-indigo-900">🏦 Financial Accounts</h3>
+                                <p class="text-xs text-slate-500 mt-1">Review money inflow and campus expenses.</p>
+                            </div>
+                            <div onclick="switchTab('staff')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 cursor-pointer transition bg-slate-50">
+                                <h3 class="font-bold text-sm text-indigo-900">👥 Staff & Payroll</h3>
+                                <p class="text-xs text-slate-500 mt-1">Monitor staff attendance and payroll status.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </article>
 
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="accountContent">Account Activity</button>
-                <div id="accountContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
-            </article>
+                <!-- Tab 2: Students by Class -->
+                <div id="tab-students" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Students Enrolled by Class</div>
+                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
+                </div>
 
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="tuitionReceivableContent">Receivable · Tuition Fee</button>
-                <div id="tuitionReceivableContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="tuitionReceivableRows"></tbody></table></div>
-            </article>
+                <!-- Tab 3: Monthly Tuition Fee Distribution -->
+                <div id="tab-tuition" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Students by Monthly Tuition Fee</div>
+                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Monthly tuition fee</th><th>Students</th></tr></thead><tbody id="tuitionRows"></tbody>
+                        <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
+                </div>
 
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="annualFundContent">Receivable · Annual Fund</button>
-                <div id="annualFundContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="annualFundRows"></tbody></table></div>
-            </article>
+                <!-- Tab 4: Fees Breakdown by Type -->
+                <div id="tab-fees" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Fees Breakdown by Type</div>
+                    <div class="overflow-x-auto">
+                        <table class="report-table min-w-[1100px]">
+                            <thead>
+                                <tr><th rowspan="2" class="bg-slate-100">Fee type</th><th colspan="4" class="text-center bg-indigo-50/50 text-indigo-900 border-x">Active students</th><th colspan="4" class="text-center bg-rose-50/50 text-rose-900 border-x">Left students</th><th colspan="4" class="text-center bg-slate-100 text-slate-900 border-x">All records</th></tr>
+                                <tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr>
+                            </thead>
+                            <tbody id="feeRows"></tbody>
+                            <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot>
+                        </table>
+                    </div>
+                </div>
 
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="attendanceContent">Staff Attendance</button>
-                <div id="attendanceContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
-            </article>
+                <!-- Tab 5: Account Activity -->
+                <div id="tab-accounts" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">General Account Activity</div>
+                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
+                </div>
 
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 md:p-5 border-b border-slate-100 text-left font-bold text-indigo-950 hover:bg-slate-50/50 transition" aria-expanded="true" aria-controls="followupContent">Follow-up Outcomes</button>
-                <div id="followupContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
-            </article>
+                <!-- Tab 6: Receivables (Tuition & Annual Fund) -->
+                <div id="tab-receivables" class="report-section-content space-y-6">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Account Receivable · Tuition Fee</div>
+                        <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="tuitionReceivableRows"></tbody></table></div>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Account Receivable · Annual Fund</div>
+                        <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="annualFundRows"></tbody></table></div>
+                    </div>
+                </div>
 
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-3">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 text-left font-bold text-indigo-950" aria-expanded="true" aria-controls="booksContent">Books & Salary Increments</button>
-                <div id="booksContent" class="report-card-content space-y-2.5 pt-2 border-t border-slate-100"><div id="booksSummary" class="text-sm text-slate-600 font-medium"></div><div id="incrementSummary" class="text-sm text-slate-600 font-medium"></div></div>
-            </article>
-        </section>
-        <p class="text-xs text-slate-400 pb-6">Generated securely from system database records. Student/staff counts and monthly tuition-fee distribution reflect current live snapshots; monthly fee and payroll entries correspond to overlapping selected periods.</p>
+                <!-- Tab 7: Staff Attendance & Payroll -->
+                <div id="tab-staff" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Staff Attendance Summary</div>
+                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
+                </div>
+
+                <!-- Tab 8: Follow-up Outcomes -->
+                <div id="tab-followups" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Follow-up Call Outcomes</div>
+                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
+                </div>
+
+                <!-- Tab 9: Books & Increments -->
+                <div id="tab-books" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                    <div class="font-bold text-indigo-950 text-base border-b pb-2">Books Inventory & Salary Increments</div>
+                    <div id="booksSummary" class="text-sm text-slate-600 font-medium"></div>
+                    <div id="incrementSummary" class="text-sm text-slate-600 font-medium"></div>
+                </div>
+            </div>
+        </div>
+
+        <p class="text-xs text-slate-400 pb-6 text-center">Generated securely from system database records. Student/staff counts reflect live snapshots.</p>
     </main>
 </div>
 <script>
@@ -142,6 +194,17 @@ const n = value => Number(value) || 0;
 const fmt = value => n(value).toLocaleString(undefined, {maximumFractionDigits: 2});
 const iso = date => date.toISOString().slice(0, 10);
 let reportData = null, reportRequestId = 0, reportFilterTimer = null;
+
+function switchTab(tabId) {
+    document.querySelectorAll('.report-section-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.sidebar-nav-btn').forEach(btn => btn.classList.remove('active'));
+    
+    const targetContent = $(`tab-${tabId}`);
+    const targetBtn = $(`nav-${tabId}`);
+    if (targetContent) targetContent.classList.add('active');
+    if (targetBtn) targetBtn.classList.add('active');
+}
+
 function periodDates(preset) {
     const today = todayYmd().split('-').map(Number), y = today[0], m = today[1], d = today[2];
     const utc = (year, month, day) => new Date(Date.UTC(year, month - 1, day));
@@ -283,16 +346,6 @@ $('preset').onchange = () => {
 };
 ['fromDate','toDate'].forEach(id => $(id).onchange = () => {$('preset').value = 'custom'; applyReportFiltersSoon(); });
 $('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print();$('exportReport').onclick = exportReport;
-const reportCards = () => Array.from(document.querySelectorAll('.report-card'));
-const setReportCardExpanded = (button, expanded) => {
-    button.setAttribute('aria-expanded', String(expanded));
-    const content = document.getElementById(button.getAttribute('aria-controls'));
-    if (content) content.hidden = !expanded;
-};
-document.querySelectorAll('.report-card-toggle').forEach(button => {
-    button.onclick = () => setReportCardExpanded(button, button.getAttribute('aria-expanded') !== 'true');
-});
-$('expandAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), true));$('collapseAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), false));
 if (!flag('export')) $('exportReport').disabled = true;
 window.addEventListener('DOMContentLoaded', () => {
     setPreset('month');
