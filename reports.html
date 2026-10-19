@@ -23,8 +23,8 @@
         .sidebar-nav-btn.active { background-color: #4f46e5; color: white; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); }
         .date-quick-btn { transition: all 0.15s ease; }
         .date-quick-btn:hover { background-color: #e0e7ff; color: #3730a3; }
-        @media(min-width:768px){.report-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
-        @media(min-width:1024px){.report-filters{grid-template-columns:2fr 1.5fr 1.5fr auto}.report-filters-note{grid-column:1/-1}}
+        @media(min-width:768px){.report-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+        @media(min-width:1024px){.report-filters{grid-template-columns:2fr 2fr 1fr}.report-filters-note{grid-column:1/-1}}
         @media(min-width:1280px){#kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
         @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print,aside.internal-sidebar{display:none!important}}
     </style>
@@ -45,10 +45,10 @@
             </div>
         </header>
 
-        <!-- Improved Easy Date Selection Filter Box -->
+        <!-- Easy Month & Year Dropdown Selectors -->
         <section class="report-filters bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm no-print">
             <div class="space-y-1.5">
-                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Quick Select Range</label>
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Quick Presets</label>
                 <div class="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                     <button type="button" onclick="quickSelect('today')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">Today</button>
                     <button type="button" onclick="quickSelect('month')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">This Month</button>
@@ -56,18 +56,25 @@
                     <button type="button" onclick="quickSelect('year')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">This Year</button>
                 </div>
             </div>
-            <div>
-                <label for="fromDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">From Date (Start)</label>
-                <input id="fromDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition cursor-pointer">
-            </div>
-            <div>
-                <label for="toDate" class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">To Date (End)</label>
-                <input id="toDate" type="date" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition cursor-pointer">
+            <div class="space-y-1.5">
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Select Month & Year Directly</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <select id="selectMonth" class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                        <option value="0">January</option><option value="1">February</option><option value="2">March</option><option value="3">April</option>
+                        <option value="4">May</option><option value="5">June</option><option value="6">July</option><option value="7">August</option>
+                        <option value="8">September</option><option value="9">October</option><option value="10">November</option><option value="11">December</option>
+                    </select>
+                    <select id="selectYear" class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                        <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option>
+                    </select>
+                </div>
             </div>
             <div class="flex items-end">
-                <button id="applyReport" class="w-full px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Range</button>
+                <button id="applyReport" class="w-full px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Selected Month</button>
             </div>
-            <p class="report-filters-note text-xs text-slate-500 font-medium pt-1">Tip: Click on any date box to open the calendar picker directly, or use quick buttons above.</p>
+            <!-- Hidden inputs to keep code logic intact -->
+            <input id="fromDate" type="hidden"><input id="toDate" type="hidden">
+            <p class="report-filters-note text-xs text-slate-500 font-medium pt-1">Aap direct mahina aur saal select karke foran report dekh sakte hain baghair kisi mushkil calendar ke.</p>
         </section>
 
         <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm font-medium" role="status"></div>
@@ -79,7 +86,6 @@
 
         <!-- Main Workspace Layout with Page Sidebar -->
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-            <!-- Page Internal Sidebar Navigation -->
             <aside class="internal-sidebar bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-1.5 lg:sticky lg:top-4 no-print">
                 <div class="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Report Sections</div>
                 <button onclick="switchTab('overview')" id="nav-overview" class="sidebar-nav-btn active w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📊 Executive Overview</span></button>
@@ -93,31 +99,12 @@
                 <button onclick="switchTab('books')" id="nav-books" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📚 Books & Increments</span></button>
             </aside>
 
-            <!-- Right Content Area where selected section opens -->
             <div class="lg:col-span-3 space-y-6">
                 <!-- Tab 1: Overview -->
                 <div id="tab-overview" class="report-section-content active space-y-6">
                     <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                         <h2 class="text-lg font-black text-indigo-950">Welcome to Campus Audit & Business Reports</h2>
                         <p class="text-sm text-slate-600 leading-relaxed">Select any specific section from the left sidebar to dive deep into class stats, fee collections, ledger accounts, staff payroll, and follow-up activities instantly.</p>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                            <div onclick="switchTab('students')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 cursor-pointer transition bg-slate-50">
-                                <h3 class="font-bold text-sm text-indigo-900">🎓 Students Report</h3>
-                                <p class="text-xs text-slate-500 mt-1">Check active counts and class-wise breakdowns.</p>
-                            </div>
-                            <div onclick="switchTab('fees')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 cursor-pointer transition bg-slate-50">
-                                <h3 class="font-bold text-sm text-indigo-900">📑 Fee Breakdown</h3>
-                                <p class="text-xs text-slate-500 mt-1">Analyze gross, discounts, and net receivables.</p>
-                            </div>
-                            <div onclick="switchTab('accounts')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 cursor-pointer transition bg-slate-50">
-                                <h3 class="font-bold text-sm text-indigo-900">🏦 Financial Accounts</h3>
-                                <p class="text-xs text-slate-500 mt-1">Review money inflow and campus expenses.</p>
-                            </div>
-                            <div onclick="switchTab('staff')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 cursor-pointer transition bg-slate-50">
-                                <h3 class="font-bold text-sm text-indigo-900">👥 Staff & Payroll</h3>
-                                <p class="text-xs text-slate-500 mt-1">Monitor staff attendance and payroll status.</p>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -155,15 +142,31 @@
                     <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
                 </div>
 
-                <!-- Tab 6: Receivables -->
+                <!-- Tab 6: Receivables (Tuition & Annual Fund formatted as Total, Discount, Paid, Pending Balance + Totals at bottom) -->
                 <div id="tab-receivables" class="report-section-content space-y-6">
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Account Receivable · Tuition Fee</div>
-                        <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="tuitionReceivableRows"></tbody></table></div>
+                        <div class="overflow-x-auto">
+                            <table class="report-table">
+                                <thead>
+                                    <tr><th>Account / Category</th><th>Total (Gross)</th><th>Discount</th><th>Paid</th><th>Pending Balance</th></tr>
+                                </thead>
+                                <tbody id="tuitionReceivableRowsCustom"></tbody>
+                                <tfoot id="tuitionReceivableFooter"></tfoot>
+                            </table>
+                        </div>
                     </div>
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Account Receivable · Annual Fund</div>
-                        <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="annualFundRows"></tbody></table></div>
+                        <div class="overflow-x-auto">
+                            <table class="report-table">
+                                <thead>
+                                    <tr><th>Account / Category</th><th>Total (Gross)</th><th>Discount</th><th>Paid</th><th>Pending Balance</th></tr>
+                                </thead>
+                                <tbody id="annualFundRowsCustom"></tbody>
+                                <tfoot id="annualFundFooter"></tfoot>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -202,26 +205,35 @@ let reportData = null, reportRequestId = 0, reportFilterTimer = null;
 function switchTab(tabId) {
     document.querySelectorAll('.report-section-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.sidebar-nav-btn').forEach(btn => btn.classList.remove('active'));
-    
     const targetContent = $(`tab-${tabId}`);
     const targetBtn = $(`nav-${tabId}`);
     if (targetContent) targetContent.classList.add('active');
     if (targetBtn) targetBtn.classList.add('active');
 }
 
+function updateHiddenDatesFromDropdowns() {
+    const year = $('selectYear').value;
+    const month = parseInt($('selectMonth').value, 10);
+    const firstDay = new Date(Date.UTC(year, month, 1));
+    const lastDay = new Date(Date.UTC(year, month + 1, 0));
+    $('fromDate').value = iso(firstDay);$('toDate').value = iso(lastDay);
+}
+
 function periodDates(preset) {
-    const today = todayYmd().split('-').map(Number), y = today[0], m = today[1], d = today[2];
+    const now = new Date();
+    const y = now.getUTCFullYear(), m = now.getUTCMonth() + 1, d = now.getUTCDate();
     const utc = (year, month, day) => new Date(Date.UTC(year, month - 1, day));
     if (preset === 'today') return [iso(utc(y, m, d)), iso(utc(y, m, d))];
     if (preset === 'last_month') return [iso(utc(y, m - 1, 1)), iso(utc(y, m, 0))];
     if (preset === 'year') return [iso(utc(y, 1, 1)), iso(utc(y, 12, 31))];
-    if (preset === 'last_year') return [iso(utc(y - 1, 1, 1)), iso(utc(y - 1, 12, 31))];
     return [iso(utc(y, m, 1)), iso(utc(y, m, d))];
 }
 
 function quickSelect(preset) {
     const dates = periodDates(preset);
     $('fromDate').value = dates[0];$('toDate').value = dates[1];
+    const dObj = new Date(dates[0]);
+    $('selectMonth').value = dObj.getUTCMonth();$('selectYear').value = dObj.getUTCFullYear();
     load();
 }
 
@@ -230,11 +242,37 @@ function status(message, ok) {
     box.className = `rounded-xl border px-4 py-3 text-sm font-medium ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`;
     box.classList.toggle('hidden', !message);
 }
+
 function rows(id, data, columns) {
     const list = Array.isArray(data) ? data : [];
     $(id).innerHTML = list.length ? list.map(row => `<tr>${columns.map(col => `<td>${esc(col(row))}</td>`).join('')}</tr>`).join('')
         : `<tr><td colspan="${columns.length}" class="text-slate-400 italic py-3 text-center">No records for this period</td></tr>`;
 }
+
+function renderReceivablesCustom(data) {
+    const list = Array.isArray(data) ? data : [];
+    const tuitionRows = list.filter(row => /(tuition|tution)\s*fee/i.test(String(row.label || '')));
+    const annualFundRows = list.filter(row => /annual\s*fund/i.test(String(row.label || '')));
+
+    const processRows = (filteredList, tbodyId, footerId) => {
+        let totGross = 0, totDisc = 0, totPaid = 0, totBal = 0;
+        const html = filteredList.length ? filteredList.map(row => {
+            let gross = n(row.money_in || row.payable || 0);
+            let discount = n(row.discount || 0);
+            let paid = n(row.collected || row.paid || row.money_in || 0);
+            let balance = Math.max(0, gross - discount - paid);
+            totGross += gross; totDisc += discount; totPaid += paid; totBal += balance;
+            return `<tr><td>${esc(row.label)}</td><td>${fmt(gross)}</td><td>${fmt(discount)}</td><td>${fmt(paid)}</td><td>${fmt(balance)}</td></tr>`;
+        }).join('') : `<tr><td colspan="5" class="text-slate-400 italic py-3 text-center">No records found</td></tr>`;
+        
+        $(tbodyId).innerHTML = html;
+        $(footerId).innerHTML = `<tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Total</td><td>${fmt(totGross)}</td><td>${fmt(totDisc)}</td><td>${fmt(totPaid)}</td><td>${fmt(totBal)}</td></tr>`;
+    };
+
+    processRows(tuitionRows, 'tuitionReceivableRowsCustom', 'tuitionReceivableFooter');
+    processRows(annualFundRows, 'annualFundRowsCustom', 'annualFundFooter');
+}
+
 function renderAccountRows(data) {
     const list = Array.isArray(data) ? data : [];
     const tuitionRows = list.filter(row => /(tuition|tution)\s*fee/i.test(String(row.label || '')));
@@ -243,12 +281,13 @@ function renderAccountRows(data) {
     const otherRows = list.filter(row => !receivableRows.includes(row));
     const rowMarkup = row => `<tr><td>${esc(row.label)}</td><td>${fmt(row.money_in)}</td><td>${fmt(row.money_out)}</td></tr>`;
     $('accountRows').innerHTML = otherRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-400 italic">No other account activity</td></tr>';
-    $('tuitionReceivableRows').innerHTML = tuitionRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-400 italic">No tuition-fee account activity</td></tr>';
-    $('annualFundRows').innerHTML = annualFundRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-400 italic">No annual-fund account activity</td></tr>';
+    renderReceivablesCustom(list);
 }
+
 function card(label, value, note) {
     return `<article class="report-kpi bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider">${esc(label)}</p><p class="text-2xl font-black text-indigo-950 mt-2 break-words">${esc(value)}</p><p class="text-xs text-slate-500 font-medium mt-2 pt-2 border-t border-slate-100">${esc(note || '')}</p></article>`;
 }
+
 function render(data) {
     reportData = data;
     const st = data.students || {}, fees = data.fees || {}, accounts = data.accounts || {}, staff = data.staff || {}, followups = data.followups || {};
@@ -295,6 +334,7 @@ function render(data) {
     $('booksSummary').textContent = `Books inventory: ${fmt(data.books && data.books.records)} saved records · ${fmt(data.books && data.books.transactions)} dated transactions · ${fmt(data.books && data.books.units)} units`;
     $('incrementSummary').textContent = `Salary Increments: ${fmt(data.increments && data.increments.records)} records · Rs ${fmt(data.increments && data.increments.amount)} applied in range`;
 }
+
 function exportReport() {
     if (!flag('export')) { status('Export permission is required.', false); return; }
     if (!reportData) { status('Load a report before exporting.', false); return; }
@@ -318,7 +358,9 @@ function exportReport() {
     const link = document.createElement('a'); link.href = url; link.download = `campus_reports_${result.from}_${result.to}.csv`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
 async function load() {
+    updateHiddenDatesFromDropdowns();
     const requestId = ++reportRequestId;
     reportData = null;
     const from = $('fromDate').value, to =$('toDate').value;
@@ -346,11 +388,18 @@ async function load() {
         if (requestId === reportRequestId) $('applyReport').disabled =$('refreshReport').disabled = false;
     }
 }
-$('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print();$('exportReport').onclick = exportReport;
+
+$('applyReport').onclick = load; 
+$('refreshReport').onclick = load; 
+$('printReport').onclick = () => window.print();$('exportReport').onclick = exportReport;
+$('selectMonth').onchange = load;
+$('selectYear').onchange = load;
+
 if (!flag('export')) $('exportReport').disabled = true;
+
 window.addEventListener('DOMContentLoaded', () => {
-    const dates = periodDates('month');
-    $('fromDate').value = dates[0];$('toDate').value = dates[1];
+    const now = new Date();
+    $('selectMonth').value = now.getUTCMonth();$('selectYear').value = now.getUTCFullYear();
     load();
 });
 </script>
