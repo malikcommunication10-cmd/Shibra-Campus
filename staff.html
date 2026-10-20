@@ -142,6 +142,10 @@
             <!-- STAFF -->
             <section id="tab-staff" class="hidden space-y-4">
                 <div id="staffCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+                <div id="incrementSetupNotice" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-900 no-print">Annual increments need the one-time <b>supabase_staff_increments.sql</b> migration. Run it in Supabase SQL Editor, then refresh this page.</div>
+                <div class="flex justify-end no-print">
+                    <button id="salaryIncrementButton" onclick="openSalaryIncrement()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">📈 Annual increment</button>
+                </div>
                 <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
                     <div class="flex flex-wrap gap-2 items-center">
                         <input id="sSearch" oninput="renderStaff()" type="text" placeholder="Search name, designation, phone..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[180px]">
@@ -398,6 +402,52 @@
         </div>
     </div>
 
+    <!-- ANNUAL SALARY INCREMENT -->
+    <div id="salaryIncrementModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-4xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                <div><h3 class="text-lg font-bold text-indigo-950">Annual salary increment</h3><p class="text-xs text-slate-500">Choose staff, one increment method, and the effective month.</p></div>
+                <button onclick="closeModal('salaryIncrementModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2" aria-label="Close">✕</button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <fieldset class="border rounded-xl p-3">
+                        <legend class="px-1 text-xs font-semibold text-slate-600">Increment method</legend>
+                        <label class="flex items-center gap-2 text-sm"><input type="radio" name="incrementMethod" value="percentage" checked onchange="renderIncrementPreview()"> Percentage (%)</label>
+                        <label class="flex items-center gap-2 text-sm mt-2"><input type="radio" name="incrementMethod" value="fixed" onchange="renderIncrementPreview()"> Fixed amount (PKR)</label>
+                    </fieldset>
+                    <label class="text-xs text-slate-600">Increase value
+                        <input id="incrementValue" type="number" min="0.01" step="0.01" oninput="renderIncrementPreview()" class="mt-1 w-full border rounded-lg p-2.5 text-sm" placeholder="e.g. 10 or 5000">
+                    </label>
+                    <label class="text-xs text-slate-600">Effective month
+                        <input id="incrementMonth" type="month" onchange="renderIncrementPreview()" class="mt-1 w-full border rounded-lg p-2.5 text-sm">
+                    </label>
+                </div>
+                <label class="block text-xs text-slate-600">Reason / remarks (required)
+                    <input id="incrementNotes" type="text" maxlength="300" class="mt-1 w-full border rounded-lg p-2.5 text-sm" placeholder="Annual performance increment, approved by...">
+                </label>
+                <div class="flex flex-wrap justify-between items-center gap-2">
+                    <div><b class="text-sm text-slate-800">Select active staff</b><p class="text-[11px] text-slate-500">Percentage is calculated separately from each person's salary before the effective month.</p></div>
+                    <button type="button" onclick="toggleAllIncrementStaff(this)" class="text-xs text-indigo-700 hover:underline">Select all active</button>
+                </div>
+                <div id="incrementStaffChoices" class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-xl p-2"></div>
+                <div>
+                    <h4 class="font-semibold text-sm text-slate-800 mb-2">Salary preview</h4>
+                    <div id="incrementPreview" class="overflow-x-auto border rounded-xl"></div>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-sm text-slate-800 mb-2">Recent increment history</h4>
+                    <div id="incrementHistory" class="overflow-x-auto border rounded-xl max-h-48"></div>
+                </div>
+                <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">Generated or paid payroll is never changed. Future increments are used only for payroll from their effective month onward. A staff member can have only one increment per month; schedule increments in date order.</p>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2 sticky bottom-0 bg-white">
+                <button onclick="closeModal('salaryIncrementModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="confirmSalaryIncrement()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Review & save increment</button>
+            </div>
+        </div>
+    </div>
+
     <!-- RULES MODAL -->
     <div id="rulesModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-3">
@@ -625,11 +675,12 @@ notify pgrst, 'reload schema';`;
 //  STATE + HELPERS
 // ====================================================================================
 let staff = [], staffByKey = {}, payroll = [], payById = {}, payMap = {};
-let staffExt = false, payrollOk = false, attendanceOk = false, securityOk = false;
+let staffExt = false, payrollOk = false, attendanceOk = false, securityOk = false, incrementsOk = false;
 let attendanceRows = [], attendanceByStaff = {}, attendanceDrafts = {}, attendanceDirty = false, attendanceImportPlan = null;
 let attendanceDate = '';
 let editingStaffKey = null, adjId = null, payTarget = null, payrollGenDrafts = [];
 let securityLedger = [], securityByStaff = {};
+let salaryIncrements = [];
 
 const $ = id => document.getElementById(id);
 const PAYROLL_DIVISOR = 30;
@@ -705,6 +756,18 @@ function rebuildSecurityBalances() {
         const sign = entry.entry_type === 'refund' ? -1 : 1;
         securityByStaff[staffId] = (securityByStaff[staffId] || 0) + sign * (parseFloat(entry.amount) || 0);
     });
+}
+function salaryBeforeMonth(member, month) {
+    const prior = salaryIncrements
+        .filter(item => item.staff_id === member.staffId && item.effective_month < month)
+        .sort((a, b) => b.effective_month.localeCompare(a.effective_month))[0];
+    return prior ? Number(prior.new_salary) : Number(member.base) || 0;
+}
+function salaryForMonth(member, month) {
+    const applicable = salaryIncrements
+        .filter(item => item.staff_id === member.staffId && item.effective_month <= month)
+        .sort((a, b) => b.effective_month.localeCompare(a.effective_month))[0];
+    return applicable ? Number(applicable.new_salary) : Number(member.base) || 0;
 }
 function openingSecurity(staffId) {
     return securityLedger.find(entry => entry.staff_id === staffId && entry.entry_type === 'opening') || null;
@@ -851,14 +914,15 @@ async function initStaff() {
     showLoading('Loading staff & payroll...');
     let c = getSupabaseConfig();
     try {
-        let [sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityPayrollProbe, securityRes] = await Promise.all([
+        let [sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityPayrollProbe, securityRes, incrementsRes] = await Promise.all([
             sbFetchAll('staff', 'select=*'),
             sbFetchAll('payroll', 'select=*'),
             fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/payroll?select=security_deduction&limit=1`, { headers: sbHeaders() }),
-            sbFetchAll('staff_security_ledger', 'select=*')
+            sbFetchAll('staff_security_ledger', 'select=*'),
+            sbFetchAll('staff_salary_increments', 'select=*')
         ]);
         let sRows = await sRes.json();
         if(!Array.isArray(sRows)) throw new Error('staff failed to load');
@@ -870,6 +934,9 @@ async function initStaff() {
         securityLedger = securityOk ? await securityRes.json() : [];
         if(!Array.isArray(securityLedger)) { securityLedger = []; securityOk = false; }
         rebuildSecurityBalances();
+        salaryIncrements = incrementsRes.ok ? await incrementsRes.json() : [];
+        incrementsOk = incrementsRes.ok && Array.isArray(salaryIncrements);
+        if(!incrementsOk) salaryIncrements = [];
 
         staff = sRows.map(normStaff).sort((a, b) => a.name.localeCompare(b.name));
         staffByKey = {}; staff.forEach(s => staffByKey[s.key] = s);
@@ -903,6 +970,9 @@ function updateBanner() {
         : 'Optional: run this once to add phone, status and notes for staff, then refresh this page.';
     $('setupBanner').classList.toggle('hidden', !need);
     $('attendanceNotReady').classList.toggle('hidden', attendanceOk);
+    $('incrementSetupNotice').classList.toggle('hidden', incrementsOk);
+    $('salaryIncrementButton').disabled = !incrementsOk;
+    $('salaryIncrementButton').classList.toggle('opacity-50', !incrementsOk);
 }
 function copySetupSql() { navigator.clipboard.writeText(SETUP_SQL).then(() => toast('SQL copied. Paste it in the Supabase SQL Editor and run it.')); }
 function fillFilters() {
@@ -1520,10 +1590,11 @@ function staffList() {
 }
 function renderStaff() {
     let list = staffList(), active = staff.filter(s => s.status === 'Active');
+    const activeBase = active.reduce((sum, member) => sum + salaryForMonth(member, todayStr().slice(0, 7)), 0);
     $('staffCards').innerHTML = [
         { t: 'Active staff', v: active.length, c: 'text-indigo-700' },
-        { t: 'Monthly base payroll', v: 'PKR ' + fmt(active.reduce((s, x) => s + x.base, 0)) },
-        { t: 'Average salary', v: 'PKR ' + fmt(active.length ? active.reduce((s, x) => s + x.base, 0) / active.length : 0) },
+        { t: 'Monthly base payroll', v: 'PKR ' + fmt(activeBase) },
+        { t: 'Average salary', v: 'PKR ' + fmt(active.length ? activeBase / active.length : 0) },
         { t: 'Designations', v: new Set(active.map(s => s.designation)).size }
     ].map(card).join('');
     $('sCount').innerText = `${list.length} of ${staff.length} staff`;
@@ -1534,13 +1605,126 @@ function renderStaff() {
         <td class="p-2.5">${esc(s.designation)}</td>
         <td class="p-2.5 whitespace-nowrap">${fmtDate(s.joining)}<div class="text-[11px] text-slate-400">${serviceLength(s.joining)}</div></td>
         <td class="p-2.5">${s.phone ? `<a href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}" class="text-indigo-700 hover:underline font-mono">${esc(s.phone)}</a>` : '-'}</td>
-        <td class="p-2.5 text-right font-bold">PKR ${fmt(s.base)}</td><td class="p-2.5">${stBadge(s)}</td>
+        <td class="p-2.5 text-right font-bold">PKR ${fmt(salaryForMonth(s, todayStr().slice(0, 7)))}</td><td class="p-2.5">${stBadge(s)}</td>
         <td class="p-2.5 whitespace-nowrap no-print">${acts(s)}</td></tr>`).join('') : `<tr><td colspan="7" class="p-8 text-center text-slate-400">No staff found.</td></tr>`;
-    $('sFoot').innerHTML = list.length ? `<tr><td colspan="4" class="p-3 text-right">Total base salary:</td><td class="p-3 text-right">PKR ${fmt(list.reduce((s, x) => s + x.base, 0))}</td><td colspan="2" class="no-print"></td></tr>` : '';
+    $('sFoot').innerHTML = list.length ? `<tr><td colspan="4" class="p-3 text-right">Total base salary:</td><td class="p-3 text-right">PKR ${fmt(list.reduce((sum, member) => sum + salaryForMonth(member, todayStr().slice(0, 7)), 0))}</td><td colspan="2" class="no-print"></td></tr>` : '';
     $('sCards2').innerHTML = list.length ? list.map(s => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex items-start justify-between gap-2"><div class="flex items-center gap-3 min-w-0">${avatar(s.name)}<div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(s.name)}</div><div class="text-xs text-slate-500">${esc(s.designation)} · ${serviceLength(s.joining) || '-'}</div></div></div>${stBadge(s)}</div>
-        <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${s.phone ? `<a href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}" class="text-indigo-700 font-mono">${esc(s.phone)}</a>` : 'No phone'}<div>Joined ${fmtDate(s.joining)}</div></div><div class="text-lg font-extrabold">PKR ${fmt(s.base)}</div></div>
+        <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${s.phone ? `<a href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}" class="text-indigo-700 font-mono">${esc(s.phone)}</a>` : 'No phone'}<div>Joined ${fmtDate(s.joining)}</div></div><div class="text-lg font-extrabold">PKR ${fmt(salaryForMonth(s, todayStr().slice(0, 7)))}</div></div>
         <div class="flex justify-end gap-1 mt-2 border-t pt-2">${acts(s)}</div></div>`).join('') : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No staff found.</div>';
+}
+
+async function openSalaryIncrement() {
+    if(!incrementsOk) {
+        toast('Run supabase_staff_increments.sql in Supabase SQL Editor, then refresh.', false);
+        return;
+    }
+    showLoading('Loading increment history...');
+    try {
+        const latest = await sbFetchAll('staff_salary_increments', 'select=*');
+        if(!latest.ok) throw new Error('Could not load salary increment history: ' + await latest.text());
+        const rows = await latest.json();
+        if(!Array.isArray(rows)) throw new Error('Supabase returned invalid salary increment history.');
+        salaryIncrements = rows;
+    } catch(error) {
+        toast(error.message || 'Could not load salary increment history.', false);
+        return;
+    } finally {
+        hideLoading();
+    }
+    $('incrementMonth').value = todayStr().slice(0, 7);
+    $('incrementValue').value = '';
+    $('incrementNotes').value = '';
+    document.querySelector('input[name="incrementMethod"][value="percentage"]').checked = true;
+    $('incrementStaffChoices').innerHTML = staff.filter(member => member.status === 'Active').map(member =>
+        `<label class="flex items-center gap-2 border rounded-lg p-2.5 text-sm cursor-pointer hover:bg-slate-50">
+            <input type="checkbox" data-increment-staff="${esc(member.staffId)}" onchange="renderIncrementPreview()" class="rounded">
+            <span class="min-w-0 flex-1"><b class="block truncate">${esc(member.name)}</b><span class="text-[11px] text-slate-500">${esc(member.designation)} · ${esc(member.staffId)}</span></span>
+            <span class="text-xs font-semibold whitespace-nowrap">PKR ${fmt(salaryForMonth(member, $('incrementMonth').value))}</span>
+        </label>`).join('') || '<p class="text-sm text-slate-500 p-2">No active staff to select.</p>';
+    renderIncrementPreview();
+    renderIncrementHistory();
+    openModal('salaryIncrementModal');
+}
+function toggleAllIncrementStaff(button) {
+    const boxes = [...document.querySelectorAll('[data-increment-staff]')];
+    const select = boxes.some(box => !box.checked);
+    boxes.forEach(box => { box.checked = select; });
+    button.innerText = select ? 'Clear selection' : 'Select all active';
+    renderIncrementPreview();
+}
+function renderIncrementPreview() {
+    const month = $('incrementMonth').value;
+    const methodInput = document.querySelector('input[name="incrementMethod"]:checked');
+    const method = methodInput ? methodInput.value : 'percentage';
+    const value = Number($('incrementValue').value);
+    const selected = [...document.querySelectorAll('[data-increment-staff]:checked')];
+    if(!selected.length) {
+        $('incrementPreview').innerHTML = '<p class="p-3 text-xs text-slate-500">Select staff to preview the new salaries.</p>';
+        return;
+    }
+    if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        $('incrementPreview').innerHTML = '<p class="p-3 text-xs text-rose-600">Choose an effective month.</p>';
+        return;
+    }
+    const rows = selected.map(box => {
+        const member = staff.find(item => item.staffId === box.dataset.incrementStaff);
+        if(!member) return '';
+        const previous = salaryBeforeMonth(member, month);
+        const increase = Math.round((method === 'percentage' ? previous * value / 100 : value) * 100) / 100;
+        return `<tr class="border-t"><td class="p-2">${esc(member.name)}</td><td class="p-2 text-right">PKR ${fmt(previous)}</td><td class="p-2 text-right text-emerald-700">+ PKR ${fmt(increase)}</td><td class="p-2 text-right font-semibold">PKR ${fmt(previous + increase)}</td></tr>`;
+    }).join('');
+    $('incrementPreview').innerHTML = `<table class="w-full text-xs"><thead class="bg-slate-50 text-slate-600"><tr><th class="p-2 text-left">Staff</th><th class="p-2 text-right">Current salary before effective month</th><th class="p-2 text-right">Increase</th><th class="p-2 text-right">New salary</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderIncrementHistory() {
+    const rows = [...salaryIncrements].sort((a, b) => b.effective_month.localeCompare(a.effective_month) || String(b.created_at).localeCompare(String(a.created_at))).slice(0, 30);
+    $('incrementHistory').innerHTML = rows.length
+        ? `<table class="w-full text-xs"><thead class="bg-slate-50 text-slate-600 sticky top-0"><tr><th class="p-2 text-left">Staff</th><th class="p-2 text-left">Effective</th><th class="p-2 text-left">Method</th><th class="p-2 text-right">Old</th><th class="p-2 text-right">Increase</th><th class="p-2 text-right">New</th><th class="p-2 text-left">Reason</th></tr></thead><tbody>${rows.map(item =>
+            `<tr class="border-t"><td class="p-2">${esc(item.staff_name)}</td><td class="p-2 whitespace-nowrap">${esc(monthLabel(item.effective_month))}</td><td class="p-2">${item.method === 'percentage' ? `${fmt(item.percentage)}%` : `PKR ${fmt(item.fixed_amount)}`}</td><td class="p-2 text-right">PKR ${fmt(item.previous_salary)}</td><td class="p-2 text-right">PKR ${fmt(item.increase_amount)}</td><td class="p-2 text-right font-semibold">PKR ${fmt(item.new_salary)}</td><td class="p-2">${esc(item.notes)}</td></tr>`
+        ).join('')}</tbody></table>`
+        : '<p class="p-3 text-xs text-slate-500">No increments have been recorded yet.</p>';
+}
+function confirmSalaryIncrement() {
+    if(!incrementsOk) { toast('Increment setup is not available. Run its SQL migration first.', false); return; }
+    const staffIds = [...document.querySelectorAll('[data-increment-staff]:checked')].map(box => box.dataset.incrementStaff);
+    const methodInput = document.querySelector('input[name="incrementMethod"]:checked');
+    const method = methodInput ? methodInput.value : '';
+    const value = Number($('incrementValue').value);
+    const month = $('incrementMonth').value;
+    const notes = $('incrementNotes').value.trim();
+    if(!staffIds.length) { toast('Select at least one active staff member.', false); return; }
+    if(!Number.isFinite(value) || value <= 0 || (method === 'percentage' && value > 100) || Math.round(value * 100) / 100 !== value) {
+        toast(method === 'percentage' ? 'Enter a percentage from 0.01 to 100, with at most two decimal places.' : 'Enter a fixed amount greater than zero, with at most two decimal places.', false);
+        return;
+    }
+    if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month < todayStr().slice(0, 7)) {
+        toast('Effective month must be the current month or a future month.', false); return;
+    }
+    if(!notes) { toast('Enter a reason for this salary increment.', false); $('incrementNotes').focus(); return; }
+    const count = staffIds.length;
+    confirmBox(`Save ${method === 'percentage' ? `${fmt(value)}%` : `PKR ${fmt(value)}`} increment for ${count} staff member(s), effective ${monthLabel(month)}? Existing payroll will not change.`, 'Save increment', () => saveSalaryIncrement(staffIds, method, value, month, notes));
+}
+async function saveSalaryIncrement(staffIds, method, value, month, notes) {
+    closeModal('salaryIncrementModal');
+    showLoading('Saving salary increments...');
+    try {
+        const c = getSupabaseConfig();
+        const response = await fetch(`${c.url}/rest/v1/rpc/schedule_staff_salary_increment`, {
+            method: 'POST', headers: sbHeaders(JSON_H),
+            body: JSON.stringify({ p_staff_ids: staffIds, p_method: method, p_value: value, p_effective_month: month, p_notes: notes })
+        });
+        if(!response.ok) throw new Error('Could not save salary increments: ' + await response.text());
+        const result = await response.json();
+        if(!Array.isArray(result) || result.length !== staffIds.length) throw new Error('Supabase did not confirm every selected increment. Refresh and review increment history.');
+        toast(`Salary increment saved for ${result.length} staff member(s), effective ${monthLabel(month)}.`);
+        await initStaff();
+        showTab('staff');
+        await openSalaryIncrement();
+    } catch(error) {
+        toast(error.message || 'Could not save salary increments.', false);
+    } finally {
+        hideLoading();
+    }
 }
 
 // staff modal
@@ -1550,7 +1734,7 @@ function openStaff(key) {
     $('stTitle').innerText = s ? 'Edit staff' : 'Add staff';
     $('stId').innerText = s ? s.staffId : 'ID is generated automatically';
     $('stName').value = s ? s.name : ''; $('stDesig').value = s ? s.designation : ''; $('stJoin').value = s ? s.joining : todayStr();
-    $('stBase').value = s ? s.base : ''; $('stPhone').value = s ? s.phone : ''; $('stStatus').value = s ? s.status : 'Active';
+    $('stBase').value = s ? salaryForMonth(s, todayStr().slice(0, 7)) : ''; $('stPhone').value = s ? s.phone : ''; $('stStatus').value = s ? s.status : 'Active';
     $('stLeave').value = s ? s.leaving : ''; $('stNotes').value = s ? s.notes : '';
     $('stLeaveWrap').classList.toggle('hidden', $('stStatus').value !== 'Left');
     document.querySelectorAll('.stExt').forEach(el => el.classList.toggle('hidden', !staffExt));
@@ -1663,6 +1847,14 @@ async function generatePayroll() {
 
     showLoading('Loading monthly attendance...');
     try {
+        if(incrementsOk) {
+            const incrementResponse = await sbFetchAll('staff_salary_increments',
+                `select=staff_id,effective_month,new_salary&effective_month=lte.${encodeURIComponent(month)}`);
+            if(!incrementResponse.ok) throw new Error('Could not refresh salary increments before payroll generation: ' + await incrementResponse.text());
+            const rows = await incrementResponse.json();
+            if(!Array.isArray(rows)) throw new Error('Supabase returned invalid salary increments for payroll generation.');
+            salaryIncrements = rows;
+        }
         const response = await sbFetchAll('staff_attendance',
             `select=staff_id,staff_name,attendance_date,status,absence_exempt,late_exempt,note&attendance_date=gte.${monthStart(month)}&attendance_date=lte.${monthEnd(month)}`);
         if(!response.ok) throw new Error('Could not read monthly attendance: ' + await response.text());
@@ -1670,15 +1862,16 @@ async function generatePayroll() {
         if(!Array.isArray(rows)) throw new Error('Supabase returned invalid monthly attendance data.');
         const dates = monthSchoolDays(month);
         payrollGenDrafts = missing.map(s => {
+            const salaryStaff = { ...s, base: salaryForMonth(s, month) };
             const expectedDates = dates.filter(d => (!s.joining || s.joining <= d) &&
                 (s.status === 'Active' || (s.leaving && s.leaving >= d)));
-            const staffRows = rows.filter(r => r.staff_id === s.staffId &&
+            const staffRows = rows.filter(r => r.staff_id === salaryStaff.staffId &&
                 expectedDates.includes(String(r.attendance_date).slice(0, 10)));
             const byDate = new Map(staffRows.map(r => [String(r.attendance_date).slice(0, 10), r]));
             const absences = staffRows.filter(r => r.status === 'absent').length;
             const excusedLeaves = staffRows.filter(r => r.status === 'absent' && r.absence_exempt).length;
             const deductibleLeaves = absences - excusedLeaves;
-            return { staff: s, expectedDates, byDate, markedDays: staffRows.length, missingDays: expectedDates.length - staffRows.length,
+            return { staff: salaryStaff, expectedDates, byDate, markedDays: staffRows.length, missingDays: expectedDates.length - staffRows.length,
                 absenceCount: absences, excusedLeaves, defaultLeaves: deductibleLeaves, lateCount: staffRows.filter(r => r.status === 'late' && !r.late_exempt).length,
                 excusedLates: staffRows.filter(r => r.status === 'late' && r.late_exempt).length };
         });
@@ -1696,7 +1889,7 @@ function renderPayrollGeneration(month) {
     $('genPayrollRows').innerHTML = payrollGenDrafts.map((draft, index) => `
         <article class="border rounded-xl p-3 space-y-2">
             <div class="flex flex-wrap items-baseline justify-between gap-1">
-                <b class="text-sm text-slate-800">${esc(draft.staff.name)}</b>
+                <b class="text-sm text-slate-800">${esc(draft.staff.name)} · PKR ${fmt(draft.staff.base)} base</b>
                 <span class="text-[11px] text-slate-500">${draft.markedDays} dates already marked · ${draft.missingDays} unmarked workdays will be saved as Present · ${draft.absenceCount} absent / ${draft.lateCount + draft.excusedLates} late</span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-[120px_150px_180px_1fr] gap-2">
