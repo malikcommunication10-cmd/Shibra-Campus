@@ -13,6 +13,10 @@
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
         .tab-off:hover { background:#f1f5f9; }
+        .tx-modal-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; }
+        .tx-modal-layout > aside { border-top:1px solid #e2e8f0; }
+        @media (max-width:767px) { .tx-modal-layout { grid-template-columns:1fr; } }
+        @media (min-width:768px) { .tx-modal-layout > aside { border-top:0; border-left:1px solid #e2e8f0; } }
         #printHeader { display:none; }
         @media print {
             aside, .no-print, #txModal, #settingsModal, #confirmModal, #toast, #loadingOverlay, #fab, #mobileBar { display:none !important; }
@@ -238,7 +242,7 @@
 
     <!-- TRANSACTION MODAL -->
     <div id="txModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
-        <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+        <div class="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
             <div class="p-5 border-b flex justify-between items-start sticky top-0 bg-white z-10">
                 <div>
                     <h3 id="mTitle" class="text-lg font-bold text-indigo-950">New transaction</h3>
@@ -246,7 +250,8 @@
                 </div>
                 <button onclick="closeTx()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
             </div>
-            <div class="p-5 space-y-3">
+            <div class="tx-modal-layout">
+            <div class="p-4 sm:p-5 space-y-3">
                 <div id="mTypeTabs" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-semibold"></div>
 
                 <div id="mDateWrap">
@@ -314,11 +319,21 @@
                         <label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
                         <input id="mNotes" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none">
                     </div>
+                    <p id="mEditAccountingHint" class="hidden text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2"></p>
                 </div>
             </div>
-            <div class="p-5 border-t flex flex-wrap justify-end gap-2 sticky bottom-0 bg-white">
+            <aside class="bg-slate-50/70 p-4">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <h4 id="mRecentTitle" class="text-sm font-bold text-slate-800">Recent transactions</h4>
+                    <span id="mRecentCount" class="text-[10px] text-slate-400"></span>
+                </div>
+                <p class="text-[11px] text-slate-500 mb-2">Latest entries · edit a transaction</p>
+                <div id="mRecentList" class="space-y-2 max-h-72 overflow-y-auto"></div>
+            </aside>
+            </div>
+            <div class="p-4 border-t flex flex-wrap justify-end gap-2 sticky bottom-0 bg-white">
                 <button onclick="closeTx()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
-                <button onclick="saveTx(true)" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-sm">Save & add another</button>
+                <button id="mAddAnotherBtn" onclick="saveTx(true)" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-sm">Save & add another</button>
                 <button id="mSaveBtn" onclick="saveTx(false)" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save</button>
             </div>
         </div>
@@ -357,7 +372,7 @@ const SETUP_SQL = `alter table public.books
 //  STATE + HELPERS
 // ====================================================================================
 let txs = [], txByUid = {}, items = {}, hasExt = false, hasItemCols = false, hasId = true;
-let txLimit = 200, txKind = 'sale', lastSaved = null;
+let txLimit = 200, txKind = 'sale', lastSaved = null, editingTxUid = null, editingAccountRow = null;
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -791,21 +806,122 @@ function setTxKind(kind) {
     $('mHint').innerText = KINDS[kind].money === 'in' ? 'Money comes in → recorded as a Receipt in Accounts' : 'Money goes out → recorded as a Payment in Accounts';
     { const show = kind === 'purchase' && hasItemCols; $('mItemExtra').classList.toggle('hidden', !show); if(show) fillItemSelects(); $('mNewItemBtn').classList.toggle('hidden', kind !== 'purchase'); }
     fillPartyList(kind);
+    renderRecentTx(kind);
     onTitleInput(true);
 }
-function openTx(kind, key) {
+function renderRecentTx(kind) {
+    const supported = kind === 'sale' || kind === 'purchase';
+    $('mRecentTitle').innerText = kind === 'purchase' ? 'Recent purchases' : 'Recent sales';
+    const recent = supported ? txs.filter(t => t.kind === kind).slice(0, 8) : [];
+    $('mRecentCount').innerText = recent.length ? `${recent.length} latest` : '';
+    $('mRecentList').innerHTML = recent.length ? recent.map(t => `<article class="rounded-xl border border-slate-200 bg-white p-2.5">
+        <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0"><div class="text-xs font-semibold text-slate-800 truncate">${esc(t.title || '-')}</div><div class="text-[10px] text-slate-500 truncate">${esc(t.party || 'No party')} · ${fmtDate(t.date)}</div></div>
+            <span class="text-[10px] font-bold whitespace-nowrap text-slate-700">PKR ${fmt(t.net)}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2 mt-1.5"><span class="text-[10px] text-slate-400">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : 'No voucher'))} · Qty ${fmt(t.qty)}</span>
+            ${t.id !== undefined && t.id !== null ? `<button type="button" onclick="editTx(${esc(JSON.stringify(t.uid))})" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-semibold">✏ Edit</button>` : '<span class="text-[10px] text-slate-400">Not editable</span>'}
+        </div>
+    </article>`).join('') : '<p class="rounded-xl border border-dashed border-slate-300 p-3 text-xs text-slate-500">No recent transactions of this type.</p>';
+}
+function openTx(kind, key, editUid) {
+    const editing = editUid !== undefined && editUid !== null;
+    const editRecord = editing ? txByUid[editUid] : null;
+    editingTxUid = editing ? editUid : null;
+    editingAccountRow = editing ? editingAccountRow : null;
     $('mDate').value = todayStr(); $('mParty').value = ''; $('mTitleIn').value = ''; $('mQty').value = 1; $('mPrice').value = '';
     $('mDiscType').value = 'percentage'; $('mDiscVal').value = 0; $('mNotes').value = ''; $('mSalePrice').value = ''; $('mPaidNow').value = ''; $('mWallet').value = 'cash'; $('mPostAcc').checked = true;
+    $('mPostAcc').disabled = false; $('mPaidNow').disabled = false; $('mWallet').disabled = false;
+    $('mEditAccountingHint').classList.add('hidden');
+    $('mAddAnotherBtn').classList.toggle('hidden', editing);
     $('mDateWrap').classList.toggle('hidden', !hasExt);
     $('mExtWrap').classList.toggle('hidden', !hasExt);
     if(key && items[key]) $('mTitleIn').value = items[key].title;
     setTxKind(kind);
+    $('mTypeTabs').classList.toggle('hidden', editing);
+    if(editRecord) {
+        $('mTitle').innerText = `Edit ${KINDS[editRecord.kind].label}`;
+        $('mHint').innerText = `Updating ${editRecord.voucher || '#' + editRecord.id}; linked account payment is kept in sync.`;
+        $('mDate').value = editRecord.date || todayStr();
+        $('mParty').value = editRecord.party;
+        $('mTitleIn').value = editRecord.title;
+        $('mQty').value = editRecord.qty;
+        $('mPrice').value = editRecord.unit;
+        $('mDiscType').value = 'fixed';
+        $('mDiscVal').value = fmt(editRecord.discount).replace(/,/g, '');
+        $('mNotes').value = editRecord.notes;
+        $('mPostAcc').checked = !!editingAccountRow;
+        $('mPostAcc').disabled = true;
+        $('mPaidNow').value = 0;
+        $('mPaidNow').disabled = true;
+        $('mWallet').value = editRecord.mode || 'cash';
+        $('mWallet').disabled = !editingAccountRow;
+        if(editRecord.kind === 'purchase' && hasItemCols) {
+            $('mSalePrice').value = editRecord.salePrice || '';
+            if(editRecord.itemClass) $('mItemClass').value = editRecord.itemClass;
+            if(editRecord.category) $('mItemCat').value = editRecord.category;
+        }
+        if(editingAccountRow) {
+            $('mEditAccountingHint').innerText = 'Record in Accounts is already enabled for this transaction. Its amount, date and account will update together; this setting cannot be changed while editing.';
+            $('mEditAccountingHint').classList.remove('hidden');
+        } else {
+            $('mEditAccountingHint').innerText = 'No direct payment is linked to this transaction. Existing credit balance will stay unchanged; use Accounts to record settlements.';
+            $('mEditAccountingHint').classList.remove('hidden');
+        }
+        $('mSaveBtn').innerText = 'Save changes';
+        $('mSaveBtn').className = 'px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm';
+    } else {
+        $('mTitle').innerText = 'New ' + KINDS[kind].label;
+        $('mSaveBtn').innerText = 'Save';
+        $('mSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + (kind === 'sale' ? 'bg-emerald-600 hover:bg-emerald-700' : (kind === 'purchase' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-500 hover:bg-amber-600'));
+    }
     if(key) onTitleInput();
     calcNet();
     $('txModal').classList.remove('hidden');
     setTimeout(() => (key ? $('mQty') : $('mParty')).focus(), 50);
 }
-function closeTx() { $('txModal').classList.add('hidden'); }
+function closeTx() {
+    $('txModal').classList.add('hidden');
+    editingTxUid = null;
+    editingAccountRow = null;
+    $('mTypeTabs').classList.remove('hidden');
+    $('mAddAnotherBtn').classList.remove('hidden');
+}
+async function editTx(uid) {
+    const transaction = txByUid[uid];
+    if(!transaction || !['sale', 'purchase'].includes(transaction.kind)) return;
+    if(transaction.id === undefined || transaction.id === null) {
+        toast('This transaction has no database id and cannot be edited.', false);
+        return;
+    }
+    let linkedAccount = null;
+    if(hasExt && transaction.voucher) {
+        showLoading('Checking linked payments...');
+        try {
+            const c = getSupabaseConfig(), base = `${c.url}/rest/v1/accounts?select=voucher_id,from_account,to_account,description,amount_in,amount_out,date,remarks`;
+            const settled = await fetch(`${base}&voucher_id=like.${encodeURIComponent(transaction.voucher + '-*')}`, { headers: sbHeaders() });
+            if(!settled.ok) throw new Error('Could not verify transaction settlements: ' + await settled.text());
+            const settlementRows = await settled.json();
+            if(Array.isArray(settlementRows) && settlementRows.length) {
+                toast('This transaction already has linked partial payments. Settle or reverse those entries in Accounts before editing it.', false);
+                return;
+            }
+            const direct = await fetch(`${base}&voucher_id=eq.${encodeURIComponent(transaction.voucher)}`, { headers: sbHeaders() });
+            if(!direct.ok) throw new Error('Could not verify the linked Accounts entry: ' + await direct.text());
+            const directRows = await direct.json();
+            if(Array.isArray(directRows) && directRows.length > 1) throw new Error('Multiple Accounts entries use this voucher. Resolve the duplicate before editing.');
+            linkedAccount = Array.isArray(directRows) ? directRows[0] || null : null;
+            if(transaction.mode && !linkedAccount) throw new Error('This transaction is marked as paid in Accounts, but its linked voucher could not be found. Refresh and check Accounts before editing.');
+        } catch(error) {
+            toast(error.message || 'Could not check linked payments.', false);
+            return;
+        } finally {
+            hideLoading();
+        }
+    }
+    editingAccountRow = linkedAccount;
+    openTx(transaction.kind, null, uid);
+}
 
 function onTitleInput(skipPrice) {
     let it = items[norm($('mTitleIn').value)], el = $('mStock'), kind = txKind;
@@ -833,21 +949,26 @@ function genVoucher(prefix) {
 
 async function saveTx(addAnother) { if(!colsOk()) return;
     let kind = txKind, meta = KINDS[kind];
+    const existingTx = editingTxUid ? txByUid[editingTxUid] : null;
     let party = $('mParty').value.trim(), title = $('mTitleIn').value.trim(), n = calcNet(), date = $('mDate').value, notes = $('mNotes').value.trim();
     if(!title) { toast('Please enter the book / item title.', false); return; }
     if(n.qty <= 0) { toast('Quantity must be at least 1.', false); return; }
     if(n.price <= 0) { toast('Please enter the unit price.', false); return; }
     if(hasExt && !date) { toast('Please select a date.', false); return; }
 
-    if(hasItemCols && kind === 'purchase' && !(parseFloat($('mSalePrice').value) > 0)) { toast('Please enter the fixed sale price for this item.', false); return; }
+    if(hasItemCols && kind === 'purchase' && !existingTx && !(parseFloat($('mSalePrice').value) > 0)) { toast('Please enter the fixed sale price for this item.', false); return; }
     let it = items[norm(title)];
     const doSave = async () => {
         let postAcc = hasExt && $('mPostAcc').checked, wallet = $('mWallet').value;
-        let voucher = hasExt ? genVoucher(postAcc ? (meta.money === 'in' ? 'RV-' : 'PV-') : 'BK-') : '';
+        let voucher = existingTx ? existingTx.voucher : (hasExt ? genVoucher(postAcc ? (meta.money === 'in' ? 'RV-' : 'PV-') : 'BK-') : '');
         let payload = { type: meta.stored, party_name: party, book_title: title, qty: n.qty, unit_price: n.price, net_amount: Math.round(n.net * 100) / 100 };
-        if(hasExt) Object.assign(payload, { date, voucher_no: voucher, payment_mode: postAcc ? wallet : null, notes: notes || null });
+        if(hasExt) Object.assign(payload, { date, voucher_no: voucher, payment_mode: existingTx ? (editingAccountRow ? wallet : existingTx.mode || null) : (postAcc ? wallet : null), notes: notes || null });
  if(hasItemCols && kind === 'purchase') Object.assign(payload, { item_class: $('mItemClass').value || 'All', category: $('mItemCat').value || null, sale_price: parseFloat($('mSalePrice').value) || null });
 
+        if(existingTx) {
+            await updateExistingTx(existingTx, payload, n, meta, wallet);
+            return;
+        }
         showLoading('Saving...');
         try {
             let c = getSupabaseConfig();
@@ -875,9 +996,56 @@ async function saveTx(addAnother) { if(!colsOk()) return;
         } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
     };
 
-    if((kind === 'sale' || kind === 'purchase_return') && it && n.qty > it.stock) {
-        confirmBox(`Only ${fmt(it.stock)} unit(s) of "${it.title}" are in stock, but you are entering ${fmt(n.qty)}.\n\nContinue anyway?`, 'Continue', doSave);
+    const availableStock = it ? it.stock + (existingTx && existingTx.kind === 'sale' && existingTx.key === it.key ? existingTx.qty : 0) : 0;
+    if((kind === 'sale' || kind === 'purchase_return') && it && n.qty > availableStock) {
+        confirmBox(`Only ${fmt(availableStock)} unit(s) of "${it.title}" are available after accounting for this transaction, but you are entering ${fmt(n.qty)}.\n\nContinue anyway?`, 'Continue', doSave);
     } else await doSave();
+}
+async function updateExistingTx(transaction, payload, totals, meta, wallet) {
+    showLoading('Updating transaction...');
+    let accountUpdated = false;
+    const c = getSupabaseConfig(), headers = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=representation" });
+    const oldAccount = editingAccountRow;
+    const newAccount = oldAccount ? (meta.money === 'in'
+        ? { from_account: meta.head, to_account: wallet, description: `${meta.label}: ${payload.book_title} x${totals.qty}${payload.party_name ? ' - ' + payload.party_name : ''}`, amount_in: payload.net_amount, amount_out: 0, date: payload.date, remarks: payload.notes }
+        : { from_account: wallet, to_account: meta.head, description: `${meta.label}: ${payload.book_title} x${totals.qty}${payload.party_name ? ' - ' + payload.party_name : ''}`, amount_in: 0, amount_out: payload.net_amount, date: payload.date, remarks: payload.notes }) : null;
+    try {
+        if(oldAccount) {
+            const accountResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(transaction.voucher)}`, {
+                method: 'PATCH', headers, body: JSON.stringify(newAccount)
+            });
+            if(!accountResponse.ok) throw new Error('Could not update linked Accounts entry: ' + await accountResponse.text());
+            const accountRows = await accountResponse.json();
+            if(!Array.isArray(accountRows) || accountRows.length !== 1) throw new Error('Linked Accounts entry was not updated exactly once. Check Accounts permissions and voucher uniqueness.');
+            accountUpdated = true;
+        }
+        const bookResponse = await fetch(`${c.url}/rest/v1/books?id=eq.${encodeURIComponent(transaction.id)}`, {
+            method: 'PATCH', headers, body: JSON.stringify(mapRow(payload))
+        });
+        if(!bookResponse.ok) throw new Error('Could not update book transaction: ' + await bookResponse.text());
+        const bookRows = await bookResponse.json();
+        if(!Array.isArray(bookRows) || bookRows.length !== 1) throw new Error('Book transaction was not updated. Check Books Edit permission.');
+        toast(`Book ${meta.label.toLowerCase()} updated${oldAccount ? ' and linked Accounts entry updated' : ''}.`);
+        closeTx();
+        await initBooks();
+    } catch(error) {
+        let message = error.message || 'Could not update the transaction.';
+        if(accountUpdated) {
+            const rollback = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(transaction.voucher)}`, {
+                method: 'PATCH',
+                headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
+                body: JSON.stringify({
+                    from_account: oldAccount.from_account, to_account: oldAccount.to_account,
+                    description: oldAccount.description, amount_in: oldAccount.amount_in,
+                    amount_out: oldAccount.amount_out, date: oldAccount.date, remarks: oldAccount.remarks
+                })
+            });
+            if(!rollback.ok) message += ' The Accounts update could not be rolled back; reconcile this voucher in Accounts.';
+        }
+        toast(message, false);
+    } finally {
+        hideLoading();
+    }
 }
 
 // ====================================================================================
