@@ -836,7 +836,7 @@ function deleteSelectedTx() {
 async function runDeleteSelectedTx(selected) {
     showLoading('Checking selected transactions...');
     const c = getSupabaseConfig();
-    const linked = selected.filter(transaction => hasExt && /^(RV|PV)-/i.test(transaction.voucher || ''));
+    const linked = selected.filter(transaction => hasExt && (/^(RV|PV)-/i.test(transaction.voucher || '') || /^BK-\d+$/i.test(transaction.voucher || '')));
     const linkedAccounts = new Map();
     try {
         for(let start = 0; start < linked.length; start += 20) {
@@ -1276,10 +1276,19 @@ async function saveStudentSale() {
 }
 
 // ---- Import items (Excel / CSV): each row becomes a Purchase that creates / tops-up the item ----
+function clearImpFile() {
+    impRows = [];
+    $('impFile').value = '';
+    $('impPreview').innerHTML = '';
+    $('impGo').classList.add('hidden');
+}
 function openImport() {
     if(!colsOk()) return;
     if(!hasExt || !hasItemCols) { toast('Run the SQL shown in the yellow box first, then refresh.', false); return; }
-    impRows = []; $('impFile').value = ''; $('impPreview').innerHTML = ''; $('impGo').classList.add('hidden'); $('impPost').checked = false; $('impWallet').value = 'cash';
+    impRows = []; $('impFile').value = ''; $('impPreview').innerHTML = ''; $('impGo').classList.add('hidden'); $('impSettle').value = 'payable';
+    const wallet = $('impWallet');
+    wallet.value = Array.from(wallet.options).some(option => option.value === 'cash') ? 'cash' : (wallet.options[0] ? wallet.options[0].value : '');
+    setImpSettleMode();
     $('importModal').classList.remove('hidden');
 }
 function downloadTemplate() {
@@ -1293,43 +1302,143 @@ function downloadTemplate() {
     a.download = 'book_items_template.csv'; document.body.appendChild(a); a.click(); a.remove();
 }
 function impDate(v) {
-    if(v instanceof Date && !isNaN(v)) return new Date(v.getTime() + 12 * 36e5).toISOString().slice(0, 10);
+    const valid = (year, month, day) => {
+        const d = new Date(year, month - 1, day);
+        return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
+            ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+    };
+    if(v instanceof Date && !isNaN(v)) return valid(v.getFullYear(), v.getMonth() + 1, v.getDate());
+    if(typeof v === 'number' && Number.isFinite(v) && typeof XLSX !== 'undefined') {
+        const parsed = XLSX.SSF.parse_date_code(v);
+        return parsed ? valid(parsed.y, parsed.m, parsed.d) : '';
+    }
     const t = String(v ?? '').trim(); let m;
-    if(m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-    if(m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/)) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    if(!t) return '';
+    if(m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:T.*)?$/)) return valid(Number(m[1]), Number(m[2]), Number(m[3]));
+    if(m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/)) return valid(Number(m[3]), Number(m[2]), Number(m[1]));
+    if(/^\d+(?:\.\d+)?$/.test(t) && typeof XLSX !== 'undefined') {
+        const parsed = XLSX.SSF.parse_date_code(Number(t));
+        return parsed ? valid(parsed.y, parsed.m, parsed.d) : '';
+    }
     return '';
+}
+function validateImpRows() {
+    const L = _settingLists || {}, classes = new Set((L['Class'] || []).map(norm)), cats = new Set((L['Book Category'] || []).map(norm));
+    impRows.forEach(o => {
+        o.err = [];
+        if(!o.title) o.err.push('title missing');
+        if(o.qty <= 0) o.err.push('qty');
+        if(o.buy <= 0) o.err.push('purchase_price');
+        if(o.sale <= 0) o.err.push('sale_price');
+        if(!o.date) o.err.push('invalid purchase date');
+        if(!o.vendor) o.err.push('vendor required');
+        if(o.cls && norm(o.cls) !== 'all' && !classes.has(norm(o.cls))) o.err.push('class not in Settings');
+        if(o.disc < 0 || o.disc > 100) o.err.push('discount must be 0–100%');
+        o.warn = o.cat && !cats.has(norm(o.cat)) ? 'category not in Settings' : '';
+        if(o.dateMissing) o.warn = [o.warn, 'purchase date missing; today used'].filter(Boolean).join('; ');
+        o.net = Math.round(o.qty * o.buy * (1 - Math.min(o.disc, 100) / 100) * 100) / 100;
+    });
+}
+function updateImpRow(index, field, value) {
+    const row = impRows[index];
+    if(!row) return;
+    if(field === 'qty' || field === 'buy' || field === 'sale' || field === 'disc') row[field] = parseFloat(value) || 0;
+    else if(field === 'date') {
+        row.date = value ? impDate(value) : todayStr();
+        row.dateMissing = !value;
+    } else row[field] = String(value || '').trim();
+    renderImpPreview();
+}
+function setImpSettleMode() {
+    const payable = $('impSettle').value === 'payable';
+    $('impWalletWrap').classList.toggle('hidden', payable);
+    renderImpPreview();
+}
+function renderImpPreview() {
+    validateImpRows();
+    const ok = impRows.filter(o => !o.err.length);
+    if(!impRows.length) {
+        $('impPreview').innerHTML = '';
+        $('impGo').classList.add('hidden');
+        return;
+    }
+    const textInput = (i, field, value, type = 'text', extra = '') =>
+        `<input type="${type}" value="${esc(value)}" onchange="updateImpRow(${i},'${field}',this.value)" ${extra} class="w-full min-w-[90px] border rounded px-1.5 py-1 text-xs bg-white">`;
+    $('impPreview').innerHTML = `<div class="font-semibold mb-1">${ok.length} valid row(s), ${impRows.length - ok.length} with errors (skipped). Total purchase cost: PKR ${fmt(ok.reduce((s, o) => s + o.net, 0))}</div>
+        <p class="text-slate-500 mb-2">You can edit the date, vendor, item, class, category, quantity, prices, and discount here before importing.</p>
+        <div class="overflow-auto max-h-80 border rounded-lg"><table class="w-full text-left"><thead class="bg-slate-100 sticky top-0 z-10"><tr><th class="p-1.5">Row</th><th class="p-1.5">Purchase date</th><th class="p-1.5">Vendor</th><th class="p-1.5">Title</th><th class="p-1.5">Class</th><th class="p-1.5">Category</th><th class="p-1.5">Qty</th><th class="p-1.5">Buy</th><th class="p-1.5">Sale</th><th class="p-1.5">Discount %</th><th class="p-1.5">Net</th><th class="p-1.5">Result</th></tr></thead><tbody>${impRows.map((o, i) => `<tr class="border-t ${o.err.length ? 'bg-rose-50' : ''}">
+            <td class="p-1.5">${o.n}</td>
+            <td class="p-1.5">${textInput(i, 'date', o.date, 'date')}</td>
+            <td class="p-1.5">${textInput(i, 'vendor', o.vendor)}</td>
+            <td class="p-1.5">${textInput(i, 'title', o.title)}</td>
+            <td class="p-1.5">${textInput(i, 'cls', o.cls)}</td>
+            <td class="p-1.5">${textInput(i, 'cat', o.cat)}</td>
+            <td class="p-1.5">${textInput(i, 'qty', o.qty, 'number', 'min="0" step="any"')}</td>
+            <td class="p-1.5">${textInput(i, 'buy', o.buy, 'number', 'min="0" step="any"')}</td>
+            <td class="p-1.5">${textInput(i, 'sale', o.sale, 'number', 'min="0" step="any"')}</td>
+            <td class="p-1.5">${textInput(i, 'disc', o.disc, 'number', 'min="0" max="100" step="any"')}</td>
+            <td class="p-1.5 whitespace-nowrap">${fmt(o.net)}</td>
+            <td class="p-1.5 whitespace-nowrap ${o.err.length ? 'text-rose-600 font-semibold' : 'text-emerald-700'}">${o.err.length ? esc(o.err.join(', ')) : 'OK'}${o.warn ? ' <span class="text-amber-600">(' + esc(o.warn) + ')</span>' : ''}</td>
+        </tr>`).join('')}</tbody></table></div>
+        ${impRows.some(o => o.dateMissing) ? '<p class="mt-1 text-amber-700">* Purchase date was blank; today’s date is used unless you edit it above.</p>' : ''}`;
+    $('impGo').classList.toggle('hidden', !ok.length);
 }
 async function readImp() {
     const f = $('impFile').files[0]; if(!f) { toast('Choose a file first.', false); return; }
     if(typeof XLSX === 'undefined') { toast('Excel reader could not load. Check your internet connection.', false); return; }
     try {
         const wb = /\.csv$/i.test(f.name) ? XLSX.read(await f.text(), { type: 'string', raw: true }) : XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
-        const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
-        const g = (r, k) => { const key = Object.keys(r).find(x => x.trim().toLowerCase() === k); return key ? r[key] : ''; };
-        const L = _settingLists || {}, classes = new Set((L['Class'] || []).map(norm)), cats = new Set((L['Book Category'] || []).map(norm));
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        if(!sheet) { toast('The selected file has no worksheet to import.', false); return; }
+        const raw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
+        const normalizeHeader = x => String(x ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        const g = (r, aliases) => {
+            const names = Array.isArray(aliases) ? aliases : [aliases];
+            const key = Object.keys(r).find(x => names.map(normalizeHeader).includes(normalizeHeader(x)));
+            return key ? r[key] : '';
+        };
         impRows = raw.map((r, i) => {
-            const o = { n: i + 2, title: String(g(r, 'title')).trim().replace(/\s+/g, ' '), cls: String(g(r, 'class')).trim() || 'All', cat: String(g(r, 'category')).trim(),
-                qty: parseFloat(String(g(r, 'qty')).replace(/,/g, '')) || 0, buy: parseFloat(String(g(r, 'purchase_price')).replace(/,/g, '')) || 0, sale: parseFloat(String(g(r, 'sale_price')).replace(/,/g, '')) || 0,
-                vendor: String(g(r, 'vendor')).trim(), date: impDate(g(r, 'date')) || todayStr(), disc: parseFloat(g(r, 'discount_percent')) || 0, err: [] };
-            if(!o.title) o.err.push('title missing'); if(o.qty <= 0) o.err.push('qty'); if(o.buy <= 0) o.err.push('purchase_price'); if(o.sale <= 0) o.err.push('sale_price');
-            if(o.cls && norm(o.cls) !== 'all' && !classes.has(norm(o.cls))) o.err.push('class not in Settings');
-            o.warn = o.cat && !cats.has(norm(o.cat)) ? 'category not in Settings' : '';
-            o.net = Math.round(o.qty * o.buy * (1 - Math.min(o.disc, 100) / 100) * 100) / 100;
-            return o;
+            const rawDate = g(r, ['date', 'purchase_date', 'purchased_date', 'purchase_day', 'date_of_purchase', 'purchase_day_date', 'purchase_from_date']);
+            const parsedDate = impDate(rawDate), dateMissing = String(rawDate ?? '').trim() === '';
+            return {
+                n: i + 2,
+                title: String(g(r, 'title')).trim().replace(/\s+/g, ' '),
+                cls: String(g(r, 'class')).trim() || 'All',
+                cat: String(g(r, 'category')).trim(),
+                qty: parseFloat(String(g(r, 'qty')).replace(/,/g, '')) || 0,
+                buy: parseFloat(String(g(r, ['purchase_price', 'buy_price', 'purchase_rate', 'cost_price', 'unit_cost'])).replace(/,/g, '')) || 0,
+                sale: parseFloat(String(g(r, ['sale_price', 'selling_price', 'sale_rate', 'selling_rate'])).replace(/,/g, '')) || 0,
+                vendor: String(g(r, ['vendor', 'vender', 'supplier', 'vendor_name', 'supplier_name', 'party_name', 'purchase_from', 'purchased_from', 'dealer', 'trader', 'company'])).trim(),
+                date: parsedDate || (dateMissing ? todayStr() : ''),
+                dateMissing,
+                disc: parseFloat(g(r, ['discount_percent', 'discount_percentage', 'discount'])) || 0,
+                err: [], warn: '', net: 0
+            };
         }).filter(o => o.title || o.qty || o.buy);
-        const ok = impRows.filter(o => !o.err.length);
-        $('impPreview').innerHTML = `<div class="font-semibold mb-1">${ok.length} valid row(s), ${impRows.length - ok.length} with errors (skipped). Total purchase cost: PKR ${fmt(ok.reduce((s, o) => s + o.net, 0))}</div>
-        <div class="overflow-x-auto max-h-64 border rounded-lg"><table class="w-full text-left"><thead class="bg-slate-100 sticky top-0"><tr><th class="p-1.5">Row</th><th class="p-1.5">Title</th><th class="p-1.5">Class</th><th class="p-1.5">Category</th><th class="p-1.5">Qty</th><th class="p-1.5">Buy</th><th class="p-1.5">Sale</th><th class="p-1.5">Result</th></tr></thead><tbody>${impRows.slice(0, 300).map(o => `<tr class="border-t ${o.err.length ? 'bg-rose-50' : ''}"><td class="p-1.5">${o.n}</td><td class="p-1.5">${esc(o.title)}</td><td class="p-1.5">${esc(o.cls)}</td><td class="p-1.5">${esc(o.cat)}</td><td class="p-1.5">${fmt(o.qty)}</td><td class="p-1.5">${fmt(o.buy)}</td><td class="p-1.5">${fmt(o.sale)}</td><td class="p-1.5 ${o.err.length ? 'text-rose-600 font-semibold' : 'text-emerald-700'}">${o.err.length ? esc(o.err.join(', ')) : 'OK'}${o.warn ? ' <span class="text-amber-600">(' + esc(o.warn) + ')</span>' : ''}</td></tr>`).join('')}</tbody></table></div>`;
-        $('impGo').classList.toggle('hidden', !ok.length);
+        renderImpPreview();
     } catch (e) { console.error(e); toast('Could not read this file.', false); }
 }
 function saveImp() {
+    validateImpRows();
     const ok = impRows.filter(o => !o.err.length); if(!ok.length) return;
-    const post = $('impPost').checked, wallet = $('impWallet').value, total = ok.reduce((s, o) => s + o.net, 0);
-    confirmBox(`Import ${ok.length} item purchase(s)? Stock increases accordingly (importing the same file twice doubles the stock).${post ? '\n\nPKR ' + fmt(total) + ' will also be recorded as one payment in Accounts.' : ''}`, 'Import', async () => {
-        const id = 'IMP' + Math.floor(100000 + Math.random() * 900000), accV = 'PV-' + Math.floor(100000 + Math.random() * 900000);
-        const rows = ok.map(o => ({ type: 'Purchase', party_name: o.vendor, book_title: o.title, qty: o.qty, unit_price: o.buy, net_amount: o.net, date: o.date, voucher_no: 'BK-' + id, payment_mode: post ? wallet : null,
-            notes: 'Imported ' + id + (post ? ' | Accounts ' + accV : ''), item_class: o.cls, category: o.cat || null, sale_price: o.sale }));
+    const settlement = $('impSettle').value, wallet = $('impWallet').value;
+    if(settlement !== 'payable' && !wallet) { toast('Choose the account used to pay for these purchases.', false); return; }
+    const total = ok.reduce((s, o) => s + o.net, 0);
+    const posting = settlement === 'payable' ? 'The amount will remain in each vendor’s Payable balance.' : `PKR ${fmt(total)} will be recorded as paid from ${WALLETS[wallet] ? WALLETS[wallet].label : wallet}, matched to the vendor bills.`;
+    confirmBox(`Import ${ok.length} item purchase(s)? Stock increases accordingly (importing the same file twice doubles the stock).\n\n${posting}`, 'Import', async () => {
+        const id = 'IMP' + Math.floor(100000 + Math.random() * 900000);
+        const usedVouchers = new Set(txs.map(t => t.voucher).filter(Boolean));
+        const nextBillVoucher = () => {
+            let voucher;
+            do { voucher = `BK-${Math.floor(100000 + Math.random() * 900000)}`; } while(usedVouchers.has(voucher));
+            usedVouchers.add(voucher);
+            return voucher;
+        };
+        const rows = ok.map((o, i) => ({
+            type: 'Purchase', party_name: o.vendor, book_title: o.title, qty: o.qty, unit_price: o.buy, net_amount: o.net, date: o.date,
+            voucher_no: nextBillVoucher(), payment_mode: null,
+            notes: `Batch ${id}`, item_class: o.cls, category: o.cat || null, sale_price: o.sale
+        }));
         showLoading('Importing items...');
         try {
             const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
@@ -1337,9 +1446,49 @@ function saveImp() {
                 const r = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.slice(i, i + 200).map(mapRow)) });
                 if(!r.ok) { hideLoading(); toast(errMsg('Import stopped: ' + await r.text()), false); return; }
             }
-            if(post) await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify({ voucher_id: accV, from_account: wallet, to_account: 'Books Purchase', description: `Books purchase import ${id} (${rows.length} items)`, amount_in: 0, amount_out: total, date: todayStr(), remarks: id }) });
-            toast(`${rows.length} item(s) imported.`); $('importModal').classList.add('hidden'); await initBooks();
-        } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+            let paymentFailures = 0, modeUpdateFailures = 0;
+            if(settlement !== 'payable') {
+                const groups = new Map();
+                ok.forEach((o, i) => {
+                    const key = partyKey(o.vendor);
+                    let group = groups.get(key);
+                    if(!group) { group = { vendor: o.vendor, total: 0, bills: [] }; groups.set(key, group); }
+                    group.total = Math.round((group.total + o.net) * 100) / 100;
+                    group.bills.push({ voucher: rows[i].voucher_no, rem: o.net, date: o.date, settlementDate: o.date });
+                });
+                const paidVouchers = [];
+                for(const group of groups.values()) {
+                    const posted = await postDuesEntry('pay', group.vendor, group.total, todayStr(), wallet, `Books purchase import ${id}`, group.bills);
+                    if(!posted) paymentFailures += group.bills.length;
+                    else group.bills.forEach(bill => paidVouchers.push(bill.voucher));
+                }
+                for(let i = 0; i < paidVouchers.length; i += 100) {
+                    const batch = paidVouchers.slice(i, i + 100);
+                    const filter = `in.(${batch.map(voucher => `"${voucher}"`).join(',')})`;
+                    const modeResponse = await fetch(`${c.url}/rest/v1/books?voucher_no=${encodeURIComponent(filter)}`, {
+                        method: 'PATCH', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=representation" }),
+                        body: JSON.stringify({ payment_mode: wallet })
+                    });
+                    if(!modeResponse.ok) {
+                        console.error('Payments were recorded, but the Books account labels could not be updated:', await modeResponse.text());
+                        modeUpdateFailures += batch.length;
+                    } else {
+                        const updated = await modeResponse.json();
+                        if(!Array.isArray(updated) || updated.length !== batch.length) modeUpdateFailures += batch.length;
+                    }
+                }
+            }
+            $('importModal').classList.add('hidden');
+            await initBooks();
+            if(paymentFailures || modeUpdateFailures) {
+                const message = `${rows.length} purchase(s) imported. ${paymentFailures ? `${paymentFailures} payment(s) could not be recorded; those vendor amounts remain payable. ` : ''}${modeUpdateFailures ? `${modeUpdateFailures} Books row(s) could not be updated with the selected account label; check Accounts before retrying.` : ''}`;
+                toast(message, false);
+            } else {
+                toast(settlement === 'payable'
+                    ? `${rows.length} purchase(s) imported to vendor Payable.`
+                    : `${rows.length} purchase(s) imported and recorded from ${WALLETS[wallet] ? WALLETS[wallet].label : wallet}.`);
+            }
+        } catch (e) { hideLoading(); console.error(e); toast('Could not complete the import. Check the latest Books and Accounts entries before retrying.', false); }
     });
 }
 
@@ -1436,8 +1585,8 @@ async function postDuesEntry(kind, partyName, amt, date, wallet, notes, bills) {
         const a = Math.round(Math.min(left, bl.rem) * 100) / 100; left = Math.round((left - a) * 100) / 100;
         const vid = `${bl.voucher}-${stamp}${i}`, rem = `Against ${bl.voucher}` + (notes ? ' | ' + notes : '');
         rows.push(kind === 'recv'
-            ? { voucher_id: vid, from_account: 'Accounts Receivable', to_account: wallet, description: partyName, amount_in: a, amount_out: 0, date, remarks: rem }
-            : { voucher_id: vid, from_account: wallet, to_account: 'Accounts Payable', description: partyName, amount_in: 0, amount_out: a, date, remarks: rem });
+            ? { voucher_id: vid, from_account: 'Accounts Receivable', to_account: wallet, description: partyName, amount_in: a, amount_out: 0, date: bl.settlementDate || date, remarks: rem }
+            : { voucher_id: vid, from_account: wallet, to_account: 'Accounts Payable', description: partyName, amount_in: 0, amount_out: a, date: bl.settlementDate || date, remarks: rem });
     });
     if(!rows.length) return false;
     try {
@@ -1539,6 +1688,16 @@ function deleteTx(uid) {
         showLoading('Deleting...');
         try {
             let c = getSupabaseConfig();
+            if(hasExt && /^BK-\d+$/i.test(t.voucher || '')) {
+                const settlementResponse = await fetch(`${c.url}/rest/v1/accounts?select=voucher_id&voucher_id=like.${encodeURIComponent(t.voucher + '-*')}`, { headers: sbHeaders() });
+                if(!settlementResponse.ok) throw new Error('Could not check vendor payments: ' + await settlementResponse.text());
+                const settlements = await settlementResponse.json();
+                if(Array.isArray(settlements) && settlements.length) {
+                    hideLoading();
+                    toast('This purchase has linked vendor payments. Reverse those Accounts entries before deleting it.', false);
+                    return;
+                }
+            }
             let res = await fetch(`${c.url}/rest/v1/books?id=eq.${encodeURIComponent(t.id)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=representation" }) });
             if(!res.ok) { hideLoading(); toast('Could not delete: ' + await res.text(), false); return; }
             let gone = await res.json();
@@ -1546,7 +1705,7 @@ function deleteTx(uid) {
             if(linked) await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(t.voucher)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
             toast('Transaction deleted.');
             await initBooks();
-        } catch (e) { hideLoading(); toast('Connection error.', false); }
+        } catch (e) { hideLoading(); console.error(e); toast(e.message || 'Connection error.', false); }
     });
 }
 
@@ -1621,14 +1780,24 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeTx(); 
   <div class="p-4 space-y-3 text-sm">
    <p class="text-xs text-slate-500">Each row is saved as a Purchase: it creates the item (class, category, fixed sale price) or adds to its stock. Columns: title, class, category, qty, purchase_price, sale_price, vendor, date, discount_percent. Use class <b>All</b> for items every student buys.</p>
    <button onclick="downloadTemplate()" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">⬇️ Download template (CSV)</button>
-   <input id="impFile" type="file" accept=".xlsx,.xls,.csv" class="w-full border rounded-lg p-2 text-sm">
+   <div class="flex items-center gap-2">
+     <input id="impFile" type="file" accept=".xlsx,.xls,.csv" class="w-full border rounded-lg p-2 text-sm">
+     <button type="button" onclick="clearImpFile()" title="Clear selected file" class="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700">✕</button>
+   </div>
    <button onclick="readImp()" class="w-full px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold">Read file & preview</button>
    <div id="impPreview" class="text-xs"></div>
-   <div class="grid grid-cols-2 gap-2 items-end"><label class="flex items-center gap-2 text-xs"><input id="impPost" type="checkbox"> Also record the purchase total in Accounts</label><select id="impWallet" class="border rounded-lg p-2 text-sm bg-white">
-                                <option value="cash">💵 Cash in Hand</option>
-                                <option value="bank">🏦 Bank</option>
-                                <option value="online">📱 Online / JazzCash</option>
-                            </select></div>
+   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end rounded-xl bg-slate-50 p-3">
+    <div><label for="impSettle" class="block text-xs font-semibold text-slate-700 mb-1">Purchase payment handling</label><select id="impSettle" onchange="setImpSettleMode()" class="w-full border rounded-lg p-2 text-sm bg-white">
+     <option value="payable">Vendor Payable (pay later)</option>
+     <option value="paid">Paid now from an account</option>
+    </select></div>
+    <div id="impWalletWrap" class="hidden"><label for="impWallet" class="block text-xs font-semibold text-slate-700 mb-1">Paid from</label><select id="impWallet" class="w-full border rounded-lg p-2 text-sm bg-white">
+     <option value="cash">💵 Cash in Hand</option>
+     <option value="bank">🏦 Bank</option>
+     <option value="online">📱 Online / JazzCash</option>
+    </select></div>
+    <p class="sm:col-span-2 text-[11px] text-slate-500">Unpaid purchases are added to the named vendor’s Payable balance. If paid now, the payment is recorded from the selected account and matched to each purchase.</p>
+   </div>
   </div>
   <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('importModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button><button id="impGo" onclick="saveImp()" class="hidden px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Import valid rows</button></div>
  </div></div>
