@@ -96,7 +96,7 @@
                         <select id="fClass" onchange="renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All Classes</option></select>
                         <select id="fStud" onchange="renderSummary(); renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none" title="Show only families with students of this status">
                             <option value="ALL">All students</option>
-                            <option value="active">Active students</option>
+                            <option value="active" selected>Active students</option>
                             <option value="left">Left students</option>
                             <option value="other">Inactive / other</option>
                         </select>
@@ -115,7 +115,7 @@
                             <option value="pending">Sort: Highest pending</option>
                             <option value="code">Sort: Family code</option>
                         </select>
-                        <label class="flex items-center gap-2 text-sm text-slate-600"><input id="fPendingOnly" type="checkbox" checked onchange="renderFamilies()"> Sirf pending wale</label>
+                        <label class="flex items-center gap-2 text-sm text-slate-600"><input id="fPendingOnly" type="checkbox" checked onchange="renderFamilies()"> Just pending</label>
                     </div>
                     <div class="flex justify-between items-center mt-3">
                         <p id="famCount" class="text-xs text-slate-500"></p>
@@ -369,9 +369,7 @@ let expanded = new Set();
 let currentCallKey = null;
 let assignmentFamilyKey = null;
 let logsTableMissing = false;
-let followupFiltersInitialized = false;
 const canAssignFollowups = () => typeof flag === 'function' && flag('assign');
-const canSeeAllFollowups = () => canAssignFollowups() || (typeof flag === 'function' && flag('allfollow'));
 
 // ====================================================================================
 //  SMALL HELPERS
@@ -436,6 +434,8 @@ function waNumber(raw) {
 //  DATA LOADING
 // ====================================================================================
 async function initFollowups() {
+    $('fStud').value = 'active';
+    $('fPendingOnly').checked = true;
     showLoading('Loading data...');
     try {
         let c = getSupabaseConfig();
@@ -456,10 +456,6 @@ async function initFollowups() {
         let students = result.students, fees = result.fees, accounts = result.accounts;
         followupAssignments = Array.isArray(result.assignments) ? result.assignments : [];
         followupAssignees = Array.isArray(result.assignees) ? result.assignees : [];
-        if(!followupFiltersInitialized) {
-            if(!canSeeAllFollowups() || canAssignFollowups()) $('fPendingOnly').checked = false;
-            followupFiltersInitialized = true;
-        }
         allStudents = students;
 
         accountsMap = {}; txMap = {};
