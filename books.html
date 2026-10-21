@@ -691,17 +691,53 @@ function renderOverview() {
     // stock alerts
     let alerts = all.filter(i => i.status !== 'ok').sort((a, b) => a.stock - b.stock).slice(0, 8);
     $('stockAlerts').innerHTML = alerts.length ? alerts.map(i => `<div class="flex items-center justify-between gap-2 border border-slate-100 rounded-xl px-3 py-2">
-        <div class="min-w-0"><div class="text-sm font-semibold text-slate-800 truncate">${esc(i.title)}</div><div class="text-[11px] text-slate-500">In stock: <b class="${i.stock <= 0 ? 'text-rose-600' : 'text-amber-600'}">${fmt(i.stock)}</b></div></div>
+        <div class="min-w-0"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(i.key))})" class="text-sm font-semibold text-left text-indigo-700 hover:underline truncate">${esc(i.title)}</button><div class="text-[11px] text-slate-500">In stock: <b class="${i.stock <= 0 ? 'text-rose-600' : 'text-amber-600'}">${fmt(i.stock)}</b></div></div>
         <div class="flex items-center gap-2"><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold ${STATUS[i.status].cls}">${STATUS[i.status].label}</span>
         <button onclick="openTx('purchase', ${esc(JSON.stringify(i.key))})" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1.5 rounded-lg font-semibold no-print">Restock</button></div></div>`).join('')
         : '<p class="text-xs text-emerald-600">All titles are sufficiently stocked. 👍</p>';
 
     // recent
     let recent = list.slice(0, 7);
-    $('recentList').innerHTML = recent.length ? recent.map(t => `<div class="py-2 flex items-center justify-between gap-2"><div class="min-w-0"><div class="text-sm font-semibold text-slate-800 truncate">${esc(t.title || '-')}</div><div class="text-[11px] text-slate-500">${kindBadge(t.kind)} <span class="ml-1">${esc(t.party || '-')} · ${fmtDate(t.date)}</span></div></div><div class="text-sm font-bold text-slate-700 whitespace-nowrap">PKR ${fmt(t.net)}</div></div>`).join('') : '<p class="text-xs text-slate-400 py-3">No transactions in this period.</p>';
+    $('recentList').innerHTML = recent.length ? recent.map(t => `<div class="py-2 flex items-center justify-between gap-2"><div class="min-w-0"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="text-sm font-semibold text-left text-indigo-700 hover:underline truncate">${esc(t.title || '-')}</button><div class="text-[11px] text-slate-500">${kindBadge(t.kind)} <span class="ml-1">${esc(t.party || '-')} · ${fmtDate(t.date)}</span></div></div><div class="text-sm font-bold text-slate-700 whitespace-nowrap">PKR ${fmt(t.net)}</div></div>`).join('') : '<p class="text-xs text-slate-400 py-3">No transactions in this period.</p>';
 }
 
 // ---------------- INVENTORY ----------------
+function openItemLedger(key) {
+    const item = items[key];
+    if(!item) { toast('This book or item could not be found.', false); return; }
+    const movements = txs.filter(t => t.key === key).sort((a, b) =>
+        (a.date || '').localeCompare(b.date || '') ||
+        (typeof a.id === 'number' && typeof b.id === 'number' ? a.id - b.id : a.idx - b.idx)
+    );
+    let balance = 0, totalIn = 0, totalOut = 0;
+    const ledger = movements.map(t => {
+        const isIn = t.kind === 'purchase' || t.kind === 'sale_return';
+        const isOut = t.kind === 'sale' || t.kind === 'purchase_return';
+        const qtyIn = isIn ? t.qty : 0, qtyOut = isOut ? t.qty : 0;
+        balance += qtyIn - qtyOut;
+        totalIn += qtyIn; totalOut += qtyOut;
+        const isVendor = t.kind === 'purchase' || t.kind === 'purchase_return';
+        return { ...t, qtyIn, qtyOut, balance, partyType: isVendor ? 'Vendor / From' : 'Student / To' };
+    });
+    $('itemLedgerTitle').innerText = item.title;
+    $('itemLedgerSummary').innerHTML = [
+        { label: 'Total In', value: fmt(totalIn), cls: 'text-emerald-700' },
+        { label: 'Total Out', value: fmt(totalOut), cls: 'text-rose-600' },
+        { label: 'Current balance', value: fmt(balance), cls: balance < 0 ? 'text-rose-600' : 'text-indigo-700' }
+    ].map(x => `<div class="rounded-xl border bg-slate-50 p-3"><div class="text-[11px] text-slate-500">${x.label}</div><div class="text-lg font-extrabold ${x.cls}">${x.value} units</div></div>`).join('');
+    $('itemLedgerBody').innerHTML = ledger.length ? ledger.map(t => `<tr class="border-b hover:bg-slate-50">
+        <td class="p-2.5 whitespace-nowrap text-slate-600">${fmtDate(t.date)}</td>
+        <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</td>
+        <td class="p-2.5">${kindBadge(t.kind)}</td>
+        <td class="p-2.5"><span class="text-[10px] text-slate-400">${t.partyType}</span><div class="font-medium text-slate-700">${esc(t.party || 'Not specified')}</div></td>
+        <td class="p-2.5 text-right font-semibold text-emerald-700">${t.qtyIn ? '+' + fmt(t.qtyIn) : '-'}</td>
+        <td class="p-2.5 text-right font-semibold text-rose-600">${t.qtyOut ? '-' + fmt(t.qtyOut) : '-'}</td>
+        <td class="p-2.5 text-right font-extrabold ${t.balance < 0 ? 'text-rose-600' : 'text-slate-800'}">${fmt(t.balance)}</td>
+        <td class="p-2.5 text-right whitespace-nowrap">PKR ${fmt(t.net)}</td>
+    </tr>`).join('') : '<tr><td colspan="8" class="p-8 text-center text-slate-400">No stock movements are recorded for this item.</td></tr>';
+    $('itemLedgerModal').classList.remove('hidden');
+}
+function closeItemLedger() { $('itemLedgerModal').classList.add('hidden'); }
 function inventoryList() {
     let q = norm($('invSearch').value), s = $('invStatus').value;
     return Object.values(items).filter(i => {
@@ -722,7 +758,7 @@ function renderInventory() {
     $('invCount').innerText = `${list.length} of ${all.length} titles`;
     const stockCls = i => i.stock <= 0 ? 'text-rose-600' : (i.status === 'low' ? 'text-amber-600' : 'text-slate-900');
     $('invBody').innerHTML = list.length ? list.map(i => `<tr class="border-b hover:bg-slate-50">
-        <td class="p-2.5 font-semibold text-slate-800">${esc(i.title)}<div class="text-[11px] font-normal text-slate-500">${[i.cls, i.cat, i.sp ? 'Sale ' + fmt(i.sp) : ''].filter(Boolean).map(esc).join(' · ')}</div></td>
+        <td class="p-2.5 font-semibold text-slate-800"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(i.key))})" class="text-left text-indigo-700 hover:underline">${esc(i.title)}</button><div class="text-[11px] font-normal text-slate-500">${[i.cls, i.cat, i.sp ? 'Sale ' + fmt(i.sp) : ''].filter(Boolean).map(esc).join(' · ')}</div></td>
         <td class="p-2.5 text-right">${fmt(i.p)}</td><td class="p-2.5 text-right">${fmt(i.s)}</td>
         <td class="p-2.5 text-right text-slate-500">${fmt(i.pr)} / ${fmt(i.sr)}</td>
         <td class="p-2.5 text-right font-extrabold ${stockCls(i)}">${fmt(i.stock)}</td>
@@ -733,7 +769,7 @@ function renderInventory() {
         : `<tr><td colspan="10" class="p-8 text-center text-slate-400">No books found.</td></tr>`;
     $('invFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right" colspan="4">Totals:</td><td class="p-3 text-right">${fmt(list.reduce((s, i) => s + Math.max(i.stock, 0), 0))}</td><td colspan="2"></td><td class="p-3 text-right">PKR ${fmt(list.reduce((s, i) => s + i.value, 0))}</td><td colspan="2" class="no-print"></td></tr>` : '';
     $('invCards2').innerHTML = list.length ? list.map(i => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-        <div class="flex justify-between items-start gap-2"><div class="font-bold text-slate-800 text-sm">${esc(i.title)}</div><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${STATUS[i.status].cls}">${STATUS[i.status].label}</span></div>
+        <div class="flex justify-between items-start gap-2"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(i.key))})" class="font-bold text-indigo-700 text-sm text-left hover:underline">${esc(i.title)}</button><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${STATUS[i.status].cls}">${STATUS[i.status].label}</span></div>
         <div class="grid grid-cols-3 gap-2 mt-3 text-center">
             <div><div class="text-[11px] text-slate-400">In stock</div><div class="text-lg font-extrabold ${stockCls(i)}">${fmt(i.stock)}</div></div>
             <div><div class="text-[11px] text-slate-400">Avg cost</div><div class="text-sm font-semibold">${fmt(i.avgCost)}</div></div>
@@ -777,7 +813,7 @@ function renderTransactions() {
         <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</td>
         <td class="p-2.5">${kindBadge(t.kind)}</td>
         <td class="p-2.5">${esc(t.party || '-')}</td>
-        <td class="p-2.5 font-semibold text-slate-800">${esc(t.title || '-')}${t.notes ? `<div class="text-[11px] font-normal text-slate-400">${esc(t.notes)}</div>` : ''}</td>
+        <td class="p-2.5 font-semibold text-slate-800"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="text-left text-indigo-700 hover:underline">${esc(t.title || '-')}</button>${t.notes ? `<div class="text-[11px] font-normal text-slate-400">${esc(t.notes)}</div>` : ''}</td>
         <td class="p-2.5 text-right">${fmt(t.qty)}</td><td class="p-2.5 text-right">${fmt(t.unit)}</td>
         <td class="p-2.5 text-right text-amber-600">${t.discount ? fmt(t.discount) : '-'}</td>
         <td class="p-2.5 text-right font-bold text-slate-800 whitespace-nowrap">PKR ${fmt(t.net)}</td>
@@ -786,7 +822,7 @@ function renderTransactions() {
         : `<tr><td colspan="12" class="p-8 text-center text-slate-400">No transactions found in this period.</td></tr>`;
     $('txCards2').innerHTML = shown.length ? shown.map(t => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex justify-between items-center gap-2"><span class="no-print">${checkbox(t)}</span>${kindBadge(t.kind)}<span class="text-xs text-slate-500">${fmtDate(t.date)}</span></div>
-        <div class="font-bold text-slate-800 text-sm mt-2">${esc(t.title || '-')}</div>
+        <button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="font-bold text-indigo-700 text-sm text-left mt-2 hover:underline">${esc(t.title || '-')}</button>
         <div class="text-xs text-slate-500">${esc(t.party || '-')}${t.voucher ? ' · ' + esc(t.voucher) : ''}</div>
         <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${fmt(t.qty)} × ${fmt(t.unit)}${t.discount ? ` · disc ${fmt(t.discount)}` : ''}</div><div class="text-lg font-extrabold text-slate-800">PKR ${fmt(t.net)}</div></div>
         <div class="flex justify-end gap-1 mt-2 border-t pt-2">${acts(t)}</div></div>`).join('')
@@ -948,7 +984,7 @@ function renderRecentTx(kind) {
     $('mRecentCount').innerText = recent.length ? `${recent.length} latest` : '';
     $('mRecentList').innerHTML = recent.length ? recent.map(t => `<article class="rounded-xl border border-slate-200 bg-white p-2.5">
         <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0"><div class="text-xs font-semibold text-slate-800 truncate">${esc(t.title || '-')}</div><div class="text-[10px] text-slate-500 truncate">${esc(t.party || 'No party')} · ${fmtDate(t.date)}</div></div>
+            <div class="min-w-0"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="text-xs font-semibold text-indigo-700 text-left hover:underline truncate">${esc(t.title || '-')}</button><div class="text-[10px] text-slate-500 truncate">${esc(t.party || 'No party')} · ${fmtDate(t.date)}</div></div>
             <span class="text-[10px] font-bold whitespace-nowrap text-slate-700">PKR ${fmt(t.net)}</span>
         </div>
         <div class="flex items-center justify-between gap-2 mt-1.5"><span class="text-[10px] text-slate-400">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : 'No voucher'))} · Qty ${fmt(t.qty)}</span>
@@ -1744,8 +1780,28 @@ function printSlip(uid) {
 
 
 
-document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeTx(); } });
+document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeItemLedger(); closeTx(); } });
 </script>
+
+<div id="itemLedgerModal" class="fixed inset-0 bg-black/60 z-[70] hidden flex items-center justify-center p-3" role="dialog" aria-modal="true" aria-labelledby="itemLedgerTitle" onclick="if(event.target===this)closeItemLedger()">
+ <div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl max-h-[94vh] flex flex-col">
+  <div class="p-4 sm:p-5 border-b flex justify-between items-start gap-3">
+   <div><p class="text-[11px] uppercase tracking-wide text-indigo-600 font-semibold">Item stock ledger</p><h3 id="itemLedgerTitle" class="text-lg sm:text-xl font-bold text-indigo-950 mt-0.5"></h3><p class="text-xs text-slate-500 mt-1">Date-wise stock in/out and running quantity balance</p></div>
+   <button type="button" onclick="closeItemLedger()" aria-label="Close item ledger" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
+  </div>
+  <div class="p-4 sm:p-5 overflow-y-auto space-y-3">
+   <div id="itemLedgerSummary" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+   <div class="overflow-auto border rounded-xl max-h-[58vh]">
+    <table class="w-full min-w-[760px] text-left border-collapse text-xs">
+     <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th><th class="p-2.5">Voucher</th><th class="p-2.5">Movement</th><th class="p-2.5">Vendor / Student</th><th class="p-2.5 text-right">In</th><th class="p-2.5 text-right">Out</th><th class="p-2.5 text-right">Running balance</th><th class="p-2.5 text-right">Amount</th></tr></thead>
+     <tbody id="itemLedgerBody"></tbody>
+    </table>
+   </div>
+   <p class="text-[11px] text-slate-500">Purchase and sale-return quantities increase stock. Sales and purchase-return quantities reduce stock. Running balance starts at 0 and follows recorded transaction history.</p>
+  </div>
+  <div class="p-3 border-t flex justify-end"><button type="button" onclick="closeItemLedger()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold">Close</button></div>
+ </div>
+</div>
 
 <div id="studentSaleModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
  <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[94vh] overflow-y-auto">
