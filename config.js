@@ -88,7 +88,7 @@ const PAGES = [['dashboard', 'Dashboard', 'index.html'], ['students', 'Students 
     ['settings', 'System Settings', 'settings.html'], ['users', 'Users & Roles', 'users.html']];
 const PAGE_ACTS = [['v', 'View'], ['a', 'Add'], ['e', 'Edit'], ['d', 'Delete']];
 const READ_ONLY_PAGES = new Set(['reports', 'audit']);
-const PERM_FLAGS = [['money', 'See money totals on the dashboard'], ['export', 'Download CSV / backup'], ['assign', 'Assign follow-ups to teachers'], ['allfollow', 'See ALL follow-up families (not only the assigned ones)'],
+const PERM_FLAGS = [['money', 'See money totals on the dashboard'], ['export', 'Download CSV / backup'], ['assign', 'Assign follow-ups for any family or student'], ['allfollow', 'See ALL follow-up families (not only the assigned ones)'],
     ['closeday', 'Close / reopen the day'], ['requiredayclose', 'Require closing all previous days before working today'], ['editclosed', 'Change entries of closed or old days'], ['todayonly', 'Change (edit / delete) only the entries of the current open day']];
 const PAGE_FILE = {}; PAGES.forEach(p => { PAGE_FILE[p[2]] = p[0]; });
 const currentPageKey = () => PAGE_FILE[(location.pathname.split('/').pop() || 'index.html').toLowerCase()] || null;
@@ -131,7 +131,7 @@ const PAGE_GUARDS = {
     students: { addStudentClick: 'a', saveStudent: () => (document.getElementById('editOriginalAdm') && document.getElementById('editOriginalAdm').value ? 'e' : 'a'), editStudentByAdm: 'e', editStudent: 'e', deleteStudent: 'd' },
     increments: { saveOrUpdateIncrement: 'e', saveByIdx: 'e', saveAllIncrementsBatch: 'e', applyBulkToCheckedRows: 'e', bulkDeleteSelected: 'd' },
     fees: { generateVouchers: 'a', generateAnnualFund: 'a', openAddItem: 'a', saveAddItem: 'a', openBulkPayModal: 'a', submitBulkFifoPayment: 'a', openPayModal: 'a', submitPayment: 'a', deleteSelectedVouchers: 'd', openSync: 'e', applySync: 'e', openDiscount: 'e', saveDiscount: 'e', openImport: 'a', confirmImport: 'a', downloadVouchersCsv: '@export', downloadArrearsReconciliation: '@export' },
-    followups: { saveCall: 'a', openCallModal: 'a', deleteLog: 'd', exportHistoryCsv: '@export' },
+    followups: { saveCall: 'a', openCallModal: 'a', deleteLog: 'd', exportHistoryCsv: '@export', openAssignmentModal: '@assign', saveFamilyAssignments: '@assign' },
     books: { openTx: 'a', saveTx: 'a', deleteTx: 'd', openStudentSale: 'a', saveStudentSale: 'a', openImport: 'a', saveImp: 'a', openNewItem: 'a', saveNewItem: 'a', deleteMasterItem: 'd', openSettle: 'a', saveSettle: 'a', openPromise: 'a', savePromise: 'a', exportCsv: '@export', exportInventoryCsv: '@export', exportTxCsv: '@export' },
     accounts: { openEntry: 'a', startSettle: 'a', saveAgainstBills: 'a', saveEntry: () => (typeof editingId !== 'undefined' && editingId ? 'e' : 'a'), editEntry: 'e', quickEdit: 'e', saveQuickEdit: 'e', deleteEntry: 'd', exportCsv: '@export', exportDaybookCsv: '@export', exportFeeCsv: '@export' },
     staff: { openStaff: 'a', saveStaff: 'a', deleteStaff: 'd', generatePayroll: 'a', openAdjust: 'e', saveAdjust: 'e', openRules: 'e', saveRules: 'e', openPay: 'a', paySalary: 'a', confirmPay: 'a', undoPay: 'd', removePayrollRow: 'd', exportCsv: '@export', exportStaffCsv: '@export', exportPayrollCsv: '@export', exportHistoryCsv: '@export' },
