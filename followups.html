@@ -65,7 +65,7 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-5 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
                 <div>
                     <h2 class="text-2xl font-extrabold text-indigo-950">Follow-up Calls</h2>
-                    <p class="text-sm text-slate-500">Family-wise dues, contact numbers, promise dates and call remarks</p>
+                    <p class="text-sm text-slate-500">Family or individual student assignments, dues and call history</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button onclick="initFollowups()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
@@ -73,12 +73,10 @@
                     </div>
             </div>
 
-            <!-- SETUP BANNER (call_logs table missing) -->
+            <!-- FOLLOW-UP DATABASE SETUP -->
             <div id="setupBanner" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-5 mb-5 no-print">
-                <h3 class="font-bold text-amber-900 mb-1">One-time setup: create the call_logs table in Supabase</h3>
-                <p class="text-sm text-amber-800 mb-3">Open Supabase → SQL Editor, paste this code and run it, then refresh this page.</p>
-                <pre id="setupSql" class="bg-white border border-amber-200 rounded-xl p-3 text-xs overflow-x-auto whitespace-pre"></pre>
-                <button onclick="copySetupSql()" class="mt-3 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">Copy SQL</button>
+                <h3 class="font-bold text-amber-900 mb-1">Follow-up database setup is required</h3>
+                <p class="text-sm text-amber-800">In Supabase SQL Editor, run <b>supabase_followups_access.sql</b> as database owner (after <b>supabase_roles.sql</b>), then refresh this page. This enables assignments and secure teacher-specific access.</p>
             </div>
 
             <!-- SUMMARY -->
@@ -173,6 +171,7 @@
                     <p id="cmFamily" class="text-sm font-semibold text-slate-700 mt-0.5"></p>
                     <p id="cmKids" class="text-xs text-slate-500"></p>
                 </div>
+
                 <button onclick="closeCallModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
             </div>
             <div class="p-5 space-y-4">
@@ -234,6 +233,32 @@
             <div class="p-5 border-t flex justify-end gap-2">
                 <button onclick="closeCallModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
                 <button onclick="saveCall()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm shadow-sm">Save call</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOLLOW-UP ASSIGNMENT MODAL -->
+    <div id="assignmentModal" class="fixed inset-0 bg-black/50 z-[65] hidden flex items-center justify-center p-3">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[94vh] flex flex-col">
+            <div class="p-5 border-b flex justify-between items-start gap-3">
+                <div><h3 class="text-lg font-bold text-indigo-950">Manage follow-up assignments</h3><p id="assignmentFamilyLabel" class="text-sm text-slate-500 mt-1"></p></div>
+                <button onclick="closeAssignmentModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-4 overflow-y-auto">
+                <div class="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                    <label class="block text-xs font-semibold text-indigo-950 mb-1">Assign entire family</label>
+                    <select id="assignFamilyEmail" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select>
+                    <p class="text-[11px] text-indigo-700 mt-1">The selected teacher will see every student in this family.</p>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-slate-700 mb-2">Individual student assignments</h4>
+                    <div id="assignStudentRows" class="space-y-2"></div>
+                    <p class="text-[11px] text-slate-500 mt-2">Individual assignments can be different from the family assignment. Leaving a student unassigned does not cancel a family-wide assignment.</p>
+                </div>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2">
+                <button onclick="closeAssignmentModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="saveFamilyAssignments()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save assignments</button>
             </div>
         </div>
     </div>
@@ -312,33 +337,6 @@ const SIBLINGS_COL = 'siblings';                 // siblings (family code) colum
 const PHONE_COL_REGEX  = /phone|mobile|contact|whatsapp|cell|\btel\b/i;   // students table columns that contain phone numbers
 const PARENT_COL_REGEX = /father|guardian|parent/i;                        // columns that hold the father / guardian name
 
-const SETUP_SQL = `create table if not exists public.call_logs (
-  id bigint generated by default as identity primary key,
-  family_key text not null,
-  family_label text,
-  children text,
-  call_date timestamptz not null default now(),
-  outcome text,
-  spoke_with text,
-  promise_date date,
-  promise_amount numeric,
-  remarks text,
-  pending_at_call numeric,
-  caller text
-);
-create index if not exists call_logs_family_idx on public.call_logs (family_key, call_date desc);
-alter table public.call_logs enable row level security;
-drop policy if exists shibra_select on public.call_logs;
-drop policy if exists shibra_insert on public.call_logs;
-drop policy if exists shibra_update on public.call_logs;
-drop policy if exists shibra_delete on public.call_logs;
-create policy shibra_select on public.call_logs for select to authenticated using (public.app_has_page_permission('followups', 'v'));
-create policy shibra_insert on public.call_logs for insert to authenticated with check (public.app_has_page_permission('followups', 'a'));
-create policy shibra_update on public.call_logs for update to authenticated using (public.app_has_page_permission('followups', 'e')) with check (public.app_has_page_permission('followups', 'e'));
-create policy shibra_delete on public.call_logs for delete to authenticated using (public.app_has_page_permission('followups', 'd'));
-grant select, insert, update, delete on public.call_logs to authenticated;
-grant usage, select on sequence public.call_logs_id_seq to authenticated;`;
-
 const OUTCOMES = {
     promised:  { label: 'Spoke – promise taken',          cls: 'bg-blue-50 text-blue-700 border-blue-200' },
     callback:  { label: 'Asked to call back later',   cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
@@ -366,9 +364,14 @@ let SCHOOL_YEAR = new Date().getFullYear();
 // ====================================================================================
 let allStudents = [], allFees = [], accountsMap = {}, txMap = {}, allLogs = [];
 let families = [], familyMap = {};
+let followupAssignments = [], followupAssignees = [];
 let expanded = new Set();
 let currentCallKey = null;
+let assignmentFamilyKey = null;
 let logsTableMissing = false;
+let followupFiltersInitialized = false;
+const canAssignFollowups = () => typeof flag === 'function' && flag('assign');
+const canSeeAllFollowups = () => canAssignFollowups() || (typeof flag === 'function' && flag('allfollow'));
 
 // ====================================================================================
 //  SMALL HELPERS
@@ -445,11 +448,18 @@ async function initFollowups() {
             throw new Error(`Could not load Follow-up data (${dataResponse.status}): ${detail}`);
         }
         let result = await dataResponse.json();
-        if(!result || !Array.isArray(result.students) || !Array.isArray(result.fees) || !Array.isArray(result.accounts)) {
-            throw new Error('The restricted Follow-up data response is incomplete. Ask the administrator to verify supabase_followups_access.sql.');
+        if(!result || !Array.isArray(result.students) || !Array.isArray(result.fees) || !Array.isArray(result.accounts)
+            || !Array.isArray(result.assignments) || !Array.isArray(result.assignees)) {
+            throw new Error('Follow-up assignment security is not installed. Ask the administrator to run supabase_followups_access.sql, then refresh.');
         }
         SCHOOL_YEAR = Number(result.school_year) || new Date().getFullYear();
         let students = result.students, fees = result.fees, accounts = result.accounts;
+        followupAssignments = Array.isArray(result.assignments) ? result.assignments : [];
+        followupAssignees = Array.isArray(result.assignees) ? result.assignees : [];
+        if(!followupFiltersInitialized) {
+            if(!canSeeAllFollowups() || canAssignFollowups()) $('fPendingOnly').checked = false;
+            followupFiltersInitialized = true;
+        }
         allStudents = students;
 
         accountsMap = {}; txMap = {};
@@ -476,6 +486,7 @@ async function initFollowups() {
         refreshAll();
     } catch (e) {
         console.error(e);
+        if(/supabase_followups_access\.sql/i.test(String(e.message || ''))) $('setupBanner').classList.remove('hidden');
         showCustomAlert(`Could not load data: ${e.message || 'Check your internet connection or API settings.'}`);
     }
     hideLoading();
@@ -488,7 +499,6 @@ async function loadLogs(rerender = true) {
         let data = await res.json();
         if(!res.ok || !Array.isArray(data)) {
             logsTableMissing = true; allLogs = [];
-            $('setupSql').innerText = SETUP_SQL;
             $('setupBanner').classList.remove('hidden');
         } else {
             logsTableMissing = false; allLogs = data;
@@ -496,10 +506,6 @@ async function loadLogs(rerender = true) {
         }
     } catch (e) { logsTableMissing = true; allLogs = []; }
     if(rerender) refreshAll();
-}
-
-function copySetupSql() {
-    navigator.clipboard.writeText(SETUP_SQL).then(() => showCustomAlert('SQL copied. Paste it in the Supabase SQL Editor and run it.'));
 }
 
 // ====================================================================================
@@ -709,8 +715,88 @@ function contactsHtml(f, big) {
         </span>`).join(' ');
 }
 
+function assignmentOptionsHtml(selectedEmail) {
+    const selected = String(selectedEmail || '').toLowerCase();
+    return `<option value="">Not assigned</option>` + followupAssignees.map(user => {
+        const email = String(user.email || '').toLowerCase();
+        const title = [user.name || email, user.role].filter(Boolean).join(' · ');
+        return `<option value="${esc(email)}" ${selected === email ? 'selected' : ''}>${esc(title)}${user.name && user.name.toLowerCase() !== email ? ` — ${esc(email)}` : ''}</option>`;
+    }).join('');
+}
+
+function openAssignmentModal(key) {
+    if(!canAssignFollowups()) { showCustomAlert('You do not have permission to manage follow-up assignments.'); return; }
+    const f = familyMap[key];
+    if(!f) return;
+    assignmentFamilyKey = key;
+    const rows = followupAssignments.filter(item => item.family_key === key);
+    const familyRow = rows.find(item => item.scope_type === 'family');
+    $('assignmentFamilyLabel').innerText = `${f.displayLabel} · ${f.kids.map(k => k.name).join(', ')}`;
+    $('assignFamilyEmail').innerHTML = assignmentOptionsHtml(familyRow && familyRow.assignee_email);
+    $('assignStudentRows').innerHTML = f.kids.map(k => {
+        const row = rows.find(item => item.scope_type === 'student' && item.scope_key === k.key);
+        return `<label class="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-2 items-center rounded-lg border border-slate-200 p-2.5 text-xs">
+            <span><b>${esc(k.name)}</b><span class="text-slate-500"> · ${esc(k.cls || '-')} · Adm# ${esc(k.adm || '-')}</span></span>
+            <select data-assignment-student="${esc(k.key)}" class="border rounded-lg p-2 text-sm bg-white">${assignmentOptionsHtml(row && row.assignee_email)}</select>
+        </label>`;
+    }).join('');
+    $('assignmentModal').classList.remove('hidden');
+}
+
+function closeAssignmentModal() {
+    $('assignmentModal').classList.add('hidden');
+    assignmentFamilyKey = null;
+}
+
+async function saveFamilyAssignments() {
+    if(!canAssignFollowups()) { showCustomAlert('You do not have permission to manage follow-up assignments.'); return; }
+    if(!assignmentFamilyKey) return;
+    const payload = {
+        p_family_key: assignmentFamilyKey,
+        p_family_email: $('assignFamilyEmail').value || null,
+        p_students: Array.from(document.querySelectorAll('[data-assignment-student]')).map(select => ({
+            student_key: select.dataset.assignmentStudent,
+            email: select.value || null
+        }))
+    };
+    showLoading('Saving assignments...');
+    try {
+        const c = getSupabaseConfig();
+        const response = await fetch(`${c.url}/rest/v1/rpc/app_followup_save_assignments`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload)
+        });
+        if(!response.ok) {
+            showCustomAlert(`Could not save assignments: ${await response.text()}`);
+            return;
+        }
+        closeAssignmentModal();
+        await initFollowups();
+    } catch(error) {
+        console.error(error);
+        showCustomAlert('Could not connect to the database while saving assignments.');
+    } finally {
+        hideLoading();
+    }
+}
+
 // clickable student name -> opens the ledger
 const nameLink = k => `<b class="cursor-pointer underline decoration-dotted hover:text-indigo-600" data-k="${esc(k.key)}" onclick="openLedger(this.dataset.k)" title="Open ledger">${esc(k.name)}</b>`;
+
+function assignmentBadges(f) {
+    const rows = followupAssignments.filter(item => item.family_key === f.key);
+    if(!rows.length) return '';
+    const labels = rows.map(item => {
+        const user = followupAssignees.find(person => String(person.email || '').toLowerCase() === String(item.assignee_email || '').toLowerCase());
+        const student = item.scope_type === 'student' ? f.kids.find(k => k.key === item.scope_key) : null;
+        const target = item.scope_type === 'family' ? 'Whole family' : (student ? student.name : 'Individual student');
+        const myName = typeof ME !== 'undefined' && ME
+            && String(ME.email || '').toLowerCase() === String(item.assignee_email || '').toLowerCase() ? ME.name : '';
+        return `${target} → ${user ? (user.name || user.email) : (myName || item.assignee_email)}`;
+    });
+    return `<span class="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1">${labels.map(esc).join(' · ')}</span>`;
+}
 
 function famCardHtml(f) {
     let sm = STATUS[f.status];
@@ -742,6 +828,7 @@ function famCardHtml(f) {
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="text-base font-extrabold text-indigo-950">${esc(f.displayLabel)}</span>
                         <span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold ${sm.cls}">${sm.label}</span>
+                        ${assignmentBadges(f)}
                         ${f.parent ? `<span class="text-xs text-slate-500">Father / Guardian: ${esc(f.parent)}</span>` : ''}
                     </div>
                     <div class="flex flex-wrap gap-1.5 mt-2">${kidsHtml}</div>
@@ -755,6 +842,7 @@ function famCardHtml(f) {
             <div class="mt-3">${promiseLine}${paidNote}${lastCall}</div>
             <div class="flex flex-wrap gap-2 mt-3 no-print">
                 <button onclick="openCallModal(this.closest('.fam-card').dataset.key)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">📞 Record call</button>
+                ${canAssignFollowups() ? `<button onclick="openAssignmentModal(this.closest('.fam-card').dataset.key)" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg text-sm font-semibold transition">👥 Manage assignments</button>` : ''}
                 <button onclick="sendFamilyWhatsApp(this.closest('.fam-card').dataset.key)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold transition">💬 WhatsApp reminder</button>
                 <button onclick="toggleDetails(this)" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg text-sm font-semibold transition">${isOpen ? '▲ Hide details' : '▼ Details & call history'} (${f.logs.length})</button>
             </div>
@@ -893,7 +981,7 @@ function openCallModal(key) {
     $('cmPromiseDate').value = '';
     $('cmPromiseAmt').value = '';
     $('cmRemarks').value = '';
-    $('cmCaller').value = localStorage.getItem('caller_name') || '';
+    $('cmCaller').value = localStorage.getItem('caller_name') || (typeof ME !== 'undefined' && ME ? ME.name : '') || '';
     $('micStatus').innerText = 'Tap 🎤 Speak and talk in Urdu. The text appears in Roman Urdu automatically; you can edit it before saving.';
     let last = $('cmLast');
     if(f.lastLog) {
@@ -912,7 +1000,7 @@ function setPromiseOffset(days) {
 
 async function saveCall() {
     let f = familyMap[currentCallKey]; if(!f) return;
-    if(logsTableMissing) { showCustomAlert('Please create the call_logs table first (see the yellow box at the top of the page), then try again.'); return; }
+    if(logsTableMissing) { showCustomAlert('Please ask the administrator to run supabase_followups_access.sql, then refresh this page.'); return; }
     stopVoice();
     let outcome = $('cmOutcome').value;
     let promiseDate = $('cmPromiseDate').value;
@@ -926,6 +1014,7 @@ async function saveCall() {
         family_key: f.key,
         family_label: f.displayLabel,
         children: f.kids.map(k => `${k.name} (${k.cls || '-'})`).join(', '),
+        student_keys: f.kids.map(k => k.key),
         call_date: new Date().toISOString(),
         outcome,
         spoke_with: $('cmSpokeWith').value.trim() || null,
