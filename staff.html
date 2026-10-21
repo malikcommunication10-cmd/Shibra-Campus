@@ -946,18 +946,20 @@ async function repairUnpaidLeaveBonuses(rows) {
 }
 
 async function initStaff() {
-    try { DESIGNATIONS = (await loadSettingLists())['Designation']; } catch (e) {}
-    fillPaySelects(['payWallet']).catch(() => {});
     showLoading('Loading staff & payroll...');
+    const settingsPromise = loadSettingLists().then(lists => {
+        DESIGNATIONS = lists['Designation'];
+        return fillPaySelects(['payWallet']).catch(() => {});
+    });
     let c = getSupabaseConfig();
     try {
-        let [sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityPayrollProbe, securityRes, incrementsRes] = await Promise.all([
+        let [, sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityRes, incrementsRes] = await Promise.all([
+            settingsPromise,
             sbFetchAll('staff', 'select=*'),
             sbFetchAll('payroll', 'select=*'),
             fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days,security_deduction&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/payroll?select=security_deduction&limit=1`, { headers: sbHeaders() }),
             sbFetchAll('staff_security_ledger', 'select=*'),
             sbFetchAll('staff_salary_increments', 'select=*')
         ]);
@@ -965,7 +967,7 @@ async function initStaff() {
         if(!Array.isArray(sRows)) throw new Error('staff failed to load');
         staffExt = staffProbe.ok;
         attendanceOk = attendanceProbe.ok;
-        securityOk = securityPayrollProbe.ok && securityRes.ok;
+        securityOk = payrollProbe.ok && securityRes.ok;
         let pRows = pRes.ok ? await pRes.json() : null;
         payrollOk = pRes.ok && payrollProbe.ok && Array.isArray(pRows);
         securityLedger = securityOk ? await securityRes.json() : [];

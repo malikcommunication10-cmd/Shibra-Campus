@@ -448,16 +448,18 @@ function normTx(row, idx) {
 }
 
 async function initBooks() {
-    try { await Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]);
-    try { await fillPaySelects(['mWallet', 'ssWallet', 'sdWallet', 'impWallet']); } catch (e) {} } catch (e) {}
     showLoading('Loading book store...');
     let c = getSupabaseConfig();
     try {
-        let [res, probe, probe2] = await Promise.all([
-            sbFetchAll('books', 'select=*'),
-            fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() }),
- fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() })
+        let [, [res, probe, probe2]] = await Promise.all([
+            Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]),
+            Promise.all([
+                sbFetchAll('books', 'select=*'),
+                fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() }),
+                fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() })
+            ])
         ]);
+        try { await fillPaySelects(['mWallet', 'ssWallet', 'sdWallet', 'impWallet']); } catch (e) {}
         let rows = await res.json();
         if(!Array.isArray(rows)) throw new Error('books failed to load');
         hasExt = probe.ok; hasItemCols = probe2.ok;

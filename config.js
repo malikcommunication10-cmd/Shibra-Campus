@@ -10,13 +10,44 @@ function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 //  login.html sets  window.SB_NO_GUARD = true  before loading this file.
 // ============================================================================
 const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1';
+const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000;
+const _sbDataMemory = new Map(), _sbDataPending = new Map();
 function sbSession() { try { return JSON.parse(localStorage.getItem(SB_SESSION_KEY) || 'null'); } catch (e) { return null; } }
+function sbDataCacheUser() { return encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase()); }
+function sbDataCacheKey(table, query) {
+    return `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_${table}_${encodeURIComponent(query)}`;
+}
+function sbDataRevision(table) {
+    try { return `${localStorage.getItem('sb_data_rev_all') || ''}|${localStorage.getItem(`sb_data_rev_${table}`) || ''}`; }
+    catch (e) { return ''; }
+}
+function sbCacheClear(table) {
+    const tableName = table ? String(table) : '';
+    const userPrefix = `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_`;
+    for (const key of _sbDataMemory.keys())
+        if (!tableName || key.startsWith(`${userPrefix}${tableName}_`)) _sbDataMemory.delete(key);
+    try {
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith(SB_DATA_CACHE_PREFIX)
+                && (!tableName || key.startsWith(`${userPrefix}${tableName}_`)))
+                sessionStorage.removeItem(key);
+        }
+        const revision = `${Date.now()}_${Math.random()}`;
+        localStorage.setItem(tableName ? `sb_data_rev_${tableName}` : 'sb_data_rev_all', revision);
+        if ((!tableName || tableName === 'settings') && typeof _settingLists !== 'undefined') {
+            _settingLists = null;
+            _settingListsRevision = '';
+            sessionStorage.removeItem('sb_settings_v2');
+        }
+    } catch (e) {}
+}
 function sbSaveSession(j) {
     const old = sbSession() || {};
     const s = { access_token: j.access_token, refresh_token: j.refresh_token || old.refresh_token, expires_at: Math.floor(Date.now() / 1000) + (j.expires_in || 3600), email: String((j.user && j.user.email) || old.email || '').toLowerCase() };
     localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s)); return s;
 }
-function sbClearAuth() { try { localStorage.removeItem(SB_SESSION_KEY); localStorage.removeItem(SB_ME_KEY); } catch (e) {} }
+function sbClearAuth() { try { sbCacheClear(); localStorage.removeItem(SB_SESSION_KEY); localStorage.removeItem(SB_ME_KEY); } catch (e) {} }
 function sbLogout() { sbClearAuth(); location.replace('login.html'); }
 const _sbFetch = window.fetch.bind(window);
 let _sbRefreshing = null;
@@ -63,6 +94,11 @@ window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : ((input && input.url) || '');
     if (url.startsWith(SB_URL + '/rest/v1')) {
         const method = String((init && init.method) || (input instanceof Request && input.method) || 'GET').toUpperCase();
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+            const match = url.match(/\/rest\/v1\/([^/?]+)/);
+            const resource = match ? decodeURIComponent(match[1]) : '';
+            sbCacheClear(resource && resource !== 'rpc' ? resource : '');
+        }
         if (!['GET', 'HEAD', 'OPTIONS'].includes(method)
             && !/\/rest\/v1\/day_close(?:[/?]|$)/.test(url)
             && sbDayClosePending()) {
@@ -100,12 +136,15 @@ function sbFirstPage(me) { const m = me || ME; for (const p of PAGES) if (m && m
 async function sbFetchMe() {
     const s = sbSession(); if (!s) return null;
     const get = async path => { try { const r = await _sbFetch(`${SB_URL}/rest/v1/${path}`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + (await sbFreshToken()) } }); const j = await r.json(); return r.ok ? j : null; } catch (e) { return null; } };
-    const u = await get(`app_users?select=*&email=eq.${encodeURIComponent(String(s.email || '').toLowerCase())}`);
+    const u = await get(`app_users?select=name,role,active,perms&email=eq.${encodeURIComponent(String(s.email || '').toLowerCase())}`);
     if (!Array.isArray(u)) return { error: 'setup', email: s.email };
     if (!u[0]) return { noaccess: true, email: s.email };
     let perms = u[0].perms;
-    if (!perms) { const r = await get(`app_roles?select=*&name=eq.${encodeURIComponent(u[0].role || '')}`); perms = (Array.isArray(r) && r[0] && r[0].perms) || { pages: {}, flags: [] }; }
-    const dc = await get('day_close?select=closed_date&order=closed_date.desc&limit=1');
+    const [roleRows, dc] = await Promise.all([
+        perms ? Promise.resolve(null) : get(`app_roles?select=perms&name=eq.${encodeURIComponent(u[0].role || '')}`),
+        get('day_close?select=closed_date&order=closed_date.desc&limit=1')
+    ]);
+    if (!perms) perms = (Array.isArray(roleRows) && roleRows[0] && roleRows[0].perms) || { pages: {}, flags: [] };
     return { email: s.email, name: u[0].name || s.email, role: u[0].role || '', active: u[0].active !== false, perms, closedThrough: (Array.isArray(dc) && dc[0] && dc[0].closed_date) || '', ts: Date.now() };
 }
 function sbSaveMe(m) { try { localStorage.setItem(SB_ME_KEY, JSON.stringify(m)); } catch (e) {} }
@@ -187,10 +226,10 @@ if (!window.SB_NO_GUARD) {
         if (ME) {
             sbApplyMe();
             sbFetchMe().then(m => {            // check in the background: if the administrator changed something, reload once
-                if (!m || m.error || m.noaccess) { if (m && (m.noaccess)) { sbSaveMe(m); location.reload(); } return; }
+                if (!m || m.error || m.noaccess) { if (m && (m.noaccess)) { sbCacheClear(); sbSaveMe(m); location.reload(); } return; }
                 const same = JSON.stringify([m.perms, m.closedThrough, m.active, m.role]) === JSON.stringify([ME.perms, ME.closedThrough, ME.active, ME.role]);
                 sbSaveMe(m); if (typeof window.shibraDayCloseRefresh === 'function') window.shibraDayCloseRefresh();
-                if (!same && !sessionStorage.getItem('sb_me_reloaded')) { sessionStorage.setItem('sb_me_reloaded', '1'); location.reload(); } else if (same) sessionStorage.removeItem('sb_me_reloaded');
+                if (!same && !sessionStorage.getItem('sb_me_reloaded')) { sbCacheClear(); sessionStorage.setItem('sb_me_reloaded', '1'); location.reload(); } else if (same) sessionStorage.removeItem('sb_me_reloaded');
             });
         } else {
             try { document.documentElement.style.visibility = 'hidden'; } catch (e) {}
@@ -206,7 +245,7 @@ async function sbChangePassword(pw) {
 
 // Supabase returns max 1000 rows per request. The first request also returns the total row count
 // (Content-Range), then ALL remaining pages are fetched in parallel. Behaves like a fetch Response.
-async function sbFetchAll(table, query) {
+async function sbFetchAllUncached(table, query) {
     query = query || 'select=*';
     const c = getSupabaseConfig(), ordKey = 'sb_ord2_' + table;
     const hdr = (f, t, count) => Object.assign({ apikey: c.key, Authorization: `Bearer ${c.key}`, Range: `${f}-${t}`, 'Range-Unit': 'items' }, count ? { Prefer: 'count=exact' } : {});
@@ -241,6 +280,53 @@ async function sbFetchAll(table, query) {
     return { ok: true, status: 200, json: async () => rows, text: async () => '' };
 }
 
+// Cache reads briefly per signed-in user; REST writes and permission changes invalidate affected data.
+async function sbFetchAll(table, query) {
+    query = query || 'select=*';
+    const key = sbDataCacheKey(table, query), revision = sbDataRevision(table), now = Date.now();
+    for (const [cacheKey, entry] of _sbDataMemory)
+        if (entry.expires <= now) _sbDataMemory.delete(cacheKey);
+    const cached = _sbDataMemory.get(key);
+    let packed = cached && cached.revision === revision && cached.expires > now ? cached.packed : '';
+    let expires = packed ? cached.expires : 0;
+    let cachedRows = null;
+    if (!packed) {
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+            if (saved && saved.revision === revision && saved.expires > now && Array.isArray(saved.rows)) {
+                cachedRows = saved.rows;
+                packed = JSON.stringify(cachedRows);
+                expires = saved.expires;
+            }
+        } catch (e) {}
+    }
+    if (packed) {
+        _sbDataMemory.set(key, { revision, expires, packed });
+        const rows = cachedRows || JSON.parse(packed);
+        return { ok: true, status: 200, json: async () => rows, text: async () => packed };
+    }
+    if (_sbDataPending.has(key)) return _sbDataPending.get(key);
+
+    const request = (async () => {
+        const response = await sbFetchAllUncached(table, query);
+        if (!response.ok) return response;
+        const rows = await response.json();
+        if (!Array.isArray(rows)) return { ok: false, status: response.status, json: async () => rows, text: async () => '' };
+        const value = JSON.stringify(rows), expires = Date.now() + SB_DATA_CACHE_TTL;
+        _sbDataMemory.set(key, { revision, expires, packed: value });
+        if (sbDataRevision(table) === revision) {
+            try {
+                if (value.length < 1800000)
+                    sessionStorage.setItem(key, JSON.stringify({ revision, expires, rows }));
+            } catch (e) {}
+        }
+        return { ok: true, status: response.status, json: async () => rows, text: async () => '' };
+    })();
+    _sbDataPending.set(key, request);
+    try { return await request; }
+    finally { _sbDataPending.delete(key); }
+}
+
 // Dropdown lists + rules maintained on the System Settings page (with sensible defaults)
 const SETTING_DEFAULTS = {
     'Class': ['Playgroup', 'Pre-Nursery', 'Nursery', 'Prep', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'],
@@ -252,10 +338,16 @@ const SETTING_DEFAULTS = {
     'Book Category': ['Books', 'Notebooks', 'Study Planner', 'Lamination Paper'],
     'Payment Account': []
 };
-let _settingLists = null;
+let _settingLists = null, _settingListsRevision = '';
 async function loadSettingLists() {
-    if (_settingLists) return _settingLists;
-    try { const c = JSON.parse(sessionStorage.getItem('sb_settings_v2') || 'null'); if (c && Date.now() - c.t < 120000) { _settingLists = c.d; return c.d; } } catch (e) {}
+    const revision = sbDataRevision('settings');
+    if (_settingLists && _settingListsRevision === revision) return _settingLists;
+    try {
+        const c = JSON.parse(sessionStorage.getItem('sb_settings_v2') || 'null');
+        if (c && c.r === revision && Date.now() - c.t < 120000) {
+            _settingLists = c.d; _settingListsRevision = revision; return c.d;
+        }
+    } catch (e) {}
     const out = { rules: { 'School Year': String(new Date().getFullYear()) } };
     Object.keys(SETTING_DEFAULTS).forEach(k => out[k] = [...SETTING_DEFAULTS[k]]);
     try {
@@ -275,7 +367,8 @@ async function loadSettingLists() {
         if (out.rules['Low Stock Limit'] !== undefined) localStorage.setItem('books_low_stock', out.rules['Low Stock Limit']);
     } catch (e) {}
     _settingLists = out;
-    try { sessionStorage.setItem('sb_settings_v2', JSON.stringify({ t: Date.now(), d: out })); } catch (e) {}
+    _settingListsRevision = revision;
+    try { sessionStorage.setItem('sb_settings_v2', JSON.stringify({ t: Date.now(), r: revision, d: out })); } catch (e) {}
     return out;
 }
 async function getSchoolYear() {

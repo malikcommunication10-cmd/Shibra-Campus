@@ -59,7 +59,7 @@ async function initDashboard() {
     try {
         const [sR, fR, aR, bR, pR] = await Promise.all([
             sbFetchAll('students', 'select=admis_no,status,class'),
-            sbFetchAll('fees', 'select=*'),
+            sbFetchAll('fees', 'select=admis_no,student_name,class,voucher_id,period,type,payable,discount'),
             sbFetchAll('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date'),
             sbFetchAll('books', 'select=*'),
             sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Promise')

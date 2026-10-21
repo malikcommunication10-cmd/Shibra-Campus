@@ -171,9 +171,10 @@ notify pgrst, 'reload schema';`;
             else {
                 showLoading("Loading Increments & Students Data...");
                 try {
+                    const dataPromise = Promise.all([fetchIncrementsCache(), fetchStudents()]);
                     setIncrementPeriods(await getSchoolYear());
-                    await fetchIncrementsCache();
-                    await fetchStudents();
+                    await dataPromise;
+                    filterIncrementStudents();
                 } catch (e) {
                     console.error("Could not initialize increments:", e);
                     alert(e.message || 'Could not load increments data.');

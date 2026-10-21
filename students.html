@@ -93,15 +93,15 @@
 
 
         async function initPage() {
-            const [year, lists] = await Promise.all([getSchoolYear(), loadSettingLists()]);
-            SCHOOL_YEAR = year;
-            document.getElementById('classList').innerHTML = lists['Class'].map(x => `<option value="${esc(x)}">`).join('');
-            document.getElementById('tuitionYearLabel').innerText = SCHOOL_YEAR;
-            let config = getSupabaseConfig();
-            if(!config.url || !config.key) { } 
-            else {
-                showLoading("Loading Students Record...");
-                await fetchStudents();
+            showLoading("Loading Students Record...");
+            const config = getSupabaseConfig();
+            const studentsPromise = config.url && config.key ? fetchStudents() : Promise.resolve();
+            try {
+                const [year, lists] = await Promise.all([getSchoolYear(), loadSettingLists(), studentsPromise]);
+                SCHOOL_YEAR = year;
+                document.getElementById('classList').innerHTML = lists['Class'].map(x => `<option value="${esc(x)}">`).join('');
+                document.getElementById('tuitionYearLabel').innerText = SCHOOL_YEAR;
+            } finally {
                 hideLoading();
             }
         }
