@@ -881,6 +881,9 @@ function calcPay(base, leaves, bonus, fine, adv, lateCount = 0, salaryDays = PAY
     let beforeSecurity = Math.max(0, Math.round(salaryAmount - ded - lateDed + bonus - fine - adv));
     return { daily, billable, ded, lateDed, salaryAmount, beforeSecurity, security: Math.max(0, security), net: Math.max(0, beforeSecurity - Math.max(0, security)) };
 }
+function qualifiesForNoLeaveBonus(absenceCount, excusedLeaves, leaveDays) {
+    return Number(absenceCount) === 0 && Number(excusedLeaves) === 0 && Number(leaveDays) === 0;
+}
 
 // ====================================================================================
 //  LOAD
@@ -888,7 +891,7 @@ function calcPay(base, leaves, bonus, fine, adv, lateCount = 0, salaryDays = PAY
 function normStaff(r, idx) {
     let staffId = String(r.staff_id || '').trim();
     let key = staffId || ('id' + (r.id ?? idx));
-    let status = String(r.status || 'Active').trim().toLowerCase() === 'left' ? 'Left' : 'Active';
+    let status = String(r.status || 'Active').trim().toLowerCase() === 'active' ? 'Active' : 'Left';
     return { key, idx, id: r.id, staffId: staffId || key, name: String(r.staff_name || r.name || '').trim() || '-', designation: String(r.designation || 'Teacher').trim(),
         joining: String(r.joining_date || '').slice(0, 10), base: parseFloat(r.base_salary || r.salary) || 0, phone: String(r.phone || '').trim(),
         status, leaving: String(r.leaving_date || '').slice(0, 10), notes: String(r.notes || '').trim(), hasStaffIdCol: !!staffId };
@@ -906,6 +909,40 @@ function normPay(r) {
         bonus: parseFloat(r.bonus) || 0, fine: parseFloat(r.fine) || 0,
         advance: parseFloat(r.advance) || 0, net: parseFloat(r.net_salary) || 0, status: String(r.status || 'Unpaid').trim() === 'Paid' ? 'Paid' : 'Unpaid',
         paidDate: String(r.paid_date || '').slice(0, 10), mode: String(r.payment_mode || '').trim(), voucher: String(r.voucher_no || '').trim(), notes: String(r.notes || '').trim() };
+}
+async function repairUnpaidLeaveBonuses(rows) {
+    const errors = [];
+    for(const payrollRow of rows.filter(row =>
+        row.status === 'Unpaid' &&
+        row.bonus > 0 &&
+        !qualifiesForNoLeaveBonus(row.absenceCount, row.excusedLeaves, row.leaves)
+    )) {
+        const corrected = calcPay(
+            payrollRow.base, payrollRow.leaves, 0, payrollRow.fine, payrollRow.advance,
+            payrollRow.lateCount, payrollRow.salaryDays, payrollRow.security
+        );
+        try {
+            const c = getSupabaseConfig();
+            const response = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(payrollRow.id)}`, {
+                method: 'PATCH',
+                headers: sbHeaders({ ...JSON_H, Prefer: 'return=representation' }),
+                body: JSON.stringify({
+                    bonus: 0,
+                    net_salary: corrected.net,
+                    notes: [payrollRow.notes, 'System correction: no-absence bonus removed because leave was recorded.'].filter(Boolean).join(' ')
+                })
+            });
+            if(!response.ok) throw new Error(await response.text());
+            const updatedRows = await response.json();
+            if(!Array.isArray(updatedRows) || !updatedRows.length) throw new Error('The payroll row was not updated; check Staff Edit permission.');
+            payrollRow.bonus = 0;
+            payrollRow.net = corrected.net;
+            payrollRow.notes = updatedRows[0].notes || payrollRow.notes;
+        } catch(error) {
+            errors.push(`${payrollRow.name} (${payrollRow.month}): ${error.message || 'update failed'}`);
+        }
+    }
+    return errors;
 }
 
 async function initStaff() {
@@ -941,6 +978,7 @@ async function initStaff() {
         staff = sRows.map(normStaff).sort((a, b) => a.name.localeCompare(b.name));
         staffByKey = {}; staff.forEach(s => staffByKey[s.key] = s);
         payroll = payrollOk ? pRows.map(normPay) : [];
+        const payrollRepairErrors = payrollOk ? await repairUnpaidLeaveBonuses(payroll) : [];
         payById = {}; payMap = {};
         payroll.forEach(p => { payById[p.id] = p; payMap[p.staffId + '|' + p.month] = p; });
 
@@ -953,6 +991,8 @@ async function initStaff() {
         updateBanner();
         fillFilters();
         renderAll();
+        if(payrollRepairErrors.length)
+            toast(`Could not correct ${payrollRepairErrors.length} unpaid payroll bonus(es): ${payrollRepairErrors.join(' · ')}`, false);
         if(attendanceOk) await loadAttendance(attendanceDate);
     } catch (e) {
         console.error(e);
@@ -1530,8 +1570,8 @@ function statusBadge(st) { return st === 'Paid' ? '<span class="px-2 py-0.5 roun
 
 // who should be on payroll for a month
 function eligibleStaff(month) {
-    let ms = monthStart(month), me = monthEnd(month);
-    return staff.filter(s => (!s.joining || s.joining <= me) && (s.status === 'Active' || (s.leaving && s.leaving >= ms)));
+    let me = monthEnd(month);
+    return staff.filter(s => s.status === 'Active' && (!s.joining || s.joining <= me));
 }
 const monthRows = month => payroll.filter(p => p.month === month);
 
@@ -1833,7 +1873,7 @@ function payrollList() {
 function renderPayroll() {
     let month = curMonth(), all = monthRows(month), list = payrollList();
     $('prNotReady').classList.toggle('hidden', payrollOk);
-    $('prRule').innerText = `${monthLabel(month)} · Daily salary = monthly base ÷ 30 · Sundays off · Unexcused absences are deducted; an excused absence still cancels the no-absence bonus. Every 3 unexcused late marks deduct one daily salary.`;
+    $('prRule').innerText = `${monthLabel(month)} · Daily salary = monthly base ÷ 30 · Sundays off · Unexcused absences are deducted; any recorded or manually entered leave cancels the no-absence bonus. Every 3 unexcused late marks deduct one daily salary.`;
     let net = all.reduce((s, p) => s + p.net, 0), paid = all.filter(p => p.status === 'Paid').reduce((s, p) => s + p.net, 0);
     $('prCards').innerHTML = [
         { t: 'Staff on sheet', v: all.length, c: 'text-indigo-700' },
@@ -1991,7 +2031,7 @@ async function confirmGeneratePayroll() {
 
         const payrollRows = drafts.map(draft => {
             const s = draft.staff;
-            const bonus = draft.absenceCount === 0 && draft.leaves === 0 && draft.salaryDays > 0
+            const bonus = qualifiesForNoLeaveBonus(draft.absenceCount, draft.excusedLeaves, draft.leaves) && draft.salaryDays > 0
                 ? Math.round(s.base / PAYROLL_DIVISOR)
                 : 0;
             const calc = calcPay(s.base, draft.leaves, bonus, 0, 0, draft.lateCount, draft.salaryDays, draft.security);
@@ -2051,7 +2091,7 @@ function openAdjust(id) {
 function adjVals() { return { base: parseFloat($('adjBase').value) || 0, salaryDays: parseFloat($('adjSalaryDays').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, security: parseFloat($('adjSecurity').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
 function calcAdj() {
     let v = adjVals(), p = payById[adjId];
-    const bonusEligible = !!p && p.absenceCount === 0 && p.excusedLeaves === 0 && v.leaves === 0;
+    const bonusEligible = !!p && qualifiesForNoLeaveBonus(p.absenceCount, p.excusedLeaves, v.leaves);
     const bonus = bonusEligible ? v.bonus : 0;
     $('adjBonus').disabled = !bonusEligible;
     $('adjBonus').classList.toggle('bg-slate-100', !bonusEligible);
