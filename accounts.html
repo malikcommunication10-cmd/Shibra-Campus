@@ -344,6 +344,7 @@ const KIND_META = {
 let entries = [], entryById = {}, feesByVoucher = {};
 let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
 let dbLimit = 300;
+let expandedDaybookGroups = new Set();
 let editingId = null, entryKind = 'receipt';
 
 const $ = id => document.getElementById(id);
@@ -640,9 +641,15 @@ function entryLabel(e) {
 
 // ---------------- DAYBOOK ----------------
 function resetLimitRender() { dbLimit = 300; renderDaybook(); }
-function daybookRows() {
+function toggleDaybookGroup(key) {
+    if(expandedDaybookGroups.has(key)) expandedDaybookGroups.delete(key);
+    else expandedDaybookGroups.add(key);
+    renderDaybook();
+}
+function daybookRows(applyFilters = true) {
     let r = getRange(), list = scopeList(), run = balanceBefore(r.from, r.wallet);
     list.forEach(e => { e._d = delta(e, r.wallet); run += e._d; e._bal = run; });
+    if(!applyFilters) return list;
     let type = $('dbType').value, q = $('dbSearch').value.trim().toLowerCase();
     return list.filter(e => {
         if(type === 'fee' && !e.isFee) return false;
@@ -664,18 +671,42 @@ function renderDaybook() {
     ];
     $('dbStrip').innerHTML = strip.map(s => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${s.t}</div><div class="text-xl font-extrabold ${s.c} mt-1">PKR ${fmt(s.v)}</div></div>`).join('');
 
-    let rows = daybookRows();
-    if($('dbOrder').value === 'desc') rows = [...rows].reverse();
-    $('dbCount').innerText = `${rows.length} entries`;
-    let shown = rows.slice(0, dbLimit);
-    $('dbBody').innerHTML = shown.length ? shown.map(e => {
+    const allRows = daybookRows(false), rows = daybookRows();
+    const visibleRows = new Set(rows), groups = new Map();
+    allRows.forEach(e => {
+        const key = JSON.stringify([e.date, e.kind, e.wallet, e.kind === 'transfer' ? e.wallet2 : '', !!e.isFee, !!e.isLiabilitySettlement, !!e.isSecurityRefund]);
+        let group = groups.get(key);
+        if(!group) {
+            group = { key, entries: [], receipt: 0, payment: 0, transfer: 0, delta: 0, balance: 0 };
+            groups.set(key, group);
+        }
+        group.entries.push(e);
+        group.delta += e._d;
+    });
+    let groupedRunning = balanceBefore(r.from, r.wallet);
+    groups.forEach(group => {
+        groupedRunning += group.delta;
+        group.balance = groupedRunning;
+        group.visibleEntries = group.entries.filter(e => visibleRows.has(e));
+        group.visibleEntries.forEach(e => {
+            if(e._d > 0) group.receipt += e._d;
+            else if(e._d < 0) group.payment += -e._d;
+            if(e.kind === 'transfer' && r.wallet === 'ALL') group.transfer += e.amount;
+        });
+    });
+    const visibleGroups = [...groups.values()].filter(group => group.visibleEntries.length);
+    let displayGroups = visibleGroups;
+    if($('dbOrder').value === 'desc') displayGroups = displayGroups.reverse();
+    $('dbCount').innerText = `${rows.length} entries · ${displayGroups.length} date/type group${displayGroups.length === 1 ? '' : 's'}`;
+    let shown = displayGroups.slice(0, dbLimit);
+    const renderEntryRow = (e, detail = false) => {
         let isT = e.kind === 'transfer' && r.wallet === 'ALL';
         let recAmt = e._d > 0 ? 'PKR ' + fmt(e._d) : '', payAmt = e._d < 0 ? 'PKR ' + fmt(-e._d) : '';
         let kindBadge = `<span class="px-2 py-0.5 rounded-md border ${KIND_META[e.kind].cls}">${KIND_META[e.kind].label}</span>${e.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
         let acct = e.kind === 'transfer' ? `${WALLETS[e.wallet].icon} → ${WALLETS[e.wallet2].icon}` : `${WALLETS[e.wallet].icon} ${WALLETS[e.wallet].label}`;
         let canEdit = e.manual && !e.isSecurityRefund;
-        return `<tr class="border-b hover:bg-slate-50 align-top">
-            <td class="p-2.5 whitespace-nowrap text-slate-600">${fmtDate(e.date)}</td>
+        return `<tr class="border-b hover:bg-slate-50 align-top ${detail ? 'bg-slate-50/70' : ''}">
+            <td class="p-2.5 whitespace-nowrap text-slate-600">${detail ? '<span class="pl-5">↳</span> ' : ''}${fmtDate(e.date)}</td>
             <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap" title="${esc(e.id)}">${esc(e.ref)}</td>
             <td class="p-2.5 whitespace-nowrap">${kindBadge}</td>
             <td class="p-2.5 whitespace-nowrap text-slate-600">${acct}</td>
@@ -688,8 +719,37 @@ function renderDaybook() {
                 ${e.isSecurityRefund ? '<span class="text-[10px] text-slate-400">Managed by Payroll</span>' : canEdit ? `<button onclick="editEntry(${esc(JSON.stringify(e.id))})" title="Edit" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>` : `<button onclick="quickEdit(${esc(JSON.stringify(e.id))})" title="Edit account / date / amount" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>`}
                 ${e.isSecurityRefund ? '' : `<button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`}
             </td></tr>`;
+    };
+    $('dbBody').innerHTML = shown.length ? shown.map(group => {
+        if(group.visibleEntries.length < 2) return renderEntryRow(group.visibleEntries[0]);
+        const first = group.visibleEntries[0], count = group.visibleEntries.length, expanded = expandedDaybookGroups.has(group.key);
+        const isTransfer = first.kind === 'transfer' && r.wallet === 'ALL';
+        const receipt = isTransfer ? `PKR ${fmt(group.transfer)}` : group.receipt ? `PKR ${fmt(group.receipt)}` : '';
+        const payment = group.payment ? `PKR ${fmt(group.payment)}` : '';
+        const kindBadge = `<span class="px-2 py-0.5 rounded-md border ${KIND_META[first.kind].cls}">${KIND_META[first.kind].label}</span>${first.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
+        const acct = first.kind === 'transfer' ? `${WALLETS[first.wallet].icon} → ${WALLETS[first.wallet2].icon}` : `${WALLETS[first.wallet].icon} ${WALLETS[first.wallet].label}`;
+        const verb = first.kind === 'receipt' || first.kind === 'opening' ? 'receipts' : first.kind === 'payment' ? 'payments' : 'transfers';
+        const amount = group.receipt || group.payment || group.transfer;
+        const summary = `<tr class="border-b bg-indigo-50/60 hover:bg-indigo-50 align-top">
+            <td class="p-2.5 whitespace-nowrap text-slate-600">${fmtDate(first.date)}</td>
+            <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap">${count} entries</td>
+            <td class="p-2.5 whitespace-nowrap">${kindBadge}</td>
+            <td class="p-2.5 whitespace-nowrap text-slate-600">${acct}</td>
+            <td class="p-2.5 text-slate-800">
+                <button type="button" aria-expanded="${expanded}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${count} ${verb}" onclick="toggleDaybookGroup(this.dataset.group)" data-group="${esc(group.key)}" class="inline-flex items-center justify-center w-5 h-5 mr-1 rounded border border-indigo-200 bg-white text-indigo-700 font-bold no-print">${expanded ? '−' : '+'}</button>
+                <span class="font-semibold">${count} ${verb}</span>
+                <span class="block text-[11px] text-slate-500 ml-7">Combined total · ${amount ? 'PKR ' + fmt(amount) : 'PKR 0'}</span>
+            </td>
+            <td class="p-2.5 text-right font-bold text-emerald-600 whitespace-nowrap">${receipt}</td>
+            <td class="p-2.5 text-right font-bold text-rose-600 whitespace-nowrap">${payment}</td>
+            <td class="p-2.5 text-right font-semibold text-slate-700 whitespace-nowrap">${fmt(group.balance)}</td>
+            <td class="p-2.5 no-print"></td>
+        </tr>`;
+        const visibleEntries = $('dbOrder').value === 'desc' ? [...group.visibleEntries].reverse() : group.visibleEntries;
+        const details = expanded ? visibleEntries.map(e => renderEntryRow(e, true)).join('') : '';
+        return summary + details;
     }).join('') : `<tr><td colspan="9" class="p-8 text-center text-slate-400">No entries found in this period.</td></tr>`;
-    $('dbMore').innerHTML = rows.length > dbLimit ? `<button onclick="dbLimit+=300;renderDaybook()" class="bg-white border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold">Show more (${rows.length - dbLimit} remaining)</button>` : '';
+    $('dbMore').innerHTML = displayGroups.length > dbLimit ? `<button onclick="dbLimit+=300;renderDaybook()" class="bg-white border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold">Show more (${displayGroups.length - dbLimit} remaining groups)</button>` : '';
 }
 
 function exportCsv(name, header, rows) {
