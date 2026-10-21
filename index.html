@@ -52,10 +52,12 @@ const fmt = n => (Number(n) || 0).toLocaleString('en-US');
 const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
 function rank(p) { const a = String(p || '').trim().toLowerCase().split(/\s+/), m = MONTHS.indexOf(a[0]); return m < 0 ? null : (parseInt(a[1]) || 0) * 12 + m; }
 
-async function initDashboard() {
+let dashboardLoadToken = 0, dashboardRefreshTimer = 0;
+async function initDashboard(backgroundRefresh = false) {
+    const loadToken = ++dashboardLoadToken;
     const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth(), today = now.toLocaleDateString('en-CA'), ym = today.slice(0, 7);
     $('dateLine').innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-    $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 p-6">Loading...</div>';
+    if (!backgroundRefresh) $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 p-6">Loading...</div>';
     try {
         const [sR, fR, aR, bR, pR] = await Promise.all([
             sbFetchAll('students', 'select=admis_no,status,class'),
@@ -64,6 +66,7 @@ async function initDashboard() {
             sbFetchAll('books', 'select=*'),
             sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Promise')
         ]);
+        if (loadToken !== dashboardLoadToken) return;
         const students = await sR.json(), fees = await fR.json(), acc = await aR.json();
         const bookRows = bR.ok ? await bR.json() : [], promRows = pR.ok ? await pR.json() : [];
         if (![students, fees, acc].every(Array.isArray)) throw new Error('load');
@@ -105,10 +108,16 @@ async function initDashboard() {
         const rows = Object.entries(byClass).sort((a, b) => b[1] - a[1]), max = rows.length ? rows[0][1] : 1;
         $('classRows').innerHTML = rows.length ? rows.map(([c, v]) => `<div><div class="flex justify-between text-xs mb-0.5"><span class="font-semibold">${esc(c)}</span><span class="text-rose-600 font-bold">PKR ${fmt(v)}</span></div><div class="h-2 bg-slate-100 rounded"><div class="h-2 bg-rose-400 rounded" style="width:${Math.max(3, v / max * 100)}%"></div></div></div>`).join('') : '<p class="text-sm text-emerald-600">No pending dues. 🎉</p>';
     } catch (e) {
+        if (loadToken !== dashboardLoadToken) return;
         console.error(e);
         $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-rose-500 p-6">Could not load dashboard data. Check your internet connection.</div>';
     }
 }
+window.addEventListener('sb:data-cache-updated', event => {
+    if (!['students', 'fees', 'accounts', 'books', 'settings'].includes(event.detail && event.detail.table) || document.visibilityState === 'hidden') return;
+    clearTimeout(dashboardRefreshTimer);
+    dashboardRefreshTimer = setTimeout(() => initDashboard(true), 600);
+});
 </script>
 </body>
 </html>

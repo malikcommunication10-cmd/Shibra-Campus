@@ -10,7 +10,7 @@ function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 //  login.html sets  window.SB_NO_GUARD = true  before loading this file.
 // ============================================================================
 const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1';
-const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000;
+const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000, SB_DATA_CACHE_STALE = 5 * 60 * 1000;
 const _sbDataMemory = new Map(), _sbDataPending = new Map();
 function sbSession() { try { return JSON.parse(localStorage.getItem(SB_SESSION_KEY) || 'null'); } catch (e) { return null; } }
 function sbDataCacheUser() { return encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase()); }
@@ -35,6 +35,7 @@ function sbCacheClear(table) {
         }
         const revision = `${Date.now()}_${Math.random()}`;
         localStorage.setItem(tableName ? `sb_data_rev_${tableName}` : 'sb_data_rev_all', revision);
+        if (!tableName) sessionStorage.removeItem(`sb_data_preload_v1_${sbDataCacheUser()}`);
         if ((!tableName || tableName === 'settings') && typeof _settingLists !== 'undefined') {
             _settingLists = null;
             _settingListsRevision = '';
@@ -150,6 +151,32 @@ async function sbFetchMe() {
 function sbSaveMe(m) { try { localStorage.setItem(SB_ME_KEY, JSON.stringify(m)); } catch (e) {} }
 function sbLoadMeCache() { try { const c = JSON.parse(localStorage.getItem(SB_ME_KEY) || 'null'); const s = sbSession(); if (c && s && c.email === s.email && c.perms && Date.now() - c.ts < 8 * 3600e3) return c; } catch (e) {} return null; }
 
+function sbQueueDataPreload() {
+    if (!ME || ME.error || ME.noaccess || !sbSession()) return;
+    const preloadKey = `sb_data_preload_v1_${sbDataCacheUser()}`;
+    try {
+        const last = Number(sessionStorage.getItem(preloadKey) || 0);
+        if (Date.now() - last < 60000) return;
+        sessionStorage.setItem(preloadKey, String(Date.now()));
+    } catch (e) {}
+
+    const jobs = [];
+    const canUseSettings = ['settings', 'books', 'fees', 'accounts', 'staff', 'dashboard'].some(page => can(page, 'v'));
+    const canUseStudents = ['books', 'fees', 'dashboard'].some(page => can(page, 'v'));
+    if (canUseSettings) jobs.push(['settings', 'select=setting_key,setting_value']);
+    if (canUseStudents) jobs.push(['students', 'select=admis_no,student_name,class,status']);
+    if (!jobs.length) return;
+
+    const run = () => {
+        Promise.all(jobs.map(async ([table, query]) => {
+            const response = await sbFetchAll(table, query);
+            if (!response.ok) throw new Error(`${table} preload failed with HTTP ${response.status}`);
+        })).catch(error => console.error('Background data preload failed:', error));
+    };
+    if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 2000 });
+    else setTimeout(run, 300);
+}
+
 // ---- checks used by the pages ----------------------------------------------
 function deny(msg) { const m = msg || 'You do not have permission for this action.'; const f = window.toast ? (x => window.toast(x, false)) : (window.showCustomAlert || window.showAlert || window.alert); f(m); }
 function dayAllowed(date, changing) {
@@ -212,6 +239,7 @@ function sbApplyMe() {
         try { installGuards(); } catch (e) { console.error(e); }
         sbUpdateDayCloseDateLimits();
         if (typeof window.shibraDayCloseRefresh === 'function') window.shibraDayCloseRefresh();
+        sbQueueDataPreload();
         if (!window.__sbDayCloseObserver) {
             window.__sbDayCloseObserver = new MutationObserver(sbUpdateDayCloseDateLimits);
             window.__sbDayCloseObserver.observe(document.body, { childList: true, subtree: true });
@@ -280,51 +308,67 @@ async function sbFetchAllUncached(table, query) {
     return { ok: true, status: 200, json: async () => rows, text: async () => '' };
 }
 
-// Cache reads briefly per signed-in user; REST writes and permission changes invalidate affected data.
-async function sbFetchAll(table, query) {
-    query = query || 'select=*';
-    const key = sbDataCacheKey(table, query), revision = sbDataRevision(table), now = Date.now();
-    for (const [cacheKey, entry] of _sbDataMemory)
-        if (entry.expires <= now) _sbDataMemory.delete(cacheKey);
-    const cached = _sbDataMemory.get(key);
-    let packed = cached && cached.revision === revision && cached.expires > now ? cached.packed : '';
-    let expires = packed ? cached.expires : 0;
-    let cachedRows = null;
-    if (!packed) {
-        try {
-            const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
-            if (saved && saved.revision === revision && saved.expires > now && Array.isArray(saved.rows)) {
-                cachedRows = saved.rows;
-                packed = JSON.stringify(cachedRows);
-                expires = saved.expires;
-            }
-        } catch (e) {}
-    }
-    if (packed) {
-        _sbDataMemory.set(key, { revision, expires, packed });
-        const rows = cachedRows || JSON.parse(packed);
-        return { ok: true, status: 200, json: async () => rows, text: async () => packed };
-    }
-    if (_sbDataPending.has(key)) return _sbDataPending.get(key);
-
+// Cache briefly per signed-in user; expired data stays visible while a background refresh runs.
+function sbFetchAllNetwork(table, query, key, revision, background) {
+    const existing = _sbDataPending.get(key);
+    if (existing && existing.revision === revision) return existing.promise;
     const request = (async () => {
         const response = await sbFetchAllUncached(table, query);
         if (!response.ok) return response;
         const rows = await response.json();
         if (!Array.isArray(rows)) return { ok: false, status: response.status, json: async () => rows, text: async () => '' };
-        const value = JSON.stringify(rows), expires = Date.now() + SB_DATA_CACHE_TTL;
-        _sbDataMemory.set(key, { revision, expires, packed: value });
-        if (sbDataRevision(table) === revision) {
-            try {
-                if (value.length < 1800000)
-                    sessionStorage.setItem(key, JSON.stringify({ revision, expires, rows }));
-            } catch (e) {}
+        if (sbDataRevision(table) !== revision) return { ok: true, status: response.status, json: async () => rows, text: async () => '' };
+        const value = JSON.stringify(rows), expires = Date.now() + SB_DATA_CACHE_TTL, staleUntil = expires + SB_DATA_CACHE_STALE;
+        _sbDataMemory.set(key, { revision, expires, staleUntil, packed: value });
+        try {
+            if (value.length < 1800000)
+                sessionStorage.setItem(key, JSON.stringify({ revision, expires, staleUntil, rows }));
+        } catch (e) {}
+        if (table === 'settings' && typeof _settingLists !== 'undefined') {
+            _settingLists = null;
+            _settingListsRevision = '';
+            try { sessionStorage.removeItem('sb_settings_v2'); } catch (e) {}
         }
+        if (background) window.dispatchEvent(new CustomEvent('sb:data-cache-updated', { detail: { table, query } }));
         return { ok: true, status: response.status, json: async () => rows, text: async () => '' };
     })();
-    _sbDataPending.set(key, request);
-    try { return await request; }
-    finally { _sbDataPending.delete(key); }
+    let tracked;
+    tracked = request.finally(() => {
+        const pending = _sbDataPending.get(key);
+        if (pending && pending.promise === tracked) _sbDataPending.delete(key);
+    });
+    _sbDataPending.set(key, { revision, promise: tracked });
+    return tracked;
+}
+async function sbFetchAll(table, query) {
+    query = query || 'select=*';
+    const key = sbDataCacheKey(table, query), revision = sbDataRevision(table), now = Date.now();
+    for (const [cacheKey, entry] of _sbDataMemory)
+        if (entry.staleUntil <= now) _sbDataMemory.delete(cacheKey);
+
+    let cached = _sbDataMemory.get(key);
+    if (!cached || cached.revision !== revision) {
+        cached = null;
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+            if (saved && saved.revision === revision && Array.isArray(saved.rows)) {
+                const staleUntil = Number(saved.staleUntil || saved.expires || 0);
+                if (staleUntil > now) {
+                    cached = { revision, expires: Number(saved.expires) || 0, staleUntil, packed: JSON.stringify(saved.rows) };
+                    _sbDataMemory.set(key, cached);
+                } else sessionStorage.removeItem(key);
+            }
+        } catch (e) {}
+    }
+    if (cached && cached.staleUntil > now) {
+        const rows = JSON.parse(cached.packed);
+        if (cached.expires <= now)
+            sbFetchAllNetwork(table, query, key, revision, true).then(response => {
+                if (!response.ok) console.warn(`Background refresh for ${table} failed with HTTP ${response.status}.`);
+            }).catch(error => console.warn(`Background refresh for ${table} failed:`, error));
+        return { ok: true, status: 200, json: async () => rows, text: async () => cached.packed };
+    }
+    return sbFetchAllNetwork(table, query, key, revision);
 }
 
 // Dropdown lists + rules maintained on the System Settings page (with sensible defaults)
