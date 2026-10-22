@@ -881,23 +881,39 @@ function openPurchaseInvoice() {
     $('piNumber').value = newPurchaseInvoiceNumber();
     $('piVendor').value = '';
     $('piNotes').value = '';
+    $('piDiscountType').value = 'percentage';
+    $('piDiscountValue').value = '0';
     $('piPostAcc').checked = false;
     $('purchaseVendorList').innerHTML = [...new Set(txs.filter(t => ['purchase', 'purchase_return'].includes(t.kind)).map(t => t.party).filter(Boolean))].sort().map(name => `<option value="${esc(name)}">`).join('');
+    fillPurchaseInvoiceClassOptions();
     renderPurchaseInvoiceLines();
     $('purchaseInvoiceModal').classList.remove('hidden');
 }
 function closePurchaseInvoice() { $('purchaseInvoiceModal').classList.add('hidden'); }
+function fillPurchaseInvoiceClassOptions() {
+    const classes = [...new Set([
+        ...(((_settingLists || {})['Class'] || []).map(value => String(value || '').trim())),
+        ...Object.values(items).map(item => String(item.cls || '').trim()),
+        ...purchaseInvoiceLines.map(line => String(line.itemClass || '').trim())
+    ].filter(value => value && value.toLowerCase() !== 'all'))];
+    return ['<option value="All">All classes</option>', ...classes.map(value => `<option value="${esc(value)}">${esc(value)}</option>`)].join('');
+}
 function renderPurchaseInvoiceLines() {
     $('piRows').innerHTML = purchaseInvoiceLines.map((line, index) => `<div class="grid grid-cols-2 md:grid-cols-[minmax(180px,2fr)_80px_110px_110px_100px_110px_36px] gap-2 items-end rounded-xl border border-slate-200 p-3">
         <div class="col-span-2 md:col-span-1"><label class="block text-[11px] font-semibold text-slate-600 mb-1">Book / item</label><input list="bookList" data-field="title" data-index="${index}" value="${esc(line.title)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="Item name"></div>
         <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Qty</label><input type="number" min="1" data-field="qty" data-index="${index}" value="${esc(line.qty)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm"></div>
         <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Cost / unit</label><input type="number" min="0.01" step="0.01" data-field="unit" data-index="${index}" value="${esc(line.unit)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="PKR"></div>
         <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Sale price</label><input type="number" min="0.01" step="0.01" data-field="salePrice" data-index="${index}" value="${esc(line.salePrice)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="PKR"></div>
-        <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Class</label><input data-field="itemClass" data-index="${index}" value="${esc(line.itemClass)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="All"></div>
+        <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Class</label><select data-field="itemClass" data-index="${index}" onchange="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm">${fillPurchaseInvoiceClassOptions()}</select></div>
         <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Category</label><input data-field="category" data-index="${index}" value="${esc(line.category)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="Optional"></div>
         <button type="button" onclick="removePurchaseInvoiceLine(${index})" aria-label="Remove item" class="h-9 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold">×</button>
         <div class="col-span-2 md:col-span-7 text-right text-xs text-slate-500">Line total: <b class="text-slate-800">PKR ${fmt((Number(line.qty) || 0) * (Number(line.unit) || 0))}</b></div>
     </div>`).join('');
+    purchaseInvoiceLines.forEach((line, index) => {
+        const select = $('piRows').querySelector(`select[data-index="${index}"][data-field="itemClass"]`);
+        if(select && [...select.options].some(option => option.value === line.itemClass)) select.value = line.itemClass;
+        else if(select) select.value = 'All';
+    });
     updatePurchaseInvoiceTotal();
 }
 function updatePurchaseInvoiceLine(input) {
@@ -919,8 +935,12 @@ function updatePurchaseInvoiceLine(input) {
 }
 function updatePurchaseInvoiceTotal() {
     if(!$('piTotal')) return;
-    const total = purchaseInvoiceLines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unit) || 0), 0);
-    $('piTotal').innerText = `Invoice total: PKR ${fmt(total)}`;
+    const subtotal = purchaseInvoiceLines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unit) || 0), 0);
+    const value = Math.max(0, Number($('piDiscountValue').value) || 0);
+    const discount = $('piDiscountType').value === 'percentage' ? subtotal * Math.min(value, 100) / 100 : Math.min(value, subtotal);
+    $('piSubtotal').innerText = 'PKR ' + fmt(subtotal);
+    $('piDiscountTotal').innerText = 'PKR ' + fmt(discount);
+    $('piTotal').innerText = `Invoice total: PKR ${fmt(subtotal - discount)}`;
 }
 function addPurchaseInvoiceLine() {
     purchaseInvoiceLines.push({ title: '', qty: 1, unit: '', salePrice: '', itemClass: 'All', category: '' });
@@ -934,7 +954,12 @@ function removePurchaseInvoiceLine(index) {
 async function savePurchaseInvoice() {
     const date = $('piDate').value, invoiceNo = $('piNumber').value.trim(), vendor = $('piVendor').value.trim();
     const notes = $('piNotes').value.trim(), paid = $('piPostAcc').checked, wallet = $('piWallet').value;
+    const discountType = $('piDiscountType').value, discountValue = Number($('piDiscountValue').value);
     if(!date || !invoiceNo || !vendor) { toast('Enter the invoice date, invoice number and vendor.', false); return; }
+    if(!Number.isFinite(discountValue) || discountValue < 0 || (discountType === 'percentage' && discountValue > 100)) {
+        toast('Discount must be zero or more; percentage discount cannot exceed 100%.', false);
+        return;
+    }
     if(txs.some(t => t.invoiceNo.toLowerCase() === invoiceNo.toLowerCase())) { toast('This supplier invoice number already exists. Use a unique number.', false); return; }
     const lines = purchaseInvoiceLines.map(line => ({
         title: String(line.title || '').trim(), qty: Number(line.qty), unit: Number(line.unit), salePrice: Number(line.salePrice),
@@ -944,6 +969,17 @@ async function savePurchaseInvoice() {
         toast('Each item needs a title, quantity, cost price and sale price above zero.', false);
         return;
     }
+    const subtotal = lines.reduce((sum, line) => sum + line.qty * line.unit, 0);
+    const invoiceDiscount = Math.round(Math.min(discountType === 'percentage' ? subtotal * discountValue / 100 : discountValue, subtotal) * 100) / 100;
+    let discountRemaining = invoiceDiscount;
+    const discountedLines = lines.map((line, index) => {
+        const gross = Math.round(line.qty * line.unit * 100) / 100;
+        const share = Math.min(discountRemaining, index === lines.length - 1
+            ? discountRemaining
+            : subtotal > 0 ? Math.round(invoiceDiscount * gross / subtotal * 100) / 100 : 0, gross);
+        discountRemaining = Math.round((discountRemaining - share) * 100) / 100;
+        return { ...line, amount: Math.max(0, Math.round((gross - share) * 100) / 100) };
+    });
     const used = new Set(txs.map(t => t.voucher.toUpperCase()).filter(Boolean));
     const nextVoucher = () => {
         let voucher;
@@ -951,11 +987,11 @@ async function savePurchaseInvoice() {
         used.add(voucher.toUpperCase());
         return voucher;
     };
-    const rows = lines.map(line => {
-        const voucher = nextVoucher(), amount = Math.round(line.qty * line.unit * 100) / 100;
+    const rows = discountedLines.map(line => {
+        const voucher = nextVoucher();
         return {
             type: 'Purchase', party_name: vendor, book_title: line.title, qty: line.qty, unit_price: line.unit,
-            net_amount: amount, date, invoice_no: invoiceNo, voucher_no: voucher, payment_mode: null,
+            net_amount: line.amount, date, invoice_no: invoiceNo, voucher_no: voucher, payment_mode: null,
             notes: notes || null, item_class: line.itemClass, category: line.category || null, sale_price: line.salePrice
         };
     });
@@ -2100,11 +2136,13 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeItemLe
    <div id="piRows" class="space-y-2"></div>
    <button type="button" onclick="addPurchaseInvoiceLine()" class="px-3 py-2 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 text-sm font-semibold">+ Add another item</button>
    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50 border p-3">
+    <div><label for="piDiscountType" class="block text-xs font-semibold text-slate-700 mb-1">Invoice discount type</label><select id="piDiscountType" onchange="updatePurchaseInvoiceTotal()" class="w-full border rounded-lg p-2 text-sm bg-white"><option value="percentage">Percentage (%)</option><option value="fixed">Lump sum (PKR)</option></select></div>
+    <div><label for="piDiscountValue" class="block text-xs font-semibold text-slate-700 mb-1">Discount</label><input id="piDiscountValue" type="number" min="0" step="0.01" value="0" oninput="updatePurchaseInvoiceTotal()" class="w-full border rounded-lg p-2 text-sm bg-white"></div>
     <div><label for="piWallet" class="block text-xs font-semibold text-slate-700 mb-1">Paid from (if recorded in Accounts)</label><select id="piWallet" class="w-full border rounded-lg p-2 text-sm bg-white"><option value="cash">💵 Cash in Hand</option><option value="bank">🏦 Bank</option><option value="online">📱 Online / JazzCash</option></select></div>
     <label class="flex items-center gap-2 text-sm text-slate-700 sm:mt-6"><input id="piPostAcc" type="checkbox"> Mark invoice as paid and record in Accounts</label>
     <label class="sm:col-span-2 text-xs text-slate-600">Notes (optional)<input id="piNotes" class="w-full mt-1 border rounded-lg p-2 text-sm" placeholder="Invoice notes"></label>
    </div>
-   <div id="piTotal" class="text-right font-bold text-violet-800">Invoice total: PKR 0</div>
+   <div class="flex flex-wrap justify-end gap-x-5 gap-y-1 text-sm"><span>Subtotal: <b id="piSubtotal">PKR 0</b></span><span>Discount: <b id="piDiscountTotal">PKR 0</b></span><span id="piTotal" class="font-bold text-violet-800">Invoice total: PKR 0</span></div>
   </div>
   <div class="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-white"><button type="button" onclick="closePurchaseInvoice()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button type="button" onclick="savePurchaseInvoice()" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm">Save complete invoice</button></div>
  </div>
