@@ -9,18 +9,10 @@ function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 //  LOGIN + USERS & ROLES.  Every page needs a session; every data request carries the user's token.
 //  login.html sets  window.SB_NO_GUARD = true  before loading this file.
 // ============================================================================
-const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1', SB_LOGOUT_REASON_KEY = 'sb_logout_reason_v1';
-const SB_IDLE_TIMEOUT = 10 * 60 * 1000;
+const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1';
 const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000, SB_DATA_CACHE_STALE = 5 * 60 * 1000;
 const _sbDataMemory = new Map(), _sbDataPending = new Map();
 function sbSession() { try { return JSON.parse(localStorage.getItem(SB_SESSION_KEY) || 'null'); } catch (e) { return null; } }
-function sbNewSessionId() {
-    if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0;
-        return (c === 'x' ? r : (r & 3 | 8)).toString(16);
-    });
-}
 function sbDataCacheUser() { return encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase()); }
 function sbDataCacheKey(table, query) {
     return `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_${table}_${encodeURIComponent(query)}`;
@@ -51,101 +43,19 @@ function sbCacheClear(table) {
         }
     } catch (e) {}
 }
-function sbSaveSession(j, newDeviceSession = false) {
+function sbSaveSession(j) {
     const old = sbSession() || {};
     const email = String((j.user && j.user.email) || old.email || '').toLowerCase();
-    const sameAccount = email && email === String(old.email || '').toLowerCase();
     const s = {
         access_token: j.access_token,
         refresh_token: j.refresh_token || old.refresh_token,
         expires_at: Math.floor(Date.now() / 1000) + (j.expires_in || 3600),
-        email,
-        session_id: newDeviceSession && !sameAccount ? sbNewSessionId() : (old.session_id || sbNewSessionId()),
-        last_activity: newDeviceSession ? Date.now() : (old.last_activity || Date.now())
+        email
     };
     localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s)); return s;
 }
 function sbClearAuth() { try { sbCacheClear(); localStorage.removeItem(SB_SESSION_KEY); localStorage.removeItem(SB_ME_KEY); } catch (e) {} }
-let _sbLoggingOut = false, _sbLastSessionTouch = 0, _sbSessionMonitor = null;
-function sbSessionIsIdle(s = sbSession()) {
-    if (!s) return true;
-    const lastActivity = Number(s.last_activity);
-    return Number.isFinite(lastActivity) && lastActivity > 0 && Date.now() - lastActivity >= SB_IDLE_TIMEOUT;
-}
-async function sbSessionRpc(name, body = {}, allowIdle = false) {
-    const s = sbSession();
-    if (!s || !s.session_id) return false;
-    const token = await sbFreshToken(allowIdle);
-    if (!token) return false;
-    const response = await _sbFetch(`${SB_URL}/rest/v1/rpc/${name}`, {
-        method: 'POST',
-        headers: { apikey: SB_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-app-session-id': s.session_id },
-        body: JSON.stringify(body)
-    });
-    if (!response.ok) throw new Error(`${name} failed with HTTP ${response.status}: ${await response.text()}`);
-    return response.json();
-}
-async function sbClaimDeviceSession() {
-    const s = sbSession();
-    if (!s || !s.session_id) throw new Error('Could not create this device session. Please try again.');
-    const claimed = await sbSessionRpc('app_claim_session', { p_session_id: s.session_id });
-    if (claimed !== true) throw new Error('This account is already signed in on another device. Sign out there, or wait 10 minutes after its last use, then try again.');
-    return true;
-}
-async function sbReleaseDeviceSession() {
-    try { await sbSessionRpc('app_release_session', {}, true); }
-    catch (error) { console.warn('Could not release the device session on the server:', error); }
-}
-async function sbLogout(reason, release = true) {
-    if (_sbLoggingOut) return;
-    _sbLoggingOut = true;
-    if (reason) { try { sessionStorage.setItem(SB_LOGOUT_REASON_KEY, reason); } catch (e) {} }
-    if (release) await sbReleaseDeviceSession();
-    sbClearAuth();
-    location.replace('login.html');
-}
-function sbTouchActivity() {
-    const s = sbSession();
-    if (!s || _sbLoggingOut) return;
-    if (sbSessionIsIdle(s)) { sbLogout('idle'); return; }
-    const now = Date.now();
-    if (now - Number(s.last_activity || 0) < 15000) return;
-    s.last_activity = now;
-    try { localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s)); }
-    catch (error) { console.warn('Could not update session activity:', error); }
-    if (now - _sbLastSessionTouch >= 20000) {
-        _sbLastSessionTouch = now;
-        sbSessionRpc('app_touch_session', { p_session_id: s.session_id }).then(current => {
-            if (current !== true) sbLogout('replaced');
-        }).catch(error => console.warn('Could not update the active session:', error));
-    }
-}
-async function sbCheckDeviceSession() {
-    if (!sbSession() || _sbLoggingOut) return;
-    if (sbSessionIsIdle()) { await sbLogout('idle'); return; }
-    try {
-        const current = await sbSessionRpc('app_session_is_current');
-        if (current !== true) await sbLogout('replaced');
-    } catch (error) { console.warn('Could not verify the active device session:', error); }
-}
-function sbStartSessionMonitor() {
-    if (!sbSession() || window.SB_NO_GUARD) return;
-    if (!_sbSessionMonitor) {
-        ['pointerdown', 'keydown', 'touchstart', 'scroll', 'click', 'input'].forEach(eventName =>
-            document.addEventListener(eventName, sbTouchActivity, { passive: true })
-        );
-        _sbSessionMonitor = setInterval(() => {
-            if (sbSessionIsIdle()) sbLogout('idle');
-            else if (document.visibilityState === 'visible') sbCheckDeviceSession();
-        }, 15000);
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') sbCheckDeviceSession();
-        });
-        window.addEventListener('storage', event => {
-            if (event.key === SB_SESSION_KEY && !event.newValue && sbSession()) sbLogout('signed-out', false);
-        });
-    }
-}
+function sbLogout() { sbClearAuth(); location.replace('login.html'); }
 const _sbFetch = window.fetch.bind(window);
 let _sbRefreshing = null;
 function sbPakistanDate(offsetDays) {
@@ -174,9 +84,8 @@ function sbUpdateDayCloseDateLimits() {
         else input.removeAttribute('max');
     });
 }
-async function sbFreshToken(allowIdle = false) {
+async function sbFreshToken() {
     const s = sbSession(); if (!s) return null;
-    if (!allowIdle && !window.SB_NO_GUARD && sbSessionIsIdle(s)) { sbLogout('idle'); return null; }
     if (s.expires_at - Date.now() / 1000 > 60) return s.access_token;
     if (!_sbRefreshing) _sbRefreshing = (async () => {
         try {
@@ -210,8 +119,6 @@ window.fetch = async function (input, init) {
         const h = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
         h.set('apikey', SB_KEY);
         h.set('Authorization', 'Bearer ' + tok);
-        const activeSession = sbSession();
-        if (activeSession && activeSession.session_id) h.set('x-app-session-id', activeSession.session_id);
         init.headers = h;
     }
     return _sbFetch(input, init);
@@ -234,14 +141,8 @@ const flag = f => !!(ME && ME.perms && (ME.perms.flags || []).includes(f));
 const todayYmd = () => sbPakistanDate(0);
 function sbFirstPage(me) { const m = me || ME; for (const p of PAGES) if (m && m.perms && String((m.perms.pages || {})[p[0]] || '').includes('v')) return p[2]; return null; }
 async function sbFetchMe() {
-    let s = sbSession(); if (!s) return null;
-    if (!s.session_id) {
-        sbSaveSession(s, true);
-        try { await sbClaimDeviceSession(); }
-        catch (error) { console.warn('Could not claim the existing device session:', error); await sbLogout('replaced'); return null; }
-        s = sbSession();
-    }
-    const get = async path => { try { const r = await _sbFetch(`${SB_URL}/rest/v1/${path}`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + (await sbFreshToken()), 'x-app-session-id': (sbSession() || {}).session_id || '' } }); const j = await r.json(); return r.ok ? j : null; } catch (e) { return null; } };
+    const s = sbSession(); if (!s) return null;
+    const get = async path => { try { const r = await _sbFetch(`${SB_URL}/rest/v1/${path}`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + (await sbFreshToken()) } }); const j = await r.json(); return r.ok ? j : null; } catch (e) { return null; } };
     const u = await get(`app_users?select=name,role,active,perms&email=eq.${encodeURIComponent(String(s.email || '').toLowerCase())}`);
     if (!Array.isArray(u)) return { error: 'setup', email: s.email };
     if (!u[0]) return { noaccess: true, email: s.email };
@@ -341,7 +242,6 @@ function sbApplyMe() {
     if (key && !can(key, 'v')) { const f = sbFirstPage(); if (f && f !== (location.pathname.split('/').pop() || 'index.html')) { location.replace(f); return; } sbShowBlock('No access', 'You are not allowed to open this page.', true); return; }
     document.documentElement.style.visibility = 'visible';
     const go = () => {
-        sbStartSessionMonitor();
         try { installGuards(); } catch (e) { console.error(e); }
         sbUpdateDayCloseDateLimits();
         if (typeof window.shibraDayCloseRefresh === 'function') window.shibraDayCloseRefresh();
@@ -354,20 +254,8 @@ function sbApplyMe() {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
 }
 if (!window.SB_NO_GUARD) {
-    if (!sbSession() || sbSessionIsIdle()) {
-        try { document.documentElement.style.visibility = 'hidden'; } catch (e) {}
-        if (sbSession()) sbLogout('idle'); else location.replace('login.html');
-    }
-    else if (!sbSession().session_id) {
-        try { document.documentElement.style.visibility = 'hidden'; } catch (e) {}
-        sbSaveSession(sbSession(), true);
-        sbClaimDeviceSession().then(() => location.reload()).catch(error => {
-            console.warn('Could not claim the existing device session:', error);
-            sbLogout('replaced');
-        });
-    }
+    if (!sbSession()) location.replace('login.html');
     else {
-        sbStartSessionMonitor();
         ME = sbLoadMeCache();
         if (ME) {
             sbApplyMe();
