@@ -74,7 +74,19 @@
             $('err').classList.remove('hidden');
         }
     } else if (sbSession() && sbLoadMeCache()) {
-        location.replace(sbFirstPage(sbLoadMeCache()) || 'index.html');
+        const cachedUser = sbLoadMeCache();
+        sbSessionRpc('app_session_is_current').then(isCurrent => {
+            if (isCurrent) {
+                location.replace(sbFirstPage(cachedUser) || 'index.html');
+                return;
+            }
+            sbClearAuth();
+            showErr('Your previous device session is no longer active. Sign in again.');
+        }).catch(error => {
+            console.error('Could not verify the saved device session:', error);
+            sbClearAuth();
+            showErr('Could not verify your saved session. Please sign in again.');
+        });
     }
     function togglePw() { const p = $('password'), show = p.type === 'password'; p.type = show ? 'text' : 'password'; $('pwBtn').innerText = show ? 'Hide' : 'Show'; }
     function showErr(m) { $('err').innerText = m; $('err').className = 'text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2'; }
