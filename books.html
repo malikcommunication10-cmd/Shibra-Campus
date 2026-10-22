@@ -69,14 +69,15 @@
                     <button onclick="openStudentSale()" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🎓 Student Sale</button>
                     <button onclick="openImport()" class="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">⬆️ Import items</button>
                     <button onclick="openTx('purchase')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">📥 Purchase</button>
+                    <button onclick="openPurchaseInvoice()" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🧾 Multi-item invoice</button>
                     <button onclick="openTx('sale_return')" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">↩️ Return</button>
                     </div>
             </div>
 
             <!-- UPGRADE BANNER -->
             <div id="setupBanner" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-5 mb-4 no-print">
-                <h3 class="font-bold text-amber-900 mb-1">Optional upgrade: enable dates, payment account, notes and Accounts sync</h3>
-                <p class="text-sm text-amber-800 mb-3">The page works as it is, but without a date column the period filters and reports are limited. Run this once in Supabase → SQL Editor, then refresh.</p>
+                <h3 class="font-bold text-amber-900 mb-1">Optional upgrade: enable dates, item details, invoice numbers and Accounts sync</h3>
+                <p class="text-sm text-amber-800 mb-3">Multi-item supplier invoices need the invoice_no column. Run this once in Supabase → SQL Editor, then refresh.</p>
                 <pre id="setupSql" class="bg-white border border-amber-200 rounded-xl p-3 text-xs overflow-x-auto whitespace-pre"></pre>
                 <div class="flex gap-2 mt-3">
                     <button onclick="copySetupSql()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">Copy SQL</button>
@@ -213,7 +214,7 @@
                 <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
-                            <tr><th class="p-2.5 no-print"></th><th class="p-2.5">Date</th><th class="p-2.5">Voucher</th><th class="p-2.5">Type</th><th class="p-2.5">Student / Vendor</th><th class="p-2.5">Book / Item</th><th class="p-2.5 text-right">Qty</th><th class="p-2.5 text-right">Unit price</th><th class="p-2.5 text-right">Discount</th><th class="p-2.5 text-right">Net amount</th><th class="p-2.5">Account</th><th class="p-2.5 no-print"></th></tr>
+                            <tr><th class="p-2.5 no-print"></th><th class="p-2.5">Date</th><th class="p-2.5">Invoice no.</th><th class="p-2.5">Voucher</th><th class="p-2.5">Type</th><th class="p-2.5">Student / Vendor</th><th class="p-2.5">Book / Item</th><th class="p-2.5 text-right">Qty</th><th class="p-2.5 text-right">Unit price</th><th class="p-2.5 text-right">Discount</th><th class="p-2.5 text-right">Net amount</th><th class="p-2.5">Account</th><th class="p-2.5 no-print"></th></tr>
                         </thead>
                         <tbody id="txBody"></tbody>
                     </table>
@@ -377,6 +378,7 @@ const KINDS = {
 const SETUP_SQL = `alter table public.books
   add column if not exists date date,
   add column if not exists voucher_no text,
+  add column if not exists invoice_no text,
   add column if not exists payment_mode text,
   add column if not exists notes text,
  add column if not exists item_class text,
@@ -387,9 +389,10 @@ const SETUP_SQL = `alter table public.books
 // ====================================================================================
 //  STATE + HELPERS
 // ====================================================================================
-let txs = [], txByUid = {}, items = {}, hasExt = false, hasItemCols = false, hasId = true;
+let txs = [], txByUid = {}, items = {}, hasExt = false, hasItemCols = false, hasInvoiceCol = false, hasId = true;
 let txLimit = 200, txKind = 'sale', lastSaved = null, editingTxUid = null, editingAccountRow = null, invoiceNumberManual = false;
 let selectedTxUids = new Set();
+let purchaseInvoiceLines = [], editingPurchaseInvoiceVouchers = [];
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -448,7 +451,7 @@ function normTx(row, idx) {
         uid, id: row.id, idx, kind, qty, unit, net, gross: qty * unit, discount: Math.max(0, qty * unit - net),
         title, key: norm(title), party: String(row.party_name || row.party || '').trim(),
         date: String(row.date || row.created_at || '').slice(0, 10),
-        voucher: String(row.voucher_no || '').trim(), mode: String(row.payment_mode || '').trim(), notes: String(row.notes || '').trim(), itemClass: String(row.item_class || '').trim(), category: String(row.category || '').trim(), salePrice: parseFloat(row.sale_price) || 0, raw: row
+        voucher: String(row.voucher_no || '').trim(), invoiceNo: String(row.invoice_no || '').trim(), mode: String(row.payment_mode || '').trim(), notes: String(row.notes || '').trim(), itemClass: String(row.item_class || '').trim(), category: String(row.category || '').trim(), salePrice: parseFloat(row.sale_price) || 0, raw: row
     };
 }
 
@@ -456,18 +459,19 @@ async function initBooks() {
     showLoading('Loading book store...');
     let c = getSupabaseConfig();
     try {
-        let [, [res, probe, probe2]] = await Promise.all([
+        let [, [res, probe, probe2, invoiceProbe]] = await Promise.all([
             Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]),
             Promise.all([
                 sbFetchAll('books', 'select=*'),
                 fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() }),
-                fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() })
+                fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() }),
+                fetch(`${c.url}/rest/v1/books?select=invoice_no&limit=1`, { headers: sbHeaders() })
             ])
         ]);
         try { await fillPaySelects(['mWallet', 'ssWallet', 'sdWallet', 'impWallet']); } catch (e) {}
         let rows = await res.json();
         if(!Array.isArray(rows)) throw new Error('books failed to load');
-        hasExt = probe.ok; hasItemCols = probe2.ok;
+        hasExt = probe.ok; hasItemCols = probe2.ok; hasInvoiceCol = invoiceProbe.ok;
         hasId = rows.length === 0 || rows.some(r => r.id !== undefined);
         txs = rows.map(normTx);
         txs.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (typeof b.id === 'number' && typeof a.id === 'number' ? b.id - a.id : b.idx - a.idx));
@@ -487,7 +491,7 @@ async function initBooks() {
 
 function updateBanner() {
     $('setupSql').innerText = SETUP_SQL;
-    $('setupBanner').classList.toggle('hidden', hasExt && hasItemCols);
+    $('setupBanner').classList.toggle('hidden', hasExt && hasItemCols && hasInvoiceCol);
 }
 function dismissBanner() { localStorage.setItem('books_banner_hidden', '1'); $('setupBanner').classList.add('hidden'); }
 function copySetupSql() { navigator.clipboard.writeText(SETUP_SQL).then(() => toast('SQL copied. Paste it in the Supabase SQL Editor and run it.')); }
@@ -521,12 +525,12 @@ function buildItems() {
 }
 let BC = null, BOOK_ALLCOLS = [];
 async function detectBookCols() {
-    try { const c = JSON.parse(sessionStorage.getItem('books_cols_v4') || 'null'); if(c && c.map && c.map.book_title) { BC = c.map; BOOK_ALLCOLS = c.all || []; return; } } catch (e) {}
+    try { const c = JSON.parse(sessionStorage.getItem('books_cols_v5') || 'null'); if(c && c.map && c.map.book_title) { BC = c.map; BOOK_ALLCOLS = c.all || []; return; } } catch (e) {}
     const cfg = getSupabaseConfig(), H = sbHeaders();
     let cols = [];
     try { const j = await (await fetch(`${cfg.url}/rest/v1/`, { headers: H })).json(); const pr = (j.definitions && j.definitions.books && j.definitions.books.properties) || (j.components && j.components.schemas && j.components.schemas.books && j.components.schemas.books.properties); if(pr) cols = Object.keys(pr); } catch (e) {}
     if(!cols.length) { try { const r = await (await fetch(`${cfg.url}/rest/v1/books?select=*&limit=1`, { headers: H })).json(); if(Array.isArray(r) && r[0]) cols = Object.keys(r[0]); } catch (e) {} }
-    const cand = { type: ['type', 'tx_type', 'transaction_type', 'kind'], party_name: ['party', 'party_name', 'vendor', 'customer', 'student_name'], book_title: ['book', 'book_title', 'title', 'item_title', 'item_name', 'book_name', 'item', 'name', 'product', 'product_name', 'particulars', 'description'], qty: ['qty', 'quantity'], unit_price: ['unit_price', 'price', 'rate'], net_amount: ['net_amount', 'amount', 'total'] };
+    const cand = { type: ['type', 'tx_type', 'transaction_type', 'kind'], party_name: ['party', 'party_name', 'vendor', 'customer', 'student_name'], book_title: ['book', 'book_title', 'title', 'item_title', 'item_name', 'book_name', 'item', 'name', 'product', 'product_name', 'particulars', 'description'], qty: ['qty', 'quantity'], unit_price: ['unit_price', 'price', 'rate'], net_amount: ['net_amount', 'amount', 'total'], invoice_no: ['invoice_no'] };
     const out = {};
     if(cols.length) {
         const low = cols.map(c => c.toLowerCase());
@@ -539,7 +543,7 @@ async function detectBookCols() {
         }));
     }
     BC = out; BOOK_ALLCOLS = cols;
-    if(out.book_title) { try { sessionStorage.setItem('books_cols_v4', JSON.stringify({ map: out, all: cols })); } catch (e) {} }
+    if(out.book_title) { try { sessionStorage.setItem('books_cols_v5', JSON.stringify({ map: out, all: cols })); } catch (e) {} }
 }
 // rename our standard keys to the real column names of the books table
 function mapRow(p) {
@@ -790,7 +794,7 @@ function renderInventory() {
 // ---------------- TRANSACTIONS ----------------
 function txList() {
     let q = norm($('txSearch').value), type = $('txType').value;
-    return periodTxs().filter(t => (type === 'ALL' || t.kind === type) && (!q || norm(t.title + ' ' + t.party + ' ' + t.voucher).includes(q)));
+    return periodTxs().filter(t => (type === 'ALL' || t.kind === type) && (!q || norm(t.title + ' ' + t.party + ' ' + t.voucher + ' ' + t.invoiceNo).includes(q)));
 }
 function renderTransactions() {
     let list = txList(), st = periodStats(list);
@@ -814,9 +818,16 @@ function renderTransactions() {
         ? `<input type="checkbox" aria-label="Select ${esc(KINDS[t.kind].label)} ${esc(t.title)}" ${selectedTxUids.has(t.uid) ? 'checked' : ''} onchange="toggleTxSelection(${esc(JSON.stringify(t.uid))},this.checked)" class="w-4 h-4 rounded">`
         : '';
     const acts = t => `${['sale', 'purchase'].includes(t.kind) ? `<button onclick="editTx(${esc(JSON.stringify(t.uid))})" title="Edit" class="px-1.5 hover:bg-indigo-50 rounded">✏️</button>` : ''}<button onclick="printSlip(${esc(JSON.stringify(t.uid))})" title="Print slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button><button onclick="deleteTx(${esc(JSON.stringify(t.uid))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`;
+    const invoiceEditButton = t => t.kind === 'purchase' && t.invoiceNo
+        ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-left text-indigo-700 hover:underline" title="Edit invoice date and number">${esc(t.invoiceNo)}</button>`
+        : '<span class="text-slate-400">-</span>';
+    const dateCell = t => t.kind === 'purchase' && t.invoiceNo
+        ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-indigo-700 hover:underline" title="Edit invoice date">${fmtDate(t.date)}</button>`
+        : fmtDate(t.date);
     $('txBody').innerHTML = shown.length ? shown.map(t => `<tr class="border-b hover:bg-slate-50 align-top">
         <td class="p-2.5 no-print">${checkbox(t)}</td>
-        <td class="p-2.5 whitespace-nowrap text-slate-600">${fmtDate(t.date)}</td>
+        <td class="p-2.5 whitespace-nowrap text-slate-600">${dateCell(t)}</td>
+        <td class="p-2.5 whitespace-nowrap">${invoiceEditButton(t)}</td>
         <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</td>
         <td class="p-2.5">${kindBadge(t.kind)}</td>
         <td class="p-2.5">${esc(t.party || '-')}</td>
@@ -826,11 +837,12 @@ function renderTransactions() {
         <td class="p-2.5 text-right font-bold text-slate-800 whitespace-nowrap">PKR ${fmt(t.net)}</td>
         <td class="p-2.5 whitespace-nowrap">${t.mode && WALLETS[t.mode] ? WALLETS[t.mode].icon + ' ' + WALLETS[t.mode].label : '-'}</td>
         <td class="p-2.5 whitespace-nowrap no-print">${acts(t)}</td></tr>`).join('')
-        : `<tr><td colspan="12" class="p-8 text-center text-slate-400">No transactions found in this period.</td></tr>`;
+        : `<tr><td colspan="13" class="p-8 text-center text-slate-400">No transactions found in this period.</td></tr>`;
     $('txCards2').innerHTML = shown.length ? shown.map(t => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-        <div class="flex justify-between items-center gap-2"><span class="no-print">${checkbox(t)}</span>${kindBadge(t.kind)}<span class="text-xs text-slate-500">${fmtDate(t.date)}</span></div>
+        <div class="flex justify-between items-center gap-2"><span class="no-print">${checkbox(t)}</span>${kindBadge(t.kind)}${t.kind === 'purchase' && t.invoiceNo ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-xs text-indigo-700 hover:underline">${fmtDate(t.date)}</button>` : `<span class="text-xs text-slate-500">${fmtDate(t.date)}</span>`}</div>
         <button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="font-bold text-indigo-700 text-sm text-left mt-2 hover:underline">${esc(t.title || '-')}</button>
         <div class="text-xs text-slate-500">${esc(t.party || '-')}${t.voucher ? ' · ' + esc(t.voucher) : ''}</div>
+        ${t.kind === 'purchase' && t.invoiceNo ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-xs text-indigo-700 hover:underline mt-1">${esc(t.invoiceNo)} · edit invoice</button>` : ''}
         <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${fmt(t.qty)} × ${fmt(t.unit)}${t.discount ? ` · disc ${fmt(t.discount)}` : ''}</div><div class="text-lg font-extrabold text-slate-800">PKR ${fmt(t.net)}</div></div>
         <div class="flex justify-end gap-1 mt-2 border-t pt-2">${acts(t)}</div></div>`).join('')
         : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No transactions found in this period.</div>';
@@ -849,6 +861,190 @@ function toggleAllTx(checked) {
         else selectedTxUids.delete(transaction.uid);
     });
     renderTransactions();
+}
+function newPurchaseInvoiceNumber() {
+    const used = new Set(txs.map(t => t.invoiceNo.toLowerCase()).filter(Boolean));
+    const prefix = 'INV-' + todayStr().replace(/-/g, '') + '-';
+    let sequence = 1, invoice;
+    do { invoice = prefix + String(sequence++).padStart(3, '0'); } while(used.has(invoice.toLowerCase()));
+    return invoice;
+}
+function openPurchaseInvoice() {
+    if(!colsOk()) return;
+    if(!hasExt || !hasItemCols || !hasInvoiceCol) {
+        toast('Run the SQL shown in the upgrade banner to enable invoice date, item details and supplier invoice numbers.', false);
+        $('setupBanner').classList.remove('hidden');
+        return;
+    }
+    purchaseInvoiceLines = [{ title: '', qty: 1, unit: '', salePrice: '', itemClass: 'All', category: '' }];
+    $('piDate').value = todayStr();
+    $('piNumber').value = newPurchaseInvoiceNumber();
+    $('piVendor').value = '';
+    $('piNotes').value = '';
+    $('piPostAcc').checked = false;
+    $('purchaseVendorList').innerHTML = [...new Set(txs.filter(t => ['purchase', 'purchase_return'].includes(t.kind)).map(t => t.party).filter(Boolean))].sort().map(name => `<option value="${esc(name)}">`).join('');
+    renderPurchaseInvoiceLines();
+    $('purchaseInvoiceModal').classList.remove('hidden');
+}
+function closePurchaseInvoice() { $('purchaseInvoiceModal').classList.add('hidden'); }
+function renderPurchaseInvoiceLines() {
+    $('piRows').innerHTML = purchaseInvoiceLines.map((line, index) => `<div class="grid grid-cols-2 md:grid-cols-[minmax(180px,2fr)_80px_110px_110px_100px_110px_36px] gap-2 items-end rounded-xl border border-slate-200 p-3">
+        <div class="col-span-2 md:col-span-1"><label class="block text-[11px] font-semibold text-slate-600 mb-1">Book / item</label><input list="bookList" data-field="title" data-index="${index}" value="${esc(line.title)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="Item name"></div>
+        <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Qty</label><input type="number" min="1" data-field="qty" data-index="${index}" value="${esc(line.qty)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm"></div>
+        <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Cost / unit</label><input type="number" min="0.01" step="0.01" data-field="unit" data-index="${index}" value="${esc(line.unit)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="PKR"></div>
+        <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Sale price</label><input type="number" min="0.01" step="0.01" data-field="salePrice" data-index="${index}" value="${esc(line.salePrice)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="PKR"></div>
+        <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Class</label><input data-field="itemClass" data-index="${index}" value="${esc(line.itemClass)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="All"></div>
+        <div><label class="block text-[11px] font-semibold text-slate-600 mb-1">Category</label><input data-field="category" data-index="${index}" value="${esc(line.category)}" oninput="updatePurchaseInvoiceLine(this)" class="w-full border rounded-lg p-2 text-sm" placeholder="Optional"></div>
+        <button type="button" onclick="removePurchaseInvoiceLine(${index})" aria-label="Remove item" class="h-9 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold">×</button>
+        <div class="col-span-2 md:col-span-7 text-right text-xs text-slate-500">Line total: <b class="text-slate-800">PKR ${fmt((Number(line.qty) || 0) * (Number(line.unit) || 0))}</b></div>
+    </div>`).join('');
+    updatePurchaseInvoiceTotal();
+}
+function updatePurchaseInvoiceLine(input) {
+    const index = Number(input.dataset.index), field = input.dataset.field, line = purchaseInvoiceLines[index];
+    if(!line || !field) return;
+    line[field] = input.value;
+    if(field === 'title') {
+        const item = items[norm(input.value)];
+        if(item) {
+            if(!line.unit && item.lastBuy) line.unit = item.lastBuy;
+            if(!line.salePrice && item.sp) line.salePrice = item.sp;
+            if(line.itemClass === 'All' && item.cls) line.itemClass = item.cls;
+            if(!line.category && item.cat) line.category = item.cat;
+            renderPurchaseInvoiceLines();
+            return;
+        }
+    }
+    updatePurchaseInvoiceTotal();
+}
+function updatePurchaseInvoiceTotal() {
+    if(!$('piTotal')) return;
+    const total = purchaseInvoiceLines.reduce((sum, line) => sum + (Number(line.qty) || 0) * (Number(line.unit) || 0), 0);
+    $('piTotal').innerText = `Invoice total: PKR ${fmt(total)}`;
+}
+function addPurchaseInvoiceLine() {
+    purchaseInvoiceLines.push({ title: '', qty: 1, unit: '', salePrice: '', itemClass: 'All', category: '' });
+    renderPurchaseInvoiceLines();
+}
+function removePurchaseInvoiceLine(index) {
+    if(purchaseInvoiceLines.length === 1) purchaseInvoiceLines[0] = { title: '', qty: 1, unit: '', salePrice: '', itemClass: 'All', category: '' };
+    else purchaseInvoiceLines.splice(index, 1);
+    renderPurchaseInvoiceLines();
+}
+async function savePurchaseInvoice() {
+    const date = $('piDate').value, invoiceNo = $('piNumber').value.trim(), vendor = $('piVendor').value.trim();
+    const notes = $('piNotes').value.trim(), paid = $('piPostAcc').checked, wallet = $('piWallet').value;
+    if(!date || !invoiceNo || !vendor) { toast('Enter the invoice date, invoice number and vendor.', false); return; }
+    if(txs.some(t => t.invoiceNo.toLowerCase() === invoiceNo.toLowerCase())) { toast('This supplier invoice number already exists. Use a unique number.', false); return; }
+    const lines = purchaseInvoiceLines.map(line => ({
+        title: String(line.title || '').trim(), qty: Number(line.qty), unit: Number(line.unit), salePrice: Number(line.salePrice),
+        itemClass: String(line.itemClass || 'All').trim() || 'All', category: String(line.category || '').trim()
+    }));
+    if(!lines.length || lines.some(line => !line.title || !Number.isFinite(line.qty) || line.qty <= 0 || !Number.isFinite(line.unit) || line.unit <= 0 || !Number.isFinite(line.salePrice) || line.salePrice <= 0)) {
+        toast('Each item needs a title, quantity, cost price and sale price above zero.', false);
+        return;
+    }
+    const used = new Set(txs.map(t => t.voucher.toUpperCase()).filter(Boolean));
+    const nextVoucher = () => {
+        let voucher;
+        do { voucher = genVoucher('BK-'); } while(used.has(voucher.toUpperCase()));
+        used.add(voucher.toUpperCase());
+        return voucher;
+    };
+    const rows = lines.map(line => {
+        const voucher = nextVoucher(), amount = Math.round(line.qty * line.unit * 100) / 100;
+        return {
+            type: 'Purchase', party_name: vendor, book_title: line.title, qty: line.qty, unit_price: line.unit,
+            net_amount: amount, date, invoice_no: invoiceNo, voucher_no: voucher, payment_mode: null,
+            notes: notes || null, item_class: line.itemClass, category: line.category || null, sale_price: line.salePrice
+        };
+    });
+    showLoading('Saving purchase invoice...');
+    try {
+        const c = getSupabaseConfig(), headers = sbHeaders({ 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+        const saved = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers, body: JSON.stringify(rows.map(mapRow)) });
+        if(!saved.ok) throw new Error(errMsg('Could not save invoice items: ' + await saved.text()));
+        let accountsSaved = true;
+        if(paid) {
+            const total = rows.reduce((sum, row) => sum + row.net_amount, 0);
+            accountsSaved = await postDuesEntry('pay', vendor, total, date, wallet, notes || `Supplier invoice ${invoiceNo}`, rows.map(row => ({ voucher: row.voucher_no, rem: row.net_amount, date })));
+        }
+        if(paid && accountsSaved) await loadDuesData();
+        closePurchaseInvoice();
+        await initBooks();
+        toast(accountsSaved ? `Invoice ${invoiceNo} saved (${rows.length} items).${paid ? ' Payment recorded in Accounts.' : ' Added to vendor payable.'}` : `Invoice ${invoiceNo} saved, but Accounts payment failed. The invoice remains in vendor payable; record payment from Accounts.`, accountsSaved);
+    } catch(error) {
+        console.error(error);
+        toast(error.message || 'Could not save the purchase invoice.', false);
+    } finally {
+        hideLoading();
+    }
+}
+function openEditPurchaseInvoice(invoiceNo) {
+    const group = txs.filter(t => t.kind === 'purchase' && t.invoiceNo.toLowerCase() === String(invoiceNo).toLowerCase());
+    if(!group.length || group.some(t => t.id === undefined || t.id === null)) {
+        toast('The invoice item records could not be identified for editing.', false);
+        return;
+    }
+    editingPurchaseInvoiceVouchers = group;
+    $('epiDate').value = group[0].date || todayStr();
+    $('epiNumber').value = group[0].invoiceNo;
+    $('epiCount').innerText = `${group.length} item${group.length === 1 ? '' : 's'} in this invoice`;
+    $('editPurchaseInvoiceModal').classList.remove('hidden');
+}
+function closeEditPurchaseInvoice() {
+    $('editPurchaseInvoiceModal').classList.add('hidden');
+    editingPurchaseInvoiceVouchers = [];
+}
+async function saveEditPurchaseInvoice() {
+    const group = editingPurchaseInvoiceVouchers, date = $('epiDate').value, invoiceNo = $('epiNumber').value.trim();
+    if(!group.length) { closeEditPurchaseInvoice(); return; }
+    if(!date || !invoiceNo) { toast('Enter both the invoice date and number.', false); return; }
+    const groupUids = new Set(group.map(t => t.uid));
+    if(txs.some(t => t.invoiceNo.toLowerCase() === invoiceNo.toLowerCase() && !groupUids.has(t.uid))) {
+        toast('Another invoice already uses this number.', false);
+        return;
+    }
+    const oldDate = group[0].date, oldNumber = group[0].invoiceNo;
+    const ids = group.map(t => encodeURIComponent(t.id)).join(',');
+    const linked = group.filter(t => t.mode && t.voucher);
+    const voucherFilter = linked.map(t => encodeURIComponent(t.voucher)).join(',');
+    showLoading('Updating invoice details...');
+    let booksUpdated = false;
+    const c = getSupabaseConfig(), headers = sbHeaders({ 'Content-Type': 'application/json', 'Prefer': 'return=representation' });
+    try {
+        const booksResponse = await fetch(`${c.url}/rest/v1/books?id=in.(${ids})`, {
+            method: 'PATCH', headers, body: JSON.stringify(mapRow({ date, invoice_no: invoiceNo }))
+        });
+        if(!booksResponse.ok) throw new Error('Could not update invoice items: ' + await booksResponse.text());
+        booksUpdated = true;
+        const changedBooks = await booksResponse.json();
+        if(!Array.isArray(changedBooks) || changedBooks.length !== group.length) throw new Error('Not all invoice items were updated. Check Books Edit permission.');
+        if(linked.length) {
+            const accountsResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=in.(${voucherFilter})`, {
+                method: 'PATCH', headers, body: JSON.stringify({ date })
+            });
+            if(!accountsResponse.ok) throw new Error('Books invoice details changed, but linked Accounts dates could not be updated: ' + await accountsResponse.text());
+            const changedAccounts = await accountsResponse.json();
+            if(!Array.isArray(changedAccounts) || changedAccounts.length !== linked.length) throw new Error('Books invoice details changed, but not all linked Accounts entries were updated.');
+        }
+        closeEditPurchaseInvoice();
+        await initBooks();
+        toast(`Invoice ${invoiceNo} date and number updated.`);
+    } catch(error) {
+        let message = error.message || 'Could not update invoice details.';
+        if(booksUpdated) {
+            const rollback = await fetch(`${c.url}/rest/v1/books?id=in.(${ids})`, {
+                method: 'PATCH',
+                headers: sbHeaders({ 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }),
+                body: JSON.stringify(mapRow({ date: oldDate, invoice_no: oldNumber }))
+            });
+            if(!rollback.ok) message += ' Invoice rollback also failed; refresh and reconcile the affected records.';
+        }
+        toast(message, false);
+    } finally {
+        hideLoading();
+    }
 }
 function viewAllRecentTx(kind) {
     closeTx();
@@ -963,8 +1159,8 @@ function exportInventoryCsv() {
 }
 function exportTxCsv() {
     let list = txList(); if(!list.length) { toast('No records to export.', false); return; }
-    exportCsv('book-transactions', ['Date', 'Voucher', 'Type', 'Student / Vendor', 'Book', 'Qty', 'Unit price', 'Discount', 'Net amount', 'Account', 'Notes'],
-        list.map(t => [t.date, t.voucher, KINDS[t.kind].label, t.party, t.title, t.qty, t.unit, t.discount, t.net, t.mode, t.notes]));
+    exportCsv('book-transactions', ['Date', 'Invoice No', 'Voucher', 'Type', 'Student / Vendor', 'Book', 'Qty', 'Unit price', 'Discount', 'Net amount', 'Account', 'Notes'],
+        list.map(t => [t.date, t.invoiceNo, t.voucher, KINDS[t.kind].label, t.party, t.title, t.qty, t.unit, t.discount, t.net, t.mode, t.notes]));
 }
 
 // ====================================================================================
@@ -1891,6 +2087,36 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeItemLe
   </div>
   <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('importModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button><button id="impGo" onclick="saveImp()" class="hidden px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Import valid rows</button></div>
  </div></div>
+
+<div id="purchaseInvoiceModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10"><div><h3 id="purchaseInvoiceTitle" class="font-bold text-violet-800">New purchase invoice</h3><p class="text-xs text-slate-500 mt-1">Add all items from one supplier invoice, then save them together.</p></div><button type="button" onclick="closePurchaseInvoice()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+  <div class="p-4 space-y-3">
+   <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div><label for="piDate" class="block text-xs font-semibold text-slate-700 mb-1">Invoice date</label><input id="piDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div>
+    <div><label for="piNumber" class="block text-xs font-semibold text-slate-700 mb-1">Supplier invoice number</label><input id="piNumber" maxlength="100" class="w-full border rounded-lg p-2.5 text-sm" placeholder="Auto-generated; editable"></div>
+    <div><label for="piVendor" class="block text-xs font-semibold text-slate-700 mb-1">Vendor / supplier</label><input id="piVendor" list="purchaseVendorList" class="w-full border rounded-lg p-2.5 text-sm" placeholder="Supplier name"><datalist id="purchaseVendorList"></datalist></div>
+   </div>
+   <div id="piRows" class="space-y-2"></div>
+   <button type="button" onclick="addPurchaseInvoiceLine()" class="px-3 py-2 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 text-sm font-semibold">+ Add another item</button>
+   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50 border p-3">
+    <div><label for="piWallet" class="block text-xs font-semibold text-slate-700 mb-1">Paid from (if recorded in Accounts)</label><select id="piWallet" class="w-full border rounded-lg p-2 text-sm bg-white"><option value="cash">💵 Cash in Hand</option><option value="bank">🏦 Bank</option><option value="online">📱 Online / JazzCash</option></select></div>
+    <label class="flex items-center gap-2 text-sm text-slate-700 sm:mt-6"><input id="piPostAcc" type="checkbox"> Mark invoice as paid and record in Accounts</label>
+    <label class="sm:col-span-2 text-xs text-slate-600">Notes (optional)<input id="piNotes" class="w-full mt-1 border rounded-lg p-2 text-sm" placeholder="Invoice notes"></label>
+   </div>
+   <div id="piTotal" class="text-right font-bold text-violet-800">Invoice total: PKR 0</div>
+  </div>
+  <div class="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-white"><button type="button" onclick="closePurchaseInvoice()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button type="button" onclick="savePurchaseInvoice()" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm">Save complete invoice</button></div>
+ </div>
+</div>
+
+<div id="editPurchaseInvoiceModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl">
+  <div class="p-4 border-b"><h3 class="font-bold text-indigo-900">Edit purchase invoice details</h3><p class="text-xs text-slate-500 mt-1">Updates the date and invoice number for every item in this invoice.</p></div>
+  <div class="p-4 space-y-3"><div><label for="epiDate" class="block text-xs font-semibold text-slate-700 mb-1">Invoice date</label><input id="epiDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div><div><label for="epiNumber" class="block text-xs font-semibold text-slate-700 mb-1">Supplier invoice number</label><input id="epiNumber" maxlength="100" class="w-full border rounded-lg p-2.5 text-sm"></div><p id="epiCount" class="text-xs text-slate-500"></p></div>
+  <div class="p-4 border-t flex justify-end gap-2"><button type="button" onclick="closeEditPurchaseInvoice()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button type="button" onclick="saveEditPurchaseInvoice()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save changes</button></div>
+ </div>
+</div>
 
 <div id="newItemModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex items-center justify-center p-3">
  <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
