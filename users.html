@@ -7,7 +7,7 @@
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js"></script>
-    <script src="nav.js"></script>
+    <script src="nav.js?v=20261022-1"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans" onload="initUsers()">
 <div id="toastBox" class="fixed top-4 right-4 z-[100] space-y-2"></div>
@@ -60,6 +60,16 @@
     <div class="flex justify-end gap-2 pt-1"><button onclick="closeModal('userModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="saveUser()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save</button></div>
 </div></div>
 
+<!-- admin password reset modal -->
+<div id="passwordModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-3"><div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-3">
+    <h3 class="font-bold text-indigo-900">Change user password</h3>
+    <p id="passwordTarget" class="text-xs text-slate-500"></p>
+    <p class="text-xs text-amber-700 bg-amber-50 rounded-lg p-2">The current password cannot be viewed. Give this new password to the user securely and ask them to change it after signing in.</p>
+    <div><label for="adminNewPassword" class="block text-xs font-semibold text-slate-600 mb-1">New password</label><input id="adminNewPassword" type="password" autocomplete="new-password" minlength="8" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+    <div><label for="adminConfirmPassword" class="block text-xs font-semibold text-slate-600 mb-1">Confirm password</label><input id="adminConfirmPassword" type="password" autocomplete="new-password" minlength="8" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+    <div class="flex justify-end gap-2 pt-1"><button onclick="closePasswordModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button id="adminSetPasswordBtn" onclick="setUserPassword()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Change password</button></div>
+</div></div>
+
 <!-- new role modal -->
 <div id="roleModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-3"><div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3">
     <h3 class="font-bold text-indigo-900">New role</h3>
@@ -85,7 +95,7 @@ const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 function toast(m, ok) { const d = document.createElement('div'); d.className = 'px-4 py-3 rounded-xl text-sm font-semibold shadow-lg max-w-xs ' + (ok === false ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'); d.textContent = m; $('toastBox').appendChild(d); setTimeout(() => d.remove(), 4500); }
 function openModal(id) { $(id).classList.remove('hidden'); $(id).classList.add('flex'); }
 function closeModal(id) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
-let users = [], roles = [], closes = [], permTarget = null;
+let users = [], roles = [], closes = [], permTarget = null, passwordTargetEmail = '';
 const H = () => ({ apikey: SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
 const roleOf = n => roles.find(r => r.name === n);
 const permsOf = u => u.perms || (roleOf(u.role) || {}).perms || { pages: {}, flags: [] };
@@ -118,13 +128,60 @@ function collectPerms() {
 
 /* ---------- users ---------- */
 function renderUsers() {
+    const isAdmin = ME && ME.role === 'Admin';
     $('usersBody').innerHTML = users.length ? users.map(u => {
         const me = u.email === (ME && ME.email);
         return `<tr class="border-t"><td class="p-3 font-semibold">${esc(u.name || '-')}${me ? ' <span class="text-[10px] bg-indigo-100 text-indigo-700 rounded px-1">you</span>' : ''}</td><td class="p-3">${esc(u.email)}</td><td class="p-3">${esc(u.role || '-')}</td>
         <td class="p-3">${u.perms ? '<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold">Custom</span>' : '<span class="text-slate-500">As role</span>'}</td>
         <td class="p-3">${u.active === false ? '<span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-semibold">Off</span>' : '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">Active</span>'}</td>
-        <td class="p-3 whitespace-nowrap" data-e="${esc(u.email)}"><button onclick="openUser(this.parentNode.dataset.e)" class="px-2 py-1 bg-slate-100 rounded font-semibold mr-1">Edit</button><button onclick="openPerms('user',this.parentNode.dataset.e)" class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded font-semibold mr-1">Permissions</button>${me ? '' : '<button onclick="deleteUser(this.parentNode.dataset.e)" class="px-2 py-1 bg-rose-50 text-rose-600 rounded font-semibold">Delete</button>'}</td></tr>`;
+        <td class="p-3 whitespace-nowrap" data-e="${esc(u.email)}"><button onclick="openUser(this.parentNode.dataset.e)" class="px-2 py-1 bg-slate-100 rounded font-semibold mr-1">Edit</button><button onclick="openPerms('user',this.parentNode.dataset.e)" class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded font-semibold mr-1">Permissions</button>${isAdmin ? '<button onclick="openPasswordModal(this.parentNode.dataset.e)" class="px-2 py-1 bg-amber-50 text-amber-800 rounded font-semibold mr-1">Change password</button>' : ''}${me ? '' : '<button onclick="deleteUser(this.parentNode.dataset.e)" class="px-2 py-1 bg-rose-50 text-rose-600 rounded font-semibold">Delete</button>'}</td></tr>`;
     }).join('') : '<tr><td colspan="6" class="p-6 text-center text-slate-400">No users.</td></tr>';
+}
+function openPasswordModal(email) {
+    if (!ME || ME.role !== 'Admin') return toast('Only an Admin can set a user password.', false);
+    const user = users.find(item => item.email === email);
+    if (!user) return toast('User not found. Refresh the user list and try again.', false);
+    passwordTargetEmail = user.email;
+    $('passwordTarget').textContent = `${user.name || 'User'} · ${user.email}`;
+    $('adminNewPassword').value = '';
+    $('adminConfirmPassword').value = '';
+    openModal('passwordModal');
+    $('adminNewPassword').focus();
+}
+function closePasswordModal() {
+    closeModal('passwordModal');
+    $('adminNewPassword').value = '';
+    $('adminConfirmPassword').value = '';
+    passwordTargetEmail = '';
+}
+async function setUserPassword() {
+    if (!ME || ME.role !== 'Admin') return toast('Only an Admin can set a user password.', false);
+    if (!passwordTargetEmail || !users.some(item => item.email === passwordTargetEmail)) return toast('Choose a valid user first.', false);
+    const password = $('adminNewPassword').value;
+    if (password.length < 8) return toast('Use at least 8 characters for the new password.', false);
+    if (password !== $('adminConfirmPassword').value) return toast('The passwords do not match.', false);
+    const button = $('adminSetPasswordBtn');
+    button.disabled = true;
+    button.textContent = 'Updating...';
+    try {
+        const token = await sbFreshToken();
+        if (!token) throw new Error('Your session expired. Sign in again.');
+        const response = await fetch(`${SB_URL}/functions/v1/admin-set-user-password`, {
+            method: 'POST',
+            headers: { apikey: SB_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: passwordTargetEmail, password })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Password update failed (HTTP ${response.status}).`);
+        closePasswordModal();
+        toast('Password updated. Give the new password to the user securely.');
+    } catch (error) {
+        console.error('Admin password update failed:', error);
+        toast(error.message || 'Could not update the password.', false);
+    } finally {
+        button.disabled = false;
+        button.textContent = 'Change password';
+    }
 }
 function openUser(email) {
     const u = email ? users.find(x => x.email === email) : null;
