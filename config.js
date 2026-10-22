@@ -9,7 +9,8 @@ function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 //  LOGIN + USERS & ROLES.  Every page needs a session; every data request carries the user's token.
 //  login.html sets  window.SB_NO_GUARD = true  before loading this file.
 // ============================================================================
-const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1';
+const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1', SB_LOGOUT_REASON_KEY = 'sb_logout_reason_v1';
+const SB_IDLE_TIMEOUT = 5 * 60 * 1000;
 const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000, SB_DATA_CACHE_STALE = 5 * 60 * 1000;
 const _sbDataMemory = new Map(), _sbDataPending = new Map();
 function sbSession() { try { return JSON.parse(localStorage.getItem(SB_SESSION_KEY) || 'null'); } catch (e) { return null; } }
@@ -43,19 +44,85 @@ function sbCacheClear(table) {
         }
     } catch (e) {}
 }
-function sbSaveSession(j) {
+function sbSaveSession(j, resetIdle = false) {
     const old = sbSession() || {};
     const email = String((j.user && j.user.email) || old.email || '').toLowerCase();
+    const sameAccount = email && email === String(old.email || '').toLowerCase();
     const s = {
         access_token: j.access_token,
         refresh_token: j.refresh_token || old.refresh_token,
         expires_at: Math.floor(Date.now() / 1000) + (j.expires_in || 3600),
-        email
+        email,
+        last_activity: resetIdle || !sameAccount || !old.last_activity ? Date.now() : old.last_activity
     };
     localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s)); return s;
 }
 function sbClearAuth() { try { sbCacheClear(); localStorage.removeItem(SB_SESSION_KEY); localStorage.removeItem(SB_ME_KEY); } catch (e) {} }
-function sbLogout() { sbClearAuth(); location.replace('login.html'); }
+function sbLogout(reason) {
+    if (reason) {
+        try { sessionStorage.setItem(SB_LOGOUT_REASON_KEY, reason); } catch (e) {}
+    }
+    sbClearAuth();
+    location.replace('login.html');
+}
+let _sbIdleMonitor = null, _sbLastActivityWrite = 0, _sbLoggingOut = false;
+function sbCheckIdleSession() {
+    const session = sbSession();
+    if (!session || _sbLoggingOut) return;
+    const lastActivity = Number(session.last_activity) || 0;
+    if (!lastActivity || Date.now() - lastActivity >= SB_IDLE_TIMEOUT) {
+        _sbLoggingOut = true;
+        sbLogout('idle');
+    }
+}
+function sbRecordUserActivity() {
+    const session = sbSession();
+    if (!session || _sbLoggingOut) return;
+    const now = Date.now();
+    if (Number(session.last_activity) && now - Number(session.last_activity) >= SB_IDLE_TIMEOUT) {
+        sbCheckIdleSession();
+        return;
+    }
+    if (now - _sbLastActivityWrite < 10000) return;
+    session.last_activity = now;
+    try {
+        localStorage.setItem(SB_SESSION_KEY, JSON.stringify(session));
+        _sbLastActivityWrite = now;
+    } catch (error) {
+        console.error('Could not update the inactivity timer:', error);
+    }
+}
+function sbStartIdleMonitor() {
+    if (window.SB_NO_GUARD || !sbSession() || _sbIdleMonitor) return;
+    const session = sbSession();
+    if (!Number(session.last_activity)) {
+        session.last_activity = Date.now();
+        try { localStorage.setItem(SB_SESSION_KEY, JSON.stringify(session)); }
+        catch (error) { console.error('Could not initialize the inactivity timer:', error); }
+    }
+    ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'scroll', 'click', 'input'].forEach(eventName =>
+        document.addEventListener(eventName, sbRecordUserActivity, { passive: true })
+    );
+    _sbIdleMonitor = setInterval(sbCheckIdleSession, 5000);
+    window.addEventListener('storage', event => {
+        if (event.key !== SB_SESSION_KEY) return;
+        if (!event.newValue && sbSession()) {
+            sbLogout('signed-out');
+            return;
+        }
+        try {
+            const updated = JSON.parse(event.newValue || 'null');
+            const current = sbSession();
+            if (updated && current && updated.email === current.email
+                && Number(updated.last_activity) > Number(current.last_activity || 0)) {
+                current.last_activity = Number(updated.last_activity);
+                localStorage.setItem(SB_SESSION_KEY, JSON.stringify(current));
+            }
+        } catch (error) {
+            console.error('Could not synchronize the inactivity timer:', error);
+        }
+    });
+}
 const _sbFetch = window.fetch.bind(window);
 let _sbRefreshing = null;
 function sbPakistanDate(offsetDays) {
@@ -256,6 +323,7 @@ function sbApplyMe() {
 if (!window.SB_NO_GUARD) {
     if (!sbSession()) location.replace('login.html');
     else {
+        sbStartIdleMonitor();
         ME = sbLoadMeCache();
         if (ME) {
             sbApplyMe();
