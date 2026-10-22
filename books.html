@@ -174,7 +174,7 @@
                 <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
-                            <tr><th class="p-2.5">Book / Item</th><th class="p-2.5 text-right">Purchased</th><th class="p-2.5 text-right">Sold</th><th class="p-2.5 text-right">Returns (P/S)</th><th class="p-2.5 text-right">In stock</th><th class="p-2.5 text-right">Avg cost</th><th class="p-2.5 text-right">Sale price</th><th class="p-2.5 text-right">Stock value</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
+                            <tr id="invHead"></tr>
                         </thead>
                         <tbody id="invBody"></tbody>
                         <tfoot id="invFoot" class="sticky bottom-0 bg-slate-100 font-bold"></tfoot>
@@ -393,6 +393,7 @@ let txs = [], txByUid = {}, items = {}, hasExt = false, hasItemCols = false, has
 let txLimit = 200, txKind = 'sale', lastSaved = null, editingTxUid = null, editingAccountRow = null, invoiceNumberManual = false;
 let selectedTxUids = new Set();
 let purchaseInvoiceLines = [], editingPurchaseInvoiceVouchers = [];
+let inventorySort = { key: 'title', direction: 'asc' };
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -774,15 +775,55 @@ function openItemLedger(key) {
 function closeItemLedger() { $('itemLedgerModal').classList.add('hidden'); }
 function inventoryList() {
     let q = norm($('invSearch').value), s = $('invStatus').value;
+    const sortValues = {
+        title: item => item.title,
+        purchased: item => item.p,
+        sold: item => item.s,
+        returns: item => item.pr + item.sr,
+        stock: item => item.stock,
+        avgCost: item => item.avgCost,
+        salePrice: item => item.lastSale,
+        value: item => item.value,
+        status: item => ({ out: 0, low: 1, ok: 2 }[item.status] ?? 3)
+    };
     return Object.values(items).filter(i => {
         if(q && !i.key.includes(q)) return false;
         if(s === 'attn' && i.status === 'ok') return false;
         if(['low', 'out', 'ok'].includes(s) && i.status !== s) return false;
         return true;
-    }).sort((a, b) => a.title.localeCompare(b.title));
+    }).sort((a, b) => {
+        const value = sortValues[inventorySort.key];
+        const left = value(a), right = value(b);
+        const comparison = typeof left === 'string' ? left.localeCompare(right) : left - right;
+        return (comparison || a.title.localeCompare(b.title)) * (inventorySort.direction === 'asc' ? 1 : -1);
+    });
+}
+function sortInventory(key) {
+    if(inventorySort.key === key) inventorySort.direction = inventorySort.direction === 'asc' ? 'desc' : 'asc';
+    else inventorySort = { key, direction: key === 'title' ? 'asc' : 'desc' };
+    renderInventory();
+}
+function renderInventoryHead() {
+    const columns = [
+        ['title', 'Book / Item', ''],
+        ['purchased', 'Purchased', 'text-right'],
+        ['sold', 'Sold', 'text-right'],
+        ['returns', 'Returns (P/S)', 'text-right'],
+        ['stock', 'In stock', 'text-right'],
+        ['avgCost', 'Avg cost', 'text-right'],
+        ['salePrice', 'Sale price', 'text-right'],
+        ['value', 'Stock value', 'text-right'],
+        ['status', 'Status', '']
+    ];
+    $('invHead').innerHTML = columns.map(([key, label, align]) => {
+        const active = inventorySort.key === key;
+        const indicator = active ? (inventorySort.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+        return `<th class="p-2.5 ${align}" aria-sort="${active ? (inventorySort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}"><button type="button" onclick="sortInventory('${key}')" class="font-semibold hover:text-indigo-700 whitespace-nowrap" aria-label="Sort by ${label}">${label}<span class="${active ? 'text-indigo-600' : 'text-slate-400'}">${indicator}</span></button></th>`;
+    }).join('') + '<th class="p-2.5 no-print"></th>';
 }
 function renderInventory() {
     let list = inventoryList(), all = Object.values(items);
+    renderInventoryHead();
     $('invCards').innerHTML = [
         { t: 'Titles', v: all.length },
         { t: 'Units in stock', v: fmt(all.reduce((s, i) => s + Math.max(i.stock, 0), 0)) },
