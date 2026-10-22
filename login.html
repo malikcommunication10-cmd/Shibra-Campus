@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Concept School Shibra Campus</title>
     <script>window.SB_NO_GUARD = true;</script>
-    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onerror=function(){console.error('Tailwind stylesheet fallback failed to load.')};document.head.appendChild(s)">
+    <link rel="stylesheet" href="styles.css">
     <script src="config.js"></script>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex items-center justify-center p-4 font-sans">
@@ -73,8 +73,6 @@
             $('err').textContent = 'This reset link is invalid or expired. Request a new link and try again.';
             $('err').classList.remove('hidden');
         }
-    } else if (sbSession() && sbLoadMeCache()) {
-        location.replace(sbFirstPage(sbLoadMeCache()) || 'index.html');
     }
     function togglePw() { const p = $('password'), show = p.type === 'password'; p.type = show ? 'text' : 'password'; $('pwBtn').innerText = show ? 'Hide' : 'Show'; }
     function showErr(m) { $('err').innerText = m; $('err').className = 'text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2'; }
