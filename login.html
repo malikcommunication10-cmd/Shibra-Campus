@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Concept School Shibra Campus</title>
-    <script>window.SB_NO_GUARD = true; window.__show = function () { document.documentElement.style.visibility = 'visible' }; document.documentElement.style.visibility = 'hidden'; setTimeout(window.__show, 4000);</script>
-    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <script>window.SB_NO_GUARD = true;</script>
+    <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onerror=function(){console.error('Tailwind stylesheet fallback failed to load.')};document.head.appendChild(s)">
     <script src="config.js"></script>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex items-center justify-center p-4 font-sans">
@@ -147,15 +147,27 @@
                 showErr(m.includes('invalid') ? 'The email or password is incorrect.' : (m.includes('confirm') ? 'This account is not confirmed yet. Ask the administrator.' : 'Could not sign in. Please try again.'));
                 btn.disabled = false; btn.innerText = 'Sign in'; return;
             }
-            sbSaveSession(j);
+            sbSaveSession(j, true);
+            try { await sbClaimDeviceSession(); }
+            catch (sessionError) {
+                console.error('Device session claim failed:', sessionError);
+                sbClearAuth();
+                showErr(sessionError.message || 'Could not start a secure session. Please try again.');
+                btn.disabled = false; btn.innerText = 'Sign in'; return;
+            }
             const me = await sbFetchMe();
-            if (!me || me.error) { sbClearAuth(); showErr('The users table is not set up yet. Run supabase_roles.sql in Supabase, then try again.'); btn.disabled = false; btn.innerText = 'Sign in'; return; }
-            if (me.noaccess || me.active === false) { sbClearAuth(); showErr(me.noaccess ? 'Your account has no role yet. Please ask the administrator.' : 'This account is switched off. Please ask the administrator.'); btn.disabled = false; btn.innerText = 'Sign in'; return; }
+            if (!me || me.error) { await sbReleaseDeviceSession(); sbClearAuth(); showErr('The users table is not set up yet. Run supabase_roles.sql in Supabase, then try again.'); btn.disabled = false; btn.innerText = 'Sign in'; return; }
+            if (me.noaccess || me.active === false) { await sbReleaseDeviceSession(); sbClearAuth(); showErr(me.noaccess ? 'Your account has no role yet. Please ask the administrator.' : 'This account is switched off. Please ask the administrator.'); btn.disabled = false; btn.innerText = 'Sign in'; return; }
             sbSaveMe(me);
             location.replace(sbFirstPage(me) || 'index.html');
-        } catch (err) { console.error(err); showErr('No connection. Check your internet and try again.'); btn.disabled = false; btn.innerText = 'Sign in'; }
+        } catch (err) { console.error(err); sbClearAuth(); showErr('No connection. Check your internet and try again.'); btn.disabled = false; btn.innerText = 'Sign in'; }
     }
     $('email').focus();
+    const logoutReason = sessionStorage.getItem(SB_LOGOUT_REASON_KEY);
+    if (logoutReason) {
+        sessionStorage.removeItem(SB_LOGOUT_REASON_KEY);
+        showErr(logoutReason === 'idle' ? 'You were signed out after 10 minutes without activity.' : logoutReason === 'replaced' ? 'This session is no longer active. Please sign in again.' : 'You have been signed out.');
+    }
 </script>
 </body>
 </html>
