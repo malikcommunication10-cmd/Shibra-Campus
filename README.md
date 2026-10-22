@@ -32,6 +32,17 @@ The checked-in `styles.css` is the compiled Tailwind output. Rebuild it after ch
 11. Sign in as that administrator. Use **Users & Roles** to add users and assign least-privilege roles.
 12. From **System Settings → Rules & Defaults**, set **School year for fee vouchers** to the year that should be used for new fee periods. Existing fee records are not rewritten when this value changes.
 
+### Admin password reset
+
+The Users & Roles page lets an active Admin set a new password for an existing user's login. Existing passwords cannot be viewed. Run `supabase_single_session.sql` first so the function can validate that the Admin is using the currently claimed, non-idle device session. Deploy the `admin-set-user-password` Supabase Edge Function from this repository with the Supabase CLI:
+
+```powershell
+supabase login
+supabase functions deploy admin-set-user-password --project-ref tsnfwebctvjnmmweepiu
+```
+
+The function verifies the signed-in user's Auth token and active `Admin` role in `app_users` before using the server-side Auth Admin API. Supabase's `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` function secrets must be available to the Edge Function runtime. If the service-role secret is not already configured for the project, set it through Supabase's secrets/CLI interface; never put it in `config.js`, HTML, or any other static client file. The Admin must securely give the new password to the user, who should change it after signing in.
+
 `supabase_roles.sql` intentionally removes all existing RLS policies from its managed tables before installing the Shibra policies. Review any custom policies before running it. Never disable RLS to resolve a permission error. Service-role keys must never be placed in this static client; only the Supabase publishable/anon key belongs in `config.js`.
 
 For a Follow-up-only account, grant **Follow-up Calls → View** (and **Add** only if the user should record calls), then remove View from Students Directory, Fee Vouchers, and Accounts & Daybook. The page uses the restricted `app_followup_data()` RPC for its family dues instead of direct reads from those tables. Keep normal RLS enabled; do not grant this role broad table access as a workaround.
