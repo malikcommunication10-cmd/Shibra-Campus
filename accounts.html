@@ -62,6 +62,7 @@
                 <div class="flex flex-wrap gap-2">
                     <button onclick="openEntry('receipt')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➕ Receipt</button>
                     <button onclick="openEntry('payment')" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➖ Payment</button>
+                    <button onclick="openPartnerWithdrawal()" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🤝 Partner withdrawal</button>
                     <button onclick="openEntry('transfer')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🔁 Transfer</button>
                     </div>
             </div>
@@ -109,7 +110,7 @@
 
             <!-- OVERVIEW -->
             <section id="tab-overview" class="space-y-4">
-                <div id="kpiCards" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></div>
+                <div id="kpiCards" class="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3"></div>
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 xl:col-span-2 print-card">
                         <div class="flex justify-between items-center mb-2">
@@ -130,6 +131,13 @@
                     </div>
                     <div class="overflow-x-auto"><table class="w-full text-xs text-left"><tbody id="recentBody"></tbody></table></div>
                 </div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
+                    <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+                        <div><h3 class="text-sm font-bold text-violet-900">Partner withdrawals</h3><p class="text-[11px] text-slate-500">Shown separately from expenses; withdrawals reduce business cash/bank, not reported profit.</p></div>
+                        <span id="partnerWithdrawalTotal" class="font-bold text-violet-800"></span>
+                    </div>
+                    <div class="overflow-x-auto"><table class="w-full text-xs text-left"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Partner</th><th class="p-2">Withdrawal type</th><th class="p-2">Account</th><th class="p-2 text-right">Amount</th><th class="p-2">Notes</th></tr></thead><tbody id="partnerWithdrawalBody"></tbody></table></div>
+                </div>
             </section>
 
             <!-- DAYBOOK -->
@@ -142,6 +150,7 @@
                             <option value="ALL">All types</option>
                             <option value="receipt">Receipts</option>
                             <option value="payment">Payments</option>
+                            <option value="partner">Partner withdrawals</option>
                             <option value="transfer">Transfers</option>
                             <option value="fee">Fee collection only</option>
                             <option value="manual">Manual entries only</option>
@@ -249,6 +258,20 @@
     <!-- FLOATING ACTION BUTTON (mobile) -->
     <button id="fab" onclick="openEntry('receipt')" class="md:hidden fixed bottom-5 right-5 z-40 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full w-14 h-14 text-2xl shadow-xl no-print" aria-label="New receipt">➕</button>
 
+    <div id="partnerWithdrawalModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-center"><div><h3 class="text-lg font-bold text-violet-900">Partner withdrawal</h3><p class="text-xs text-slate-500">This reduces the selected business account, but is not recorded as an expense.</p></div><button type="button" onclick="closePartnerWithdrawal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+            <div class="p-5 space-y-3">
+                <div><label for="pwPartner" class="block text-xs font-medium text-slate-700 mb-1">Partner</label><select id="pwPartner" class="w-full border rounded-lg p-2.5 text-sm bg-white"><option value="">Select partner</option></select></div>
+                <div><label for="pwType" class="block text-xs font-medium text-slate-700 mb-1">Withdrawal type</label><select id="pwType" class="w-full border rounded-lg p-2.5 text-sm bg-white"><option value="Profit distribution">Profit distribution</option><option value="Partner drawings">Partner drawings / personal use</option><option value="Capital withdrawal">Capital withdrawal</option></select></div>
+                <div class="grid grid-cols-2 gap-3"><div><label for="pwDate" class="block text-xs font-medium text-slate-700 mb-1">Date</label><input id="pwDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div><div><label for="pwAmount" class="block text-xs font-medium text-slate-700 mb-1">Amount (PKR)</label><input id="pwAmount" type="number" min="0.01" step="0.01" class="w-full border rounded-lg p-2.5 text-sm font-bold"></div></div>
+                <div><label for="pwWallet" class="block text-xs font-medium text-slate-700 mb-1">Paid from</label><select id="pwWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select></div>
+                <div><label for="pwNotes" class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label><input id="pwNotes" type="text" class="w-full border rounded-lg p-2.5 text-sm"></div>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2"><button type="button" onclick="closePartnerWithdrawal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button type="button" onclick="savePartnerWithdrawal()" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm">Save withdrawal</button></div>
+        </div>
+    </div>
+
     <!-- ENTRY MODAL -->
     <div id="entryModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
         <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
@@ -325,6 +348,7 @@ const WALLETS = {
 let INCOME_HEADS  = ['Admission / Registration Fee', 'Annual Fund', 'Book Store Sale', 'Uniform / Stationery Sale', 'Transport Fee', 'Donation', 'Other Income'];
 let EXPENSE_HEADS = ['Salaries', 'Utility Bills', 'Rent', 'Stationery', 'Repair & Maintenance', 'Fuel / Transport', 'Events / Functions', 'Books Purchase', 'Printing', 'Internet / Phone', 'Refreshments', 'Misc Expense'];
 const KIND_META = {
+    partner_withdrawal: { label: 'Partner withdrawal', prefix: 'PD-', cls: 'bg-violet-50 text-violet-700 border-violet-200', title: 'Partner Withdrawal' },
     bill_raised: { label: 'Bill Raised', prefix: 'AR-', cls: 'bg-teal-50 text-teal-700 border-teal-200', title: 'Bill Raised (Accounts Receivable)' },
     bill_received: { label: 'Bill Received', prefix: 'AP-', cls: 'bg-orange-50 text-orange-700 border-orange-200', title: 'Bill Received (Accounts Payable)' },
     receipt:  { label: 'Receipt',  prefix: 'RV-', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', title: 'Receipt Voucher' },
@@ -337,6 +361,7 @@ const KIND_META = {
 //  STATE + HELPERS
 // ====================================================================================
 let entries = [], entryById = {}, feesByVoucher = {};
+let BUSINESS_PARTNERS = [];
 let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
 let dbLimit = 300;
 let expandedDaybookGroups = new Set();
@@ -409,7 +434,7 @@ function setupWallets(items) {
 function fillWalletSelects() {
     const opt = k => `<option value="${esc(k)}">${WALLETS[k].icon} ${esc(WALLETS[k].label)}</option>`;
     const set = (id, keys, withAll) => { const el = $(id); if(!el) return; const cur = el.value; el.innerHTML = (withAll ? '<option value="ALL">All accounts</option>' : '') + keys.map(opt).join(''); if(cur && [...el.options].some(o => o.value === cur)) el.value = cur; };
-    set('gWallet', Object.keys(WALLETS), true); set('emWallet', WALLET_CHOICES); set('emWallet2', WALLET_CHOICES);
+    set('gWallet', Object.keys(WALLETS), true); set('emWallet', WALLET_CHOICES); set('emWallet2', WALLET_CHOICES); set('pwWallet', WALLET_CHOICES);
 }
 function setWalletValue(id, key) {
     const el = $(id); if(!key || !WALLETS[key]) return;
@@ -423,7 +448,7 @@ function normalize(row, idx) {
     const from = String(row.from_account || '').trim(), to = String(row.to_account || '').trim();
     const desc = String(row.description || '').trim(), rem = String(row.remarks || '').trim();
     const up = id.toUpperCase();
-    let e = { id, idx, date: String(row.date || '').slice(0, 10), raw: row, notes: rem, legacy: false, isFee: false, isLiabilitySettlement: false, isSecurityRefund: securityRefundVouchers.has(id), manual: false, wallet2: null, fee: null };
+    let e = { id, idx, date: String(row.date || '').slice(0, 10), raw: row, notes: rem, legacy: false, isFee: false, isLiabilitySettlement: false, isPartnerWithdrawal: false, isSecurityRefund: securityRefundVouchers.has(id), manual: false, wallet2: null, fee: null };
 
     const mb = up.match(/^(AR|AP)-\d+$/), ms = up.match(/^((?:AR|AP|BK)-\d+)-/);
 
@@ -441,9 +466,13 @@ function normalize(row, idx) {
         Object.assign(e, { kind: 'transfer', wallet: normWallet(from), wallet2: normWallet(to), amount: inAmt || outAmt, head: 'Transfer', title: desc, manual: true });
     } else if(up.startsWith('OB-')) {
         Object.assign(e, { kind: 'opening', wallet: normWallet(to), amount: inAmt || outAmt, head: 'Opening Balance', title: desc || 'Opening Balance', manual: true });
+    } else if(up.startsWith('PD-')) {
+        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt || inAmt, head: 'Partner Drawings',
+            title: desc, manual: true, isPartnerWithdrawal: true });
     } else if(up.startsWith('PV-')) {
         Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt || inAmt, head: to || 'Misc Expense',
-            title: desc, manual: true, isLiabilitySettlement: partyKey(to) === partyKey('Staff Security Payable') });
+            title: desc, manual: true, isLiabilitySettlement: partyKey(to) === partyKey('Staff Security Payable'),
+            isPartnerWithdrawal: partyKey(to) === partyKey('Partner Drawings') });
     } else if(up.startsWith('RV-')) {
         Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt || outAmt, head: from || 'Other Income', title: desc, manual: true });
     } else if(/^(cash receipt|cash payment|salary payment)$/i.test(from)) {
@@ -455,7 +484,8 @@ function normalize(row, idx) {
             title: desc || to, notes: '', legacy: true, manual: true
         });
     } else if(outAmt > 0 && inAmt === 0) {
-        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt, head: to || desc || 'Misc Expense', title: desc });
+        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt, head: to || desc || 'Misc Expense', title: desc,
+            isPartnerWithdrawal: partyKey(to) === partyKey('Partner Drawings') });
     } else {
         // fee payments (fees.html) and other receipts: from = head, to = wallet
         Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt, head: from || 'Receipt', title: desc });
@@ -468,7 +498,7 @@ function normalize(row, idx) {
         }
     }
     e.ref = e.isFee ? shortId(id) : (e.billRef || id);
-    e.headLabel = e.isFee ? 'Fee – ' + titleCase((e.fee && e.fee.type) || 'Tuition Fee') : e.head;
+    e.headLabel = e.isFee ? 'Fee – ' + titleCase((e.fee && e.fee.type) || 'Tuition Fee') : (e.isPartnerWithdrawal ? 'Partner withdrawal' : e.head);
     return e;
 }
 
@@ -485,7 +515,7 @@ async function initAccounts() {
                 sbFetchAll('staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes')
             ])
         ]);
-        INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; setupWallets(L['Payment Account']);
+        INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; BUSINESS_PARTNERS = L['Business Partner'] || []; setupWallets(L['Payment Account']);
         if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD);
         if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable');
         if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable');
@@ -567,7 +597,7 @@ function renderAll() {
     showTab(currentTab());
 }
 
-function sumKind(list, kind, w) { return list.filter(e => e.kind === kind && !(kind === 'payment' && e.isLiabilitySettlement) && (w === 'ALL' || e.wallet === w)).reduce((s, e) => s + e.amount, 0); }
+function sumKind(list, kind, w) { return list.filter(e => e.kind === kind && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal)) && (w === 'ALL' || e.wallet === w)).reduce((s, e) => s + e.amount, 0); }
 
 function barRow(label, value, max, total, color) {
     let w = max > 0 ? Math.max(2, Math.round(value / max * 100)) : 0;
@@ -587,7 +617,8 @@ function renderOverview() {
         { t: 'Total Expense', v: 'PKR ' + fmt(expense), c: 'text-rose-600' },
         { t: net >= 0 ? 'Surplus' : 'Deficit', v: 'PKR ' + fmt(Math.abs(net)), c: net >= 0 ? 'text-indigo-700' : 'text-rose-600' },
         { t: 'Fee Collection', v: 'PKR ' + fmt(feeIn), c: 'text-emerald-700', s: `${list.filter(e => e.isFee).length} receipts` },
-        { t: 'Closing balance', v: 'PKR ' + fmt(closing), c: closing >= 0 ? 'text-slate-900' : 'text-rose-600', s: r.wallet === 'ALL' ? 'Cash + Bank + Online' : WALLETS[r.wallet].label }
+        { t: 'Closing balance', v: 'PKR ' + fmt(closing), c: closing >= 0 ? 'text-slate-900' : 'text-rose-600', s: r.wallet === 'ALL' ? 'Cash + Bank + Online' : WALLETS[r.wallet].label },
+        { t: 'Partner withdrawals', v: 'PKR ' + fmt(list.filter(e => e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).reduce((sum, e) => sum + e.amount, 0)), c: 'text-violet-700', s: 'Not included in expenses / profit' }
     ];
     $('kpiCards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`).join('');
 
@@ -597,7 +628,7 @@ function renderOverview() {
     while(cur <= to) { months.push({ key: ymd(cur).slice(0, 7), label: cur.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), inc: 0, exp: 0 }); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1); }
     if(months.length > 12) months = months.slice(-12);
     let mm = {}; months.forEach(m => mm[m.key] = m);
-    list.forEach(e => { let m = mm[e.date.slice(0, 7)]; if(!m) return; if(e.kind === 'receipt') m.inc += e.amount; if(e.kind === 'payment' && !e.isLiabilitySettlement) m.exp += e.amount; });
+    list.forEach(e => { let m = mm[e.date.slice(0, 7)]; if(!m) return; if(e.kind === 'receipt') m.inc += e.amount; if(e.kind === 'payment' && !e.isLiabilitySettlement && !e.isPartnerWithdrawal) m.exp += e.amount; });
     let max = Math.max(1, ...months.map(m => Math.max(m.inc, m.exp)));
     let W = Math.max(520, months.length * 70), H = 230, padL = 8, padB = 28, padT = 20, ch = H - padB - padT, gw = (W - padL) / Math.max(months.length, 1), bw = Math.min(22, gw / 3);
     const short = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : (v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + 'k' : String(Math.round(v)));
@@ -616,7 +647,7 @@ function renderOverview() {
 
     // top expense heads
     let heads = {};
-    list.filter(e => e.kind === 'payment' && !e.isLiabilitySettlement && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { heads[e.headLabel] = (heads[e.headLabel] || 0) + e.amount; });
+    list.filter(e => e.kind === 'payment' && !e.isLiabilitySettlement && !e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { heads[e.headLabel] = (heads[e.headLabel] || 0) + e.amount; });
     let arr = Object.entries(heads).sort((a, b) => b[1] - a[1]).slice(0, 6), tot = Object.values(heads).reduce((s, v) => s + v, 0);
     $('topExpenses').innerHTML = arr.length ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, 'bg-rose-500')).join('') : '<p class="text-xs text-slate-400">No expenses in this period.</p>';
 
@@ -624,13 +655,22 @@ function renderOverview() {
     let recent = [...list].reverse().slice(0, 8);
     $('recentBody').innerHTML = recent.length ? recent.map(e => {
         let d = delta(e, r.wallet);
-        return `<tr class="border-b"><td class="py-2 pr-3 text-slate-500 whitespace-nowrap">${fmtDate(e.date)}</td><td class="py-2 pr-3"><span class="px-2 py-0.5 rounded-md border ${KIND_META[e.kind].cls}">${KIND_META[e.kind].label}</span></td><td class="py-2 pr-3 text-slate-700">${esc(entryLabel(e))}</td><td class="py-2 text-right font-bold ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'} whitespace-nowrap">${e.kind === 'transfer' && r.wallet === 'ALL' ? 'PKR ' + fmt(e.amount) : (d >= 0 ? '+ ' : '- ') + 'PKR ' + fmt(Math.abs(d))}</td></tr>`;
+        const meta = e.isPartnerWithdrawal ? KIND_META.partner_withdrawal : KIND_META[e.kind];
+        return `<tr class="border-b"><td class="py-2 pr-3 text-slate-500 whitespace-nowrap">${fmtDate(e.date)}</td><td class="py-2 pr-3"><span class="px-2 py-0.5 rounded-md border ${meta.cls}">${meta.label}</span></td><td class="py-2 pr-3 text-slate-700">${esc(entryLabel(e))}</td><td class="py-2 text-right font-bold ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'} whitespace-nowrap">${e.kind === 'transfer' && r.wallet === 'ALL' ? 'PKR ' + fmt(e.amount) : (d >= 0 ? '+ ' : '- ') + 'PKR ' + fmt(Math.abs(d))}</td></tr>`;
     }).join('') : '<tr><td class="py-4 text-center text-slate-400">No entries in this period.</td></tr>';
+    const partnerRows = list.filter(e => e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).slice().reverse();
+    $('partnerWithdrawalTotal').innerText = `Selected period: PKR ${fmt(partnerRows.reduce((sum, e) => sum + e.amount, 0))}`;
+    $('partnerWithdrawalBody').innerHTML = partnerRows.length ? partnerRows.map(e => {
+        const type = (e.notes.match(/(?:^|\|\s*)Type:\s*([^|]+)/i) || [])[1] || 'Partner drawings';
+        const notes = e.notes.replace(/(?:^|\|\s*)Type:\s*[^|]+/i, '').replace(/^\s*\|\s*|\s*\|\s*$/g, '').trim();
+        return `<tr class="border-b"><td class="p-2 whitespace-nowrap">${fmtDate(e.date)}</td><td class="p-2 font-semibold">${esc(e.title || 'Partner')}</td><td class="p-2">${esc(type)}</td><td class="p-2">${WALLETS[e.wallet].icon} ${esc(WALLETS[e.wallet].label)}</td><td class="p-2 text-right font-bold text-violet-700">PKR ${fmt(e.amount)}</td><td class="p-2 text-slate-500">${esc(notes || '-')}</td></tr>`;
+    }).join('') : `<tr><td colspan="6" class="p-4 text-center text-slate-400">${BUSINESS_PARTNERS.length ? 'No partner withdrawals in this period.' : 'Add partner names in Settings → Business partners to start recording withdrawals.'}</td></tr>`;
 }
 
 function entryLabel(e) {
     if(e.isFee) return `${(e.fee && e.fee.student) || '-'} — ${titleCase((e.fee && e.fee.type) || 'Fee')}${e.fee && e.fee.period ? ' (' + e.fee.period + ')' : ''}`;
     if(e.kind === 'transfer') return `${WALLETS[e.wallet].label} → ${WALLETS[e.wallet2].label}${e.title ? ' · ' + e.title : ''}`;
+    if(e.isPartnerWithdrawal) return `Partner withdrawal — ${e.title || 'Partner'}`;
     return `${e.head}${e.title && e.title !== e.head ? ' — ' + e.title : ''}`;
 }
 
@@ -648,6 +688,7 @@ function daybookRows(applyFilters = true) {
     let type = $('dbType').value, q = $('dbSearch').value.trim().toLowerCase();
     return list.filter(e => {
         if(type === 'fee' && !e.isFee) return false;
+        if(type === 'partner' && !e.isPartnerWithdrawal) return false;
         if(type === 'manual' && !e.manual) return false;
         if(['receipt', 'payment', 'transfer'].includes(type) && e.kind !== type) return false;
         if(q && !(entryLabel(e) + ' ' + e.id + ' ' + e.notes + ' ' + ((e.fee && e.fee.adm) || '')).toLowerCase().includes(q)) return false;
@@ -669,7 +710,7 @@ function renderDaybook() {
     const allRows = daybookRows(false), rows = daybookRows();
     const visibleRows = new Set(rows), groups = new Map();
     allRows.forEach(e => {
-        const key = JSON.stringify([e.date, e.kind, e.wallet, e.kind === 'transfer' ? e.wallet2 : '', !!e.isFee, !!e.isLiabilitySettlement, !!e.isSecurityRefund]);
+        const key = JSON.stringify([e.date, e.kind, e.wallet, e.kind === 'transfer' ? e.wallet2 : '', !!e.isFee, !!e.isPartnerWithdrawal, !!e.isLiabilitySettlement, !!e.isSecurityRefund]);
         let group = groups.get(key);
         if(!group) {
             group = { key, entries: [], receipt: 0, payment: 0, transfer: 0, delta: 0, balance: 0 };
@@ -697,7 +738,7 @@ function renderDaybook() {
     const renderEntryRow = (e, detail = false) => {
         let isT = e.kind === 'transfer' && r.wallet === 'ALL';
         let recAmt = e._d > 0 ? 'PKR ' + fmt(e._d) : '', payAmt = e._d < 0 ? 'PKR ' + fmt(-e._d) : '';
-        let kindBadge = `<span class="px-2 py-0.5 rounded-md border ${KIND_META[e.kind].cls}">${KIND_META[e.kind].label}</span>${e.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
+        let kindBadge = `<span class="px-2 py-0.5 rounded-md border ${e.isPartnerWithdrawal ? KIND_META.partner_withdrawal.cls : KIND_META[e.kind].cls}">${e.isPartnerWithdrawal ? KIND_META.partner_withdrawal.label : KIND_META[e.kind].label}</span>${e.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
         let acct = e.kind === 'transfer' ? `${WALLETS[e.wallet].icon} → ${WALLETS[e.wallet2].icon}` : `${WALLETS[e.wallet].icon} ${WALLETS[e.wallet].label}`;
         let canEdit = e.manual && !e.isSecurityRefund;
         return `<tr class="border-b hover:bg-slate-50 align-top ${detail ? 'bg-slate-50/70' : ''}">
@@ -721,7 +762,7 @@ function renderDaybook() {
         const isTransfer = first.kind === 'transfer' && r.wallet === 'ALL';
         const receipt = isTransfer ? `PKR ${fmt(group.transfer)}` : group.receipt ? `PKR ${fmt(group.receipt)}` : '';
         const payment = group.payment ? `PKR ${fmt(group.payment)}` : '';
-        const kindBadge = `<span class="px-2 py-0.5 rounded-md border ${KIND_META[first.kind].cls}">${KIND_META[first.kind].label}</span>${first.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
+        const kindBadge = `<span class="px-2 py-0.5 rounded-md border ${first.isPartnerWithdrawal ? KIND_META.partner_withdrawal.cls : KIND_META[first.kind].cls}">${first.isPartnerWithdrawal ? KIND_META.partner_withdrawal.label : KIND_META[first.kind].label}</span>${first.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
         const acct = first.kind === 'transfer' ? `${WALLETS[first.wallet].icon} → ${WALLETS[first.wallet2].icon}` : `${WALLETS[first.wallet].icon} ${WALLETS[first.wallet].label}`;
         const verb = first.kind === 'receipt' || first.kind === 'opening' ? 'receipts' : first.kind === 'payment' ? 'payments' : 'transfers';
         const amount = group.receipt || group.payment || group.transfer;
@@ -759,7 +800,7 @@ function exportDaybookCsv() {
     let rows = daybookRows();
     if(!rows.length) { toast('No entries to export.', false); return; }
     exportCsv('daybook', ['Date', 'Voucher', 'Type', 'Account', 'Details', 'Receipt', 'Payment', 'Balance', 'Notes'],
-        rows.map(e => [e.date, e.id, KIND_META[e.kind].label, e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label, entryLabel(e), e._d > 0 ? e._d : '', e._d < 0 ? -e._d : '', e._bal, e.notes]));
+        rows.map(e => [e.date, e.id, e.isPartnerWithdrawal ? KIND_META.partner_withdrawal.label : KIND_META[e.kind].label, e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label, entryLabel(e), e._d > 0 ? e._d : '', e._d < 0 ? -e._d : '', e._bal, e.notes]));
 }
 
 // ---------------- FEE COLLECTION ----------------
@@ -806,7 +847,7 @@ function renderHeads() {
     let r = getRange(), list = scopeList();
     const build = (kind, color, el) => {
         let map = {};
-        list.filter(e => e.kind === kind && !(kind === 'payment' && e.isLiabilitySettlement) && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { map[e.headLabel] = (map[e.headLabel] || 0) + e.amount; });
+        list.filter(e => e.kind === kind && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal)) && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { map[e.headLabel] = (map[e.headLabel] || 0) + e.amount; });
         let arr = Object.entries(map).sort((a, b) => b[1] - a[1]), tot = arr.reduce((s, x) => s + x[1], 0);
         $(el).innerHTML = arr.length
             ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, color)).join('') + `<div class="flex justify-between text-sm font-bold border-t pt-2 mt-2"><span>Total</span><span>PKR ${fmt(tot)}</span></div>`
@@ -1109,6 +1150,41 @@ function openEntry(kind) {
     setEntryKind(kind);
     $('entryModal').classList.remove('hidden');
 }
+function openPartnerWithdrawal() {
+    if(!BUSINESS_PARTNERS.length) {
+        toast('Add the two partner names first in Settings → Business partners.', false);
+        return;
+    }
+    $('pwPartner').innerHTML = '<option value="">Select partner</option>' + BUSINESS_PARTNERS.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+    $('pwDate').value = todayStr();
+    $('pwAmount').value = '';
+    $('pwType').value = 'Profit distribution';
+    $('pwNotes').value = '';
+    setWalletValue('pwWallet', WALLET_CHOICES[0]);
+    $('partnerWithdrawalModal').classList.remove('hidden');
+}
+function closePartnerWithdrawal() { $('partnerWithdrawalModal').classList.add('hidden'); }
+async function savePartnerWithdrawal() {
+    const partner = $('pwPartner').value.trim(), date = $('pwDate').value;
+    const amount = parseFloat($('pwAmount').value) || 0, wallet = $('pwWallet').value;
+    const type = $('pwType').value, notes = $('pwNotes').value.trim();
+    if(!BUSINESS_PARTNERS.includes(partner)) { toast('Select a partner from the list.', false); return; }
+    if(!date) { toast('Please select a date.', false); return; }
+    if(!Number.isFinite(amount) || amount <= 0) { toast('Amount must be greater than 0.', false); return; }
+    if(!WALLETS[wallet]) { toast('Select a valid payment account.', false); return; }
+    const id = genVoucherNo('partner_withdrawal');
+    const remarks = `Type: ${type}${notes ? ' | ' + notes : ''}`;
+    const payload = { voucher_id: id, from_account: wallet, to_account: 'Partner Drawings', description: partner, amount_in: 0, amount_out: amount, date, remarks };
+    showLoading('Saving partner withdrawal...');
+    try {
+        const c = getSupabaseConfig();
+        const res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(payload) });
+        if(!res.ok) { hideLoading(); toast('Could not save withdrawal: ' + await res.text(), false); return; }
+        closePartnerWithdrawal();
+        toast(`Partner withdrawal of PKR ${fmt(amount)} recorded for ${partner}.`);
+        await initAccounts();
+    } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
+}
 function editEntry(id) {
     let e = entryById[id]; if(!e || !e.manual) return;
     if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
@@ -1221,7 +1297,7 @@ function deleteEntry(id) {
 // ====================================================================================
 function printVoucher(id) {
     let e = entryById[id]; if(!e) return;
-    let meta = KIND_META[e.kind];
+    let meta = e.isPartnerWithdrawal ? KIND_META.partner_withdrawal : KIND_META[e.kind];
     let who = e.kind === 'receipt' ? 'Received from / Head' : (e.kind === 'payment' ? 'Paid to / Head' : (e.kind === 'transfer' ? 'Transfer' : 'Account'));
     let whoVal = e.isFee ? `${(e.fee || {}).student || ''}${(e.fee || {}).cls ? ' (Class ' + e.fee.cls + ')' : ''}` :
         (e.kind === 'transfer' ? `${WALLETS[e.wallet].label} → ${WALLETS[e.wallet2].label}` : e.head);
