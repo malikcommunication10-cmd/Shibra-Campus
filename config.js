@@ -310,6 +310,7 @@ function sbApplyMe() {
     document.documentElement.style.visibility = 'visible';
     const go = () => {
         try { installGuards(); } catch (e) { console.error(e); }
+        document.dispatchEvent(new CustomEvent('shibra:me-ready', { detail: ME }));
         sbUpdateDayCloseDateLimits();
         if (typeof window.shibraDayCloseRefresh === 'function') window.shibraDayCloseRefresh();
         sbQueueDataPreload();
@@ -454,14 +455,15 @@ const SETTING_DEFAULTS = {
     'Expense Head': ['Salaries', 'Utility Bills', 'Rent', 'Stationery', 'Repair & Maintenance', 'Fuel / Transport', 'Events / Functions', 'Books Purchase', 'Printing', 'Internet / Phone', 'Refreshments', 'Misc Expense'],
     'Book Vendor': [],
     'Book Category': ['Books', 'Notebooks', 'Study Planner', 'Lamination Paper'],
-    'Payment Account': []
+    'Payment Account': [],
+    'Business Partner': []
 };
 let _settingLists = null, _settingListsRevision = '';
 async function loadSettingLists() {
     const revision = sbDataRevision('settings');
     if (_settingLists && _settingListsRevision === revision) return _settingLists;
     try {
-        const c = JSON.parse(sessionStorage.getItem('sb_settings_v2') || 'null');
+        const c = JSON.parse(sessionStorage.getItem('sb_settings_v3') || 'null');
         if (c && c.r === revision && Date.now() - c.t < 120000) {
             _settingLists = c.d; _settingListsRevision = revision; return c.d;
         }
@@ -473,7 +475,7 @@ async function loadSettingLists() {
         if (Array.isArray(rows)) {
             const by = {};
             const canon = k => String(k || '').toLowerCase().replace(/[^a-z]/g, '').replace(/s$/, '');
-            const ALIAS = { 'Book Vendor': ['bookvendor', 'vendor', 'booksupplier', 'supplier'], 'Income Head': ['incomehead', 'income'], 'Expense Head': ['expensehead', 'expense'], 'Designation': ['designation'], 'Class': ['class'], 'Section': ['section'], 'Book Category': ['bookcategory', 'category'], 'Payment Account': ['paymentaccount', 'paymentmode', 'paymentaccounts'] };
+            const ALIAS = { 'Book Vendor': ['bookvendor', 'vendor', 'booksupplier', 'supplier'], 'Income Head': ['incomehead', 'income'], 'Expense Head': ['expensehead', 'expense'], 'Designation': ['designation'], 'Class': ['class'], 'Section': ['section'], 'Book Category': ['bookcategory', 'category'], 'Payment Account': ['paymentaccount', 'paymentmode', 'paymentaccounts'], 'Business Partner': ['businesspartner', 'partner', 'partners'] };
             const keyOf = raw => { const cn = canon(raw); for (const d of Object.keys(ALIAS)) if (ALIAS[d].includes(cn) || canon(d) === cn) return d; return String(raw || '').trim(); };
             rows.forEach(x => { const k = keyOf(x.setting_key), v = String(x.setting_value ?? '').trim(); if (k && v !== '') (by[k] = by[k] || []).push(v); });
             Object.keys(SETTING_DEFAULTS).forEach(k => { if (by[k] && by[k].length) out[k] = by[k]; });
@@ -486,7 +488,7 @@ async function loadSettingLists() {
     } catch (e) {}
     _settingLists = out;
     _settingListsRevision = revision;
-    try { sessionStorage.setItem('sb_settings_v2', JSON.stringify({ t: Date.now(), r: revision, d: out })); } catch (e) {}
+    try { sessionStorage.setItem('sb_settings_v3', JSON.stringify({ t: Date.now(), r: revision, d: out })); } catch (e) {}
     return out;
 }
 async function getSchoolYear() {
