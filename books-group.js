@@ -97,7 +97,45 @@
 
     let shownRows = [];                // every transaction that is on screen (for "select all")
     window.renderTransactions = function () {
-        const list = txList(), st = periodStats(list), units = buildUnits(list), shown = units.slice(0, txLimit);
+        const list = txList(), st = periodStats(list), units = buildUnits(sortedTxList());
+        const value = (unit, key) => {
+            const rows = unit.single ? [unit.single] : unit.rows;
+            if(key === 'net' && !unit.single) return unit.net;
+            if(key === 'qty' && !unit.single) return unit.qty;
+            if(key === 'discount' && !unit.single) return unit.discount;
+            if(key === 'unit' && !unit.single) return unit.qty ? rows.reduce((sum, row) => sum + row.gross, 0) / unit.qty : 0;
+            if(key === 'invoice' && !unit.single) return unit.invoices.join(', ');
+            if(key === 'voucher' && !unit.single) return unit.vouchers.join(', ');
+            if(key === 'type' && !unit.single) return KINDS[unit.kind]?.label || unit.kind;
+            if(key === 'party' && !unit.single) return unit.party || '';
+            if(key === 'item' && !unit.single) return rows.map(row => row.title).join(', ');
+            if(key === 'account' && !unit.single) return unit.modes.join(', ');
+            const transaction = unit.single || rows[0];
+            const getters = {
+                date: row => row.date || '',
+                invoice: row => row.invoiceNo || '',
+                voucher: row => row.voucher || (row.id !== undefined ? '#' + row.id : ''),
+                type: row => KINDS[row.kind]?.label || row.kind,
+                party: row => row.party || '',
+                item: row => row.title || '',
+                qty: row => row.qty || 0,
+                unit: row => row.unit || 0,
+                discount: row => row.discount || 0,
+                net: row => row.net || 0,
+                account: row => WALLETS[row.mode]?.label || row.mode || ''
+            };
+            return (getters[key] || getters.date)(transaction);
+        };
+        units.sort((a, b) => {
+            const left = value(a, transactionSort.key), right = value(b, transactionSort.key);
+            const comparison = typeof left === 'number' ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+            const aDate = a.single ? a.single.date : a.date, bDate = b.single ? b.single.date : b.date;
+            const aIndex = a.single ? a.single.idx : a.rows[0].idx, bIndex = b.single ? b.single.idx : b.rows[0].idx;
+            const tie = (aDate || '').localeCompare(bDate || '') || aIndex - bIndex;
+            return (comparison || tie) * (transactionSort.direction === 'asc' ? 1 : -1);
+        });
+        const shown = units.slice(0, txLimit);
+        renderTransactionHead();
         $('txCards').innerHTML = [
             { t: 'Sales', v: 'PKR ' + fmt(st.sales), c: 'text-emerald-600' }, { t: 'Purchases', v: 'PKR ' + fmt(st.purch), c: 'text-indigo-700' },
             { t: 'Sale returns', v: 'PKR ' + fmt(st.salesRet), c: 'text-amber-600' }, { t: 'Purchase returns', v: 'PKR ' + fmt(st.purchRet), c: 'text-rose-600' }
