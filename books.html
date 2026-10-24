@@ -2069,6 +2069,7 @@ function deleteMasterItem(i) {
 // PENDING AMOUNTS (to receive from students / to pay to vendors), FIFO, promise dates
 // ====================================================================================
 let accRows = [], bookPromises = {}, bookDues = [], bookDuesMap = {};
+let statementViewMode = 'date';
 async function loadDuesData() {
     try { const r = await sbFetchAll('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date'); const a = r.ok ? await r.json() : []; accRows = Array.isArray(a) ? a : []; } catch (e) { accRows = []; }
     try { const r = await sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Promise'); const a = r.ok ? await r.json() : []; bookPromises = parsePromises(Array.isArray(a) ? a : []); } catch (e) { bookPromises = {}; }
@@ -2125,18 +2126,74 @@ async function saveSettle() {
     $('settleModal').classList.add('hidden'); renderAll();
     toast(`${kind === 'recv' ? 'Received' : 'Paid'} PKR ${fmt(amt)} against the oldest pending bills and recorded in Accounts.`);
 }
-function openStatement(key) {
+function setStatementView(mode) {
+    statementViewMode = mode === 'bill' ? 'bill' : 'date';
+    const key = $('stmtPartyKey').value;
+    if(key) renderStatement(key);
+}
+function renderStatement(key) {
     const p = bookDuesMap[key]; if(!p) return;
     const pr = bookPromises[key];
-    const sec = (title, E, S, side, cls) => (!E.length && !S.length) ? '' : `<h4 class="font-bold text-sm mt-4 mb-1 ${cls}">${title}</h4>
-        <div class="overflow-x-auto"><table class="w-full text-left text-xs border-collapse"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Item</th><th class="p-2 text-right">Amount</th><th class="p-2 text-right">Cleared</th><th class="p-2 text-right">Remaining</th></tr></thead><tbody>
-        ${E.map(e => `<tr class="border-b ${e.rem > 0 ? '' : 'text-slate-400'}"><td class="p-2">${fmtDate(e.date)}</td><td class="p-2 font-mono">${esc(e.voucher)}</td><td class="p-2">${esc(e.title)}${e.qty ? ' x ' + fmt(e.qty) : ''}</td><td class="p-2 text-right">${fmt(e.amt)}</td><td class="p-2 text-right text-emerald-600">${fmt(e.paid)}</td><td class="p-2 text-right font-bold ${e.rem > 0 ? 'text-rose-600' : ''}">${fmt(e.rem)}</td></tr>`).join('')}
-        </tbody></table></div>
-        ${S.length ? `<div class="text-xs mt-2 font-semibold text-slate-600">Received / adjusted</div><div class="overflow-x-auto"><table class="w-full text-left text-xs"><tbody>${S.map(x => `<tr class="border-b"><td class="p-1.5">${fmtDate(x.date)}</td><td class="p-1.5 font-mono">${esc(x.voucher)}</td><td class="p-1.5">${esc(x.label)}${x.bill ? ' (against ' + esc(x.bill) + ')' : ''}</td><td class="p-1.5 text-right font-bold text-emerald-600">${fmt(x.amt)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-        <div class="mt-2 text-sm font-bold flex flex-wrap justify-between gap-2 bg-slate-50 rounded-xl p-2"><span>Total: ${fmt(side.total)}</span><span>Cleared: ${fmt(side.settled)}</span><span class="${side.pending > 0 ? 'text-rose-600' : 'text-emerald-600'}">${side.pending >= 0 ? 'Pending' : 'Advance'}: PKR ${fmt(Math.abs(side.pending))}</span></div>`;
+    const money = value => fmt(Math.round((Number(value) || 0) * 100) / 100);
+    const invoiceByVoucher = new Map(txs.filter(t => t.invoiceNo && t.voucher).map(t => [t.voucher.toUpperCase(), t.invoiceNo]));
+    const section = (title, bills, settlements, side, isPayable, color) => {
+        if(!bills.length && !settlements.length) return '';
+        const events = [
+            ...bills.map(e => ({ date: e.date || '', voucher: e.voucher || '', label: isPayable ? 'Purchase bill' : 'Sales bill', inAmount: isPayable ? 0 : e.amt, outAmount: isPayable ? e.amt : 0 })),
+            ...settlements.map(e => ({ date: e.date || '', voucher: e.voucher || '', label: e.label || (isPayable ? 'Payment / adjustment' : 'Receipt / adjustment'), inAmount: isPayable ? e.amt : 0, outAmount: isPayable ? 0 : e.amt, bill: e.bill || '' }))
+        ].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.inAmount === b.inAmount ? 0 : (a.inAmount ? -1 : 1)) || a.voucher.localeCompare(b.voucher));
+        let running = 0;
+        const dateGroups = new Map();
+        events.forEach(event => {
+            const keyDate = event.date || '';
+            const group = dateGroups.get(keyDate) || { date: keyDate, inAmount: 0, outAmount: 0, descriptions: [], vouchers: [] };
+            group.inAmount += event.inAmount;
+            group.outAmount += event.outAmount;
+            group.descriptions.push(event.label);
+            if(event.voucher) group.vouchers.push(event.voucher);
+            dateGroups.set(keyDate, group);
+        });
+        const dateRows = [...dateGroups.values()].sort((a, b) => a.date.localeCompare(b.date)).map(row => {
+            running += isPayable ? row.outAmount - row.inAmount : row.inAmount - row.outAmount;
+            return `<tr class="border-b"><td class="p-2 whitespace-nowrap">${row.date ? fmtDate(row.date) : 'Date not recorded'}</td><td class="p-2">${[...new Set(row.descriptions)].map(esc).join(' + ')} <span class="text-slate-400">(${row.vouchers.length} entries)</span></td><td class="p-2 text-right font-semibold text-emerald-700">${row.inAmount ? money(row.inAmount) : '-'}</td><td class="p-2 text-right font-semibold text-rose-600">${row.outAmount ? money(row.outAmount) : '-'}</td><td class="p-2 text-right font-bold">${money(running)}</td></tr>`;
+        }).join('');
+        const billGroups = new Map();
+        bills.forEach((bill, index) => {
+            const invoice = invoiceByVoucher.get(String(bill.voucher || '').toUpperCase());
+            const groupKey = invoice ? `invoice:${invoice.toLowerCase()}` : `voucher:${bill.voucher || index}`;
+            const group = billGroups.get(groupKey) || { date: bill.date || '', invoice: invoice || '', vouchers: [], count: 0, amount: 0, remaining: 0 };
+            if((bill.date || '') < group.date || !group.date) group.date = bill.date || '';
+            if(bill.voucher && !group.vouchers.includes(bill.voucher)) group.vouchers.push(bill.voucher);
+            group.count++;
+            group.amount += Number(bill.amt) || 0;
+            group.remaining += Number(bill.rem) || 0;
+            billGroups.set(groupKey, group);
+        });
+        let billBalance = 0;
+        const billRows = [...billGroups.values()].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.invoice || a.vouchers[0] || '').localeCompare(b.invoice || b.vouchers[0] || '')).map(bill => {
+            const cleared = Math.max(0, bill.amount - bill.remaining);
+            billBalance += bill.remaining;
+            return `<tr class="border-b"><td class="p-2 whitespace-nowrap">${bill.date ? fmtDate(bill.date) : 'Date not recorded'}</td><td class="p-2 font-mono">${esc(bill.invoice || bill.vouchers.join(', ') || '-')}</td><td class="p-2">${bill.count} item${bill.count === 1 ? '' : 's'} <span class="text-slate-400">· ${bill.vouchers.length} voucher${bill.vouchers.length === 1 ? '' : 's'}</span></td><td class="p-2 text-right">${money(bill.amount)}</td><td class="p-2 text-right text-emerald-600">${money(cleared)}</td><td class="p-2 text-right font-semibold ${bill.remaining > 0.005 ? 'text-rose-600' : 'text-slate-500'}">${money(bill.remaining)}</td><td class="p-2 text-right font-bold">${money(billBalance)}</td></tr>`;
+        }).join('');
+        const inTotal = events.reduce((sum, event) => sum + event.inAmount, 0);
+        const outTotal = events.reduce((sum, event) => sum + event.outAmount, 0);
+        const endingBalance = side.pending;
+        const modeTable = statementViewMode === 'date'
+            ? `<div class="overflow-x-auto"><table class="w-full text-left text-xs border-collapse"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Activity</th><th class="p-2 text-right">IN</th><th class="p-2 text-right">OUT</th><th class="p-2 text-right">Running balance</th></tr></thead><tbody>${dateRows || '<tr><td colspan="5" class="p-4 text-center text-slate-400">No ledger entries.</td></tr>'}</tbody><tfoot class="bg-slate-50 font-bold border-t"><tr><td class="p-2" colspan="2">Total</td><td class="p-2 text-right text-emerald-700">${money(inTotal)}</td><td class="p-2 text-right text-rose-600">${money(outTotal)}</td><td class="p-2 text-right">${money(endingBalance)}</td></tr></tfoot></table></div>`
+            : `<div class="overflow-x-auto"><table class="w-full text-left text-xs border-collapse"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Bill / Invoice</th><th class="p-2">Summary</th><th class="p-2 text-right">Bill total</th><th class="p-2 text-right">Cleared</th><th class="p-2 text-right">Remaining</th><th class="p-2 text-right">Running balance</th></tr></thead><tbody>${billRows || '<tr><td colspan="7" class="p-4 text-center text-slate-400">No bills found.</td></tr>'}</tbody><tfoot class="bg-slate-50 font-bold border-t"><tr><td class="p-2" colspan="3">Total</td><td class="p-2 text-right">${money(side.total)}</td><td class="p-2 text-right text-emerald-600">${money(side.settled)}</td><td class="p-2 text-right text-rose-600">${money(side.pending)}</td><td class="p-2 text-right">${money(endingBalance)}</td></tr></tfoot></table></div>`;
+        return `<section class="mt-4"><h4 class="font-bold text-sm mb-1 ${color}">${title}</h4><p class="text-[11px] text-slate-500 mb-2">${isPayable ? 'OUT increases payable; IN reduces payable.' : 'IN increases receivable; OUT reduces receivable.'}</p>${modeTable}<div class="mt-2 text-sm font-bold flex flex-wrap justify-between gap-2 bg-slate-50 rounded-xl p-2"><span>Total: PKR ${money(side.total)}</span><span>Cleared: PKR ${money(side.settled)}</span><span class="${side.pending > 0 ? 'text-rose-600' : 'text-emerald-600'}">${side.pending >= 0 ? 'Pending' : 'Advance'}: PKR ${money(Math.abs(side.pending))}</span></div></section>`;
+    };
     $('stmtName').innerText = p.name;
-    $('stmtBody').innerHTML = sec('Amount to receive (sales on credit)', p.recvE, p.recvS, p.recv, 'text-emerald-700') + sec('Amount to pay (purchases on credit)', p.payE, p.payS, p.pay, 'text-indigo-700')
+    $('stmtPartyKey').value = key;
+    $('stmtViewDate').className = `px-3 py-1.5 rounded-lg text-xs font-semibold ${statementViewMode === 'date' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`;
+    $('stmtViewBill').className = `px-3 py-1.5 rounded-lg text-xs font-semibold ${statementViewMode === 'bill' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`;
+    $('stmtBody').innerHTML = section('Receivable ledger (sales on credit)', p.recvE, p.recvS, p.recv, false, 'text-emerald-700') + section('Payable ledger (purchases on credit)', p.payE, p.payS, p.pay, true, 'text-indigo-700')
         + (pr ? `<p class="mt-3 text-sm">Promise to pay: <b>${fmtDate(pr.d)}</b>${pr.a ? ' (PKR ' + fmt(pr.a) + ')' : ''}${pr.note ? ' - ' + esc(pr.note) : ''}</p>` : '');
+}
+function openStatement(key) {
+    const p = bookDuesMap[key]; if(!p) return;
+    statementViewMode = 'date';
+    renderStatement(key);
     $('stmtModal').classList.remove('hidden');
 }
 function printStatement() { document.body.classList.add('print-stmt'); window.print(); }
@@ -2392,9 +2449,9 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeItemLe
   <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('settleModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="saveSettle()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save</button></div>
  </div></div>
 <div id="stmtModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
- <div id="stmtBox" class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto p-5">
+ <div id="stmtBox" class="bg-white w-full max-w-6xl rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto p-5">
   <div class="flex justify-between items-start border-b pb-3 mb-2 gap-2"><div><h3 class="font-bold text-indigo-950">Concept School - Book Store Statement</h3><p id="stmtName" class="text-sm font-semibold text-slate-700"></p></div>
-  <div class="flex gap-2 no-print"><button onclick="printStatement()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">Print</button><button onclick="document.getElementById('stmtModal').classList.add('hidden')" class="bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">&#10005;</button></div></div>
+  <div class="flex flex-wrap items-center gap-2 no-print"><input id="stmtPartyKey" type="hidden"><div class="flex gap-1" role="group" aria-label="Statement grouping"><button id="stmtViewDate" type="button" onclick="setStatementView('date')" class="px-3 py-1.5 rounded-lg text-xs font-semibold">Date-wise</button><button id="stmtViewBill" type="button" onclick="setStatementView('bill')" class="px-3 py-1.5 rounded-lg text-xs font-semibold">Bill-wise</button></div><button onclick="printStatement()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">Print</button><button onclick="document.getElementById('stmtModal').classList.add('hidden')" class="bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">&#10005;</button></div></div>
   <div id="stmtBody"></div></div></div>
 <div id="promiseModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
  <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3"><h3 class="font-bold text-amber-700">Promise to pay</h3><input type="hidden" id="prKey"><p id="prParty" class="text-sm font-semibold"></p>
