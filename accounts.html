@@ -12,6 +12,8 @@
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
         .tab-off:hover { background:#f1f5f9; }
+        #entryModal.em-batch-mode > div { width:min(96vw, 1500px); max-width:1500px; }
+        .em-batch-grid { display:grid; grid-template-columns:minmax(80px, .8fr) minmax(120px, 1.1fr) minmax(120px, 1fr) minmax(150px, 1.35fr) minmax(120px, 1.1fr) 40px; gap:8px; align-items:center; min-width:740px; }
         #printHeader { display:none; }
         @media print {
             aside, .no-print, #mobileBar, #fab, #entryModal, #settingsModal, #confirmModal, #toast, #loadingOverlay { display:none !important; }
@@ -284,12 +286,12 @@
             </div>
             <div class="p-5 space-y-3">
                 <div id="emTypeTabs" class="grid grid-cols-3 sm:grid-cols-6 gap-1.5 text-xs font-semibold"></div>
-                <div class="grid grid-cols-2 gap-3">
+                <div id="emDateAmountGrid" class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-medium text-slate-700 mb-1">Date</label>
                         <input id="emDate" type="date" class="w-full border rounded-lg p-2.5 text-sm outline-none">
                     </div>
-                    <div>
+                    <div id="emAmountWrap">
                         <label class="block text-xs font-medium text-slate-700 mb-1">Amount (PKR)</label>
                         <input id="emAmount" type="number" min="1" placeholder="0" class="w-full border rounded-lg p-2.5 text-sm outline-none font-bold">
                     </div>
@@ -307,7 +309,7 @@
                         <div class="text-xs font-medium text-slate-700 mb-1">Pending bills (tick the bills to settle; the voucher number stays the same)</div>
                         <div id="emBills" class="max-h-48 overflow-y-auto border rounded-lg divide-y bg-white"></div>
                     </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div id="emWalletFieldsWrap" class="grid grid-cols-2 gap-3">
                     <div id="emWalletWrap">
                         <label id="emWalletLabel" class="block text-xs font-medium text-slate-700 mb-1">Account</label>
                         <select id="emWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
@@ -321,9 +323,24 @@
                     <label id="emTitleLabel" class="block text-xs font-medium text-slate-700 mb-1">Particulars (what for / from whom / to whom)</label>
                     <input id="emTitle2" list="partyNames" type="text" placeholder="e.g. Electricity bill for September" class="w-full border rounded-lg p-2.5 text-sm outline-none"><datalist id="partyNames"></datalist>
                 </div>
-                <div>
+                <div id="emNotesWrap">
                     <label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
                     <input id="emNotes" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                </div>
+                <div id="emBatchWrap" class="hidden border-t pt-3 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <p class="text-sm font-semibold text-indigo-950">More entries on this date</p>
+                            <p class="text-xs text-slate-500">Date is shared; each entry can have its own amount, category, account and particulars.</p>
+                        </div>
+                        <button id="emAddBatchRow" type="button" onclick="addBatchEntry()" class="shrink-0 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100">＋ Add entry</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <div class="em-batch-grid mb-1 px-2 text-[11px] font-semibold text-slate-500">
+                            <span>Amount (PKR)</span><span id="emBatchHeadLabel">Category</span><span id="emBatchWalletLabel">Account</span><span>Particulars</span><span>Notes</span><span></span>
+                        </div>
+                        <div id="emBatchRows" class="space-y-2"></div>
+                    </div>
                 </div>
             </div>
             <div class="p-5 border-t flex justify-end gap-2">
@@ -896,6 +913,14 @@ function genVoucherNo(kind) {
     return id;
 }
 function setEntryKind(kind) {
+    const hasBatchData = [...document.querySelectorAll('#emBatchRows [data-field]')].some(input =>
+        input.dataset.field !== 'wallet' && input.value.trim() !== ''
+    );
+    if(kind !== entryKind && hasBatchData) {
+        toast('Remove the additional entries before changing this voucher type.', false);
+        return;
+    }
+    if(kind !== entryKind) $('emBatchRows').innerHTML = '';
     entryKind = kind; setTimeout(updateDuesPicker, 0);
     let tabs = ['receipt', 'payment', 'bill_raised', 'bill_received', 'transfer', 'opening'];
     $('emTypeTabs').innerHTML = tabs.map(k => `<button type="button" ${editingId ? 'disabled' : ''} onclick="setEntryKind('${k}')" class="py-2 rounded-lg border ${k === kind ? 'tab-on' : 'tab-off'} ${editingId && k !== kind ? 'opacity-40' : ''}">${KIND_META[k].label}</button>`).join('');
@@ -910,6 +935,18 @@ function setEntryKind(kind) {
     $('emWalletLabel').innerText = isT ? 'From account' : (kind === 'payment' ? 'Paid from account' : (kind === 'receipt' ? 'Received in account' : 'Account'));
     $('emHeadLabel').innerText = kind === 'payment' ? 'Expense head (category)' : 'Income head (source)';
     $('headList').innerHTML = (kind === 'payment' ? EXPENSE_HEADS : INCOME_HEADS).map(h => `<option value="${esc(h)}">`).join('');
+    const batchMode = !editingId && (kind === 'receipt' || kind === 'payment');
+    $('entryModal').classList.toggle('em-batch-mode', batchMode);
+    $('emBatchWrap').classList.toggle('hidden', !batchMode);
+    $('emAmountWrap').classList.toggle('hidden', batchMode);
+    $('emHeadWrap').classList.toggle('hidden', batchMode || isT || isO || isB);
+    $('emWalletFieldsWrap').classList.toggle('hidden', batchMode);
+    $('emTitleWrap').classList.toggle('hidden', batchMode || isO);
+    $('emNotesWrap').classList.toggle('hidden', batchMode);
+    $('emDateAmountGrid').classList.toggle('grid-cols-1', batchMode);
+    $('emBatchHeadLabel').innerText = kind === 'payment' ? 'Expense head' : 'Income head';
+    $('emBatchWalletLabel').innerText = kind === 'payment' ? 'Paid from' : 'Received in';
+    updateBatchSaveLabel();
     if(!editingId) $('emVoucherNo').innerText = 'Voucher no: ' + (editingId || 'auto');
 }
 let _bd = null;
@@ -959,6 +996,8 @@ function billTick() {
     const bills = dueBills(); let sum = 0;
     document.querySelectorAll('.bill-cb').forEach(cb => { if(cb.checked && bills[+cb.dataset.i]) sum += bills[+cb.dataset.i].rem; });
     $('emAmount').value = Math.round(sum * 100) / 100 || '';
+    const firstBatchAmount = $('emBatchRows')?.firstElementChild?.querySelector('[data-field="amount"]');
+    if(firstBatchAmount) firstBatchAmount.value = $('emAmount').value;
     const d = (_bd || []).find(x => x.key === $('emParty').value); if(d) $('emTitle2').value = d.name;
 }
 async function saveAgainstBills(kind, date, amount, w, notes) {
@@ -1150,12 +1189,69 @@ function renderDuesLedger(list, query) {
 
 function openEntry(kind) {
     editingId = null;
+    $('emBatchRows').innerHTML = '';
     $('emDate').value = todayStr(); $('emAmount').value = ''; $('emHead').value = ''; $('emTitle2').value = ''; $('emNotes').value = '';
     setWalletValue('emWallet', WALLET_CHOICES[0]); setWalletValue('emWallet2', WALLET_CHOICES[1] || WALLET_CHOICES[0]);
     $('emVoucherNo').innerText = 'Voucher no: auto';
     setEntryKind(kind);
+    if(kind === 'receipt' || kind === 'payment') addBatchEntry();
     $('entryModal').classList.remove('hidden');
 }
+function updateBatchSaveLabel() {
+    const count = $('emBatchRows')?.children.length || 0;
+    $('emSaveBtn').innerText = count > 1 ? `Save ${count} entries` : 'Save voucher';
+}
+function addBatchEntry() {
+    if(entryKind !== 'receipt' && entryKind !== 'payment') return;
+    const rows = $('emBatchRows');
+    const row = document.createElement('div');
+    row.className = 'em-batch-row em-batch-grid rounded-xl border border-indigo-100 bg-indigo-50/40 p-2';
+    const walletOptions = WALLET_CHOICES.map(key => `<option value="${esc(key)}">${esc(WALLETS[key].icon)} ${esc(WALLETS[key].label)}</option>`).join('');
+    row.innerHTML = `<input data-field="amount" aria-label="Amount (PKR)" type="number" min="0.01" step="0.01" placeholder="Amount" class="w-full min-w-0 border rounded-lg p-2 text-sm font-semibold">
+        <input data-field="head" aria-label="${entryKind === 'payment' ? 'Expense head' : 'Income head'}" list="headList" placeholder="${entryKind === 'payment' ? 'Expense head' : 'Income head'}" class="w-full min-w-0 border rounded-lg p-2 text-sm">
+        <select data-field="wallet" aria-label="${entryKind === 'payment' ? 'Paid from account' : 'Received in account'}" class="w-full min-w-0 border rounded-lg p-2 text-sm bg-white">${walletOptions}</select>
+        <input data-field="title" aria-label="Particulars" list="partyNames" placeholder="Particulars" class="w-full min-w-0 border rounded-lg p-2 text-sm">
+        <input data-field="notes" aria-label="Notes" placeholder="Notes (optional)" class="w-full min-w-0 border rounded-lg p-2 text-sm">
+        <button type="button" onclick="removeBatchEntry(this)" aria-label="Remove entry" title="Remove entry" class="w-full h-9 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 font-bold">×</button>`;
+    rows.appendChild(row);
+    updateBatchSaveLabel();
+    row.querySelector('[data-field="amount"]').focus();
+}
+function removeBatchEntry(button) {
+    const row = button.closest('.em-batch-row');
+    if(row && $('emBatchRows').children.length === 1) {
+        row.querySelectorAll('[data-field]').forEach(field => {
+            if(field.dataset.field === 'wallet') field.selectedIndex = 0;
+            else field.value = '';
+        });
+        row.querySelector('[data-field="amount"]').focus();
+    } else row?.remove();
+    updateBatchSaveLabel();
+}
+document.addEventListener('keydown', event => {
+    if(event.key === 'Enter' && event.target.matches('#emDate') && $('entryModal').classList.contains('em-batch-mode')) {
+        event.preventDefault();
+        $('emBatchRows').querySelector('[data-field="amount"]')?.focus();
+        return;
+    }
+    const field = event.target.closest('#emBatchRows [data-field]');
+    if(!field || event.key !== 'Enter') return;
+    event.preventDefault();
+    const row = field.closest('.em-batch-row');
+    const fields = [...row.querySelectorAll('[data-field]')];
+    const nextIndex = fields.indexOf(field) + 1;
+    if(nextIndex < fields.length) fields[nextIndex].focus();
+    else addBatchEntry();
+});
+document.addEventListener('input', event => {
+    const field = event.target;
+    if(!field.matches('#emBatchRows [data-field="head"]')) return;
+    const firstRow = $('emBatchRows').firstElementChild;
+    if(field.closest('.em-batch-row') === firstRow) {
+        $('emHead').value = field.value;
+        updateDuesPicker();
+    }
+});
 function openPartnerWithdrawal() {
     if(!ME || ME.role !== 'Admin') { toast('Only an Admin can record partner withdrawals.', false); return; }
     if(!BUSINESS_PARTNERS.length) {
@@ -1234,19 +1330,77 @@ async function saveQuickEdit() {
         await initAccounts();
     } catch (err) { hideLoading(); console.error(err); toast('Connection error.', false); }
 }
-function closeEntry() { $('entryModal').classList.add('hidden'); editingId = null; }
+function closeEntry() {
+    $('entryModal').classList.add('hidden');
+    editingId = null;
+    $('emBatchRows').innerHTML = '';
+    updateBatchSaveLabel();
+}
 
 async function saveEntry() {
     let kind = entryKind;
+    const batchMode = !editingId && (kind === 'receipt' || kind === 'payment');
+    const batchRows = batchMode ? [...document.querySelectorAll('#emBatchRows .em-batch-row')] : [];
+    const batchItems = batchRows.map(row => ({
+        amount: parseFloat(row.querySelector('[data-field="amount"]').value) || 0,
+        head: row.querySelector('[data-field="head"]').value.trim(),
+        wallet: row.querySelector('[data-field="wallet"]').value,
+        title: row.querySelector('[data-field="title"]').value.trim(),
+        notes: row.querySelector('[data-field="notes"]').value.trim()
+    }));
+    if(batchMode && batchItems.length) {
+        const first = batchItems[0];
+        $('emAmount').value = first.amount || '';
+        $('emHead').value = first.head;
+        $('emWallet').value = first.wallet;
+        $('emTitle2').value = first.title;
+        $('emNotes').value = first.notes;
+    }
     let date = $('emDate').value, amount = parseFloat($('emAmount').value) || 0;
     let head = $('emHead').value.trim(), title = $('emTitle2').value.trim(), notes = $('emNotes').value.trim();
     let w = $('emWallet').value, w2 = $('emWallet2').value;
     if(!date) { toast('Please enter a date.', false); return; }
+    if(batchMode && !batchItems.length) { toast('Add at least one entry.', false); return; }
     if(amount <= 0) { toast('Amount must be greater than 0.', false); return; }
- if(duesSide && !editingId && (kind === 'receipt' || kind === 'payment')) { await saveAgainstBills(kind, date, amount, w, notes); return; }
+ if(duesSide && !editingId && (kind === 'receipt' || kind === 'payment')) {
+     if(batchItems.length > 1) { toast('Pending bills must be settled one entry at a time.', false); return; }
+     await saveAgainstBills(kind, date, amount, w, notes); return;
+ }
  if((kind === 'bill_raised' || kind === 'bill_received') && !title) { toast('Please enter the party name.', false); return; }
     if((kind === 'receipt' || kind === 'payment') && !head) { toast('Please enter or select a head (category).', false); return; }
     if(kind === 'transfer' && w === w2) { toast('From and To accounts must be different.', false); return; }
+
+    if(batchItems.length > 1) {
+        for(let i = 0; i < batchItems.length; i++) {
+            const item = batchItems[i];
+            if(item.amount <= 0) { toast(`Enter an amount greater than 0 for entry ${i + 1}.`, false); return; }
+            if(!item.head) { toast(`Enter a category for entry ${i + 1}.`, false); return; }
+            if(!WALLETS[item.wallet]) { toast(`Select a valid account for entry ${i + 1}.`, false); return; }
+            if((kind === 'receipt' && isRecvHead(item.head)) || (kind === 'payment' && isPayHead(item.head))) {
+                toast('Pending-bill categories must be recorded one entry at a time.', false);
+                return;
+            }
+        }
+        const usedIds = new Set();
+        const payloads = batchItems.map(item => {
+            let id;
+            do { id = genVoucherNo(kind); } while(usedIds.has(id));
+            usedIds.add(id);
+            return kind === 'receipt'
+                ? { voucher_id: id, from_account: item.head, to_account: item.wallet, description: item.title || item.head, amount_in: item.amount, amount_out: 0, date, remarks: item.notes }
+                : { voucher_id: id, from_account: item.wallet, to_account: item.head, description: item.title || item.head, amount_in: 0, amount_out: item.amount, date, remarks: item.notes };
+        });
+        showLoading(`Saving ${payloads.length} entries...`);
+        try {
+            const c = getSupabaseConfig();
+            const res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(payloads) });
+            if(!res.ok) { hideLoading(); toast('Could not save entries: ' + await res.text(), false); return; }
+            closeEntry();
+            toast(`${payloads.length} entries saved for ${fmtDate(date)}.`);
+            await initAccounts();
+        } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
+        return;
+    }
 
     let id = editingId || genVoucherNo(kind);
     let oldEntry = editingId ? entryById[editingId] : null;
