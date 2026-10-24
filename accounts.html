@@ -62,7 +62,7 @@
                 <div class="flex flex-wrap gap-2">
                     <button onclick="openEntry('receipt')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➕ Receipt</button>
                     <button onclick="openEntry('payment')" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➖ Payment</button>
-                    <button onclick="openPartnerWithdrawal()" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🤝 Partner withdrawal</button>
+                    <button id="partnerWithdrawalButton" onclick="openPartnerWithdrawal()" class="hidden bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🤝 Partner withdrawal</button>
                     <button onclick="openEntry('transfer')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🔁 Transfer</button>
                     </div>
             </div>
@@ -366,6 +366,7 @@ let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers
 let dbLimit = 300;
 let expandedDaybookGroups = new Set();
 let editingId = null, entryKind = 'receipt';
+document.addEventListener('shibra:me-ready', updatePartnerWithdrawalAccess);
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -440,6 +441,10 @@ function setWalletValue(id, key) {
     const el = $(id); if(!key || !WALLETS[key]) return;
     if(![...el.options].some(o => o.value === key)) { const o = document.createElement('option'); o.value = key; o.textContent = WALLETS[key].icon + ' ' + WALLETS[key].label; el.appendChild(o); }
     el.value = key;
+}
+function updatePartnerWithdrawalAccess() {
+    const button = $('partnerWithdrawalButton');
+    if(button) button.classList.toggle('hidden', !ME || ME.role !== 'Admin');
 }
 
 function normalize(row, idx) {
@@ -516,6 +521,7 @@ async function initAccounts() {
             ])
         ]);
         INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; BUSINESS_PARTNERS = L['Business Partner'] || []; setupWallets(L['Payment Account']);
+        updatePartnerWithdrawalAccess();
         if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD);
         if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable');
         if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable');
@@ -1151,6 +1157,7 @@ function openEntry(kind) {
     $('entryModal').classList.remove('hidden');
 }
 function openPartnerWithdrawal() {
+    if(!ME || ME.role !== 'Admin') { toast('Only an Admin can record partner withdrawals.', false); return; }
     if(!BUSINESS_PARTNERS.length) {
         toast('Add the two partner names first in Settings → Business partners.', false);
         return;
@@ -1165,6 +1172,7 @@ function openPartnerWithdrawal() {
 }
 function closePartnerWithdrawal() { $('partnerWithdrawalModal').classList.add('hidden'); }
 async function savePartnerWithdrawal() {
+    if(!ME || ME.role !== 'Admin') { toast('Only an Admin can record partner withdrawals.', false); return; }
     const partner = $('pwPartner').value.trim(), date = $('pwDate').value;
     const amount = parseFloat($('pwAmount').value) || 0, wallet = $('pwWallet').value;
     const type = $('pwType').value, notes = $('pwNotes').value.trim();
