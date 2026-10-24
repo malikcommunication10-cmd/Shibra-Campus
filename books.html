@@ -201,8 +201,8 @@
                             <option value="purchase_return">Purchase returns</option>
                         </select>
                         <div class="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Transaction date order">
-                            <button id="txNewestBtn" type="button" onclick="setTxDateOrder('desc')" aria-pressed="true" class="px-2.5 py-1.5 rounded-md text-xs font-semibold">Newest</button>
-                            <button id="txOldestBtn" type="button" onclick="setTxDateOrder('asc')" aria-pressed="false" class="px-2.5 py-1.5 rounded-md text-xs font-semibold">Oldest</button>
+                            <button id="txNewestBtn" type="button" aria-pressed="true" class="px-2.5 py-1.5 rounded-md text-xs font-semibold">Newest</button>
+                            <button id="txOldestBtn" type="button" aria-pressed="false" class="px-2.5 py-1.5 rounded-md text-xs font-semibold">Oldest</button>
                         </div>
                         <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
                         <button onclick="exportTxCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
@@ -893,13 +893,15 @@ function sortedTxList() {
 }
 function setTxDateOrder(direction) {
     transactionSort = { key: 'date', direction };
-    renderTransactions();
+    window.renderTransactions();
 }
 function sortTransactions(key) {
     if(transactionSort.key === key) transactionSort.direction = transactionSort.direction === 'asc' ? 'desc' : 'asc';
     else transactionSort = { key, direction: key === 'date' ? 'desc' : 'asc' };
-    renderTransactions();
+    window.renderTransactions();
 }
+document.getElementById('txNewestBtn').addEventListener('click', () => setTxDateOrder('desc'));
+document.getElementById('txOldestBtn').addEventListener('click', () => setTxDateOrder('asc'));
 function renderTransactionHead() {
     const columns = [
         ['date', 'Date', '7%'],
@@ -2401,6 +2403,6 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeItemLe
   <div><label class="block text-xs font-medium text-slate-700 mb-1">Note (optional)</label><input id="prNote" class="w-full border rounded-lg p-2.5 text-sm"></div>
   <div class="flex justify-between gap-2 pt-1"><button onclick="savePromise(true)" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Remove</button><div class="flex gap-2"><button onclick="document.getElementById('promiseModal').classList.add('hidden')" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="savePromise(false)" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg text-sm">Save</button></div></div>
  </div></div>
-<script src="books-group.js?v=20261024-1"></script>
+<script src="books-group.js?v=20261024-2"></script>
 </body>
 </html>
