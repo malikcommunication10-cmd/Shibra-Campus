@@ -15,6 +15,10 @@
         .tab-off:hover { background:#f1f5f9; }
         .tx-modal-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; }
         .tx-modal-layout > aside { border-top:1px solid #e2e8f0; }
+        #tab-transactions .tx-table-wrap { overflow-x:hidden; }
+        #tab-transactions table { width:100%; table-layout:fixed; }
+        #tab-transactions th, #tab-transactions td { padding:.4rem .3rem; overflow:hidden; }
+        #tab-transactions .tx-cell-truncate { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         @media (max-width:767px) { .tx-modal-layout { grid-template-columns:1fr; } }
         @media (min-width:768px) { .tx-modal-layout > aside { border-top:0; border-left:1px solid #e2e8f0; } }
         #printHeader { display:none; }
@@ -196,6 +200,10 @@
                             <option value="sale_return">Sale returns</option>
                             <option value="purchase_return">Purchase returns</option>
                         </select>
+                        <div class="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Transaction date order">
+                            <button id="txNewestBtn" type="button" onclick="setTxDateOrder('desc')" aria-pressed="true" class="px-2.5 py-1.5 rounded-md text-xs font-semibold">Newest</button>
+                            <button id="txOldestBtn" type="button" onclick="setTxDateOrder('asc')" aria-pressed="false" class="px-2.5 py-1.5 rounded-md text-xs font-semibold">Oldest</button>
+                        </div>
                         <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
                         <button onclick="exportTxCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
                     </div>
@@ -211,15 +219,15 @@
                         </div>
                     </div>
                 </div>
-                <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
+                <div class="md-table hidden xl:block bg-white rounded-2xl border border-slate-200 shadow-sm tx-table-wrap print-card scroll-area max-h-[640px]">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
-                            <tr><th class="p-2.5 no-print"></th><th class="p-2.5">Date</th><th class="p-2.5">Invoice no.</th><th class="p-2.5">Voucher</th><th class="p-2.5">Type</th><th class="p-2.5">Student / Vendor</th><th class="p-2.5">Book / Item</th><th class="p-2.5 text-right">Qty</th><th class="p-2.5 text-right">Unit price</th><th class="p-2.5 text-right">Discount</th><th class="p-2.5 text-right">Net amount</th><th class="p-2.5">Account</th><th class="p-2.5 no-print"></th></tr>
+                            <tr id="txHead"></tr>
                         </thead>
                         <tbody id="txBody"></tbody>
                     </table>
                 </div>
-                <div id="txCards2" class="mobile-cards md:hidden space-y-2"></div>
+                <div id="txCards2" class="mobile-cards xl:hidden space-y-2"></div>
                 <div id="txMore" class="text-center no-print"></div>
             </section>
 
@@ -394,6 +402,7 @@ let txLimit = 200, txKind = 'sale', lastSaved = null, editingTxUid = null, editi
 let selectedTxUids = new Set();
 let purchaseInvoiceLines = [], editingPurchaseInvoiceVouchers = [];
 let inventorySort = { key: 'title', direction: 'asc' };
+let transactionSort = { key: 'date', direction: 'desc' };
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -860,8 +869,66 @@ function txList() {
     let q = norm($('txSearch').value), type = $('txType').value;
     return periodTxs().filter(t => (type === 'ALL' || t.kind === type) && (!q || norm(t.title + ' ' + t.party + ' ' + t.voucher + ' ' + t.invoiceNo).includes(q)));
 }
+function sortedTxList() {
+    const values = {
+        date: t => t.date || '',
+        invoice: t => t.invoiceNo || '',
+        voucher: t => t.voucher || (t.id !== undefined ? '#' + t.id : ''),
+        type: t => KINDS[t.kind]?.label || t.kind,
+        party: t => t.party || '',
+        item: t => t.title || '',
+        qty: t => t.qty || 0,
+        unit: t => t.unit || 0,
+        discount: t => t.discount || 0,
+        net: t => t.net || 0,
+        account: t => WALLETS[t.mode]?.label || t.mode || ''
+    };
+    const get = values[transactionSort.key] || values.date;
+    return txList().slice().sort((a, b) => {
+        const left = get(a), right = get(b);
+        const comparison = typeof left === 'number' ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+        const tie = (a.date || '').localeCompare(b.date || '') || a.idx - b.idx;
+        return (comparison || tie) * (transactionSort.direction === 'asc' ? 1 : -1);
+    });
+}
+function setTxDateOrder(direction) {
+    transactionSort = { key: 'date', direction };
+    renderTransactions();
+}
+function sortTransactions(key) {
+    if(transactionSort.key === key) transactionSort.direction = transactionSort.direction === 'asc' ? 'desc' : 'asc';
+    else transactionSort = { key, direction: key === 'date' ? 'desc' : 'asc' };
+    renderTransactions();
+}
+function renderTransactionHead() {
+    const columns = [
+        ['date', 'Date', '7%'],
+        ['invoice', 'Invoice', '5%'],
+        ['voucher', 'Voucher', '7%'],
+        ['type', 'Type', '6%'],
+        ['party', 'Student / Vendor', '12%'],
+        ['item', 'Book / Item', '17%'],
+        ['qty', 'Qty', '4%'],
+        ['unit', 'Unit price', '6%'],
+        ['discount', 'Discount', '6%'],
+        ['net', 'Net amount', '9%'],
+        ['account', 'Account', '8%']
+    ];
+    $('txHead').innerHTML = '<th class="no-print" style="width:3%"></th>' + columns.map(([key, label, width]) => {
+        const active = transactionSort.key === key;
+        const indicator = active ? (transactionSort.direction === 'asc' ? '▲' : '▼') : '↕';
+        const align = ['qty', 'unit', 'discount', 'net'].includes(key) ? 'text-right' : 'text-left';
+        return `<th style="width:${width}" class="${align}" aria-sort="${active ? (transactionSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}"><button type="button" onclick="sortTransactions('${key}')" class="font-semibold hover:text-indigo-700" title="Sort by ${label}">${label} <span class="${active ? 'text-indigo-600' : 'text-slate-400'}">${indicator}</span></button></th>`;
+    }).join('') + '<th class="no-print" style="width:10%"></th>';
+    $('txNewestBtn').className = `px-2.5 py-1.5 rounded-md text-xs font-semibold ${transactionSort.key === 'date' && transactionSort.direction === 'desc' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:bg-white'}`;
+    $('txOldestBtn').className = `px-2.5 py-1.5 rounded-md text-xs font-semibold ${transactionSort.key === 'date' && transactionSort.direction === 'asc' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:bg-white'}`;
+    $('txNewestBtn').setAttribute('aria-pressed', String(transactionSort.key === 'date' && transactionSort.direction === 'desc'));
+    $('txOldestBtn').setAttribute('aria-pressed', String(transactionSort.key === 'date' && transactionSort.direction === 'asc'));
+}
 function renderTransactions() {
-    let list = txList(), st = periodStats(list);
+    let filteredList = txList(), st = periodStats(filteredList);
+    let list = sortedTxList();
+    renderTransactionHead();
     $('txCards').innerHTML = [
         { t: 'Sales', v: 'PKR ' + fmt(st.sales), c: 'text-emerald-600' },
         { t: 'Purchases', v: 'PKR ' + fmt(st.purch), c: 'text-indigo-700' },
@@ -888,19 +955,19 @@ function renderTransactions() {
     const dateCell = t => t.kind === 'purchase' && t.invoiceNo
         ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-indigo-700 hover:underline" title="Edit invoice date">${fmtDate(t.date)}</button>`
         : fmtDate(t.date);
-    $('txBody').innerHTML = shown.length ? shown.map(t => `<tr class="border-b hover:bg-slate-50 align-top">
-        <td class="p-2.5 no-print">${checkbox(t)}</td>
-        <td class="p-2.5 whitespace-nowrap text-slate-600">${dateCell(t)}</td>
-        <td class="p-2.5 whitespace-nowrap">${invoiceEditButton(t)}</td>
-        <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</td>
-        <td class="p-2.5">${kindBadge(t.kind)}</td>
-        <td class="p-2.5">${esc(t.party || '-')}</td>
-        <td class="p-2.5 font-semibold text-slate-800"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="text-left text-indigo-700 hover:underline">${esc(t.title || '-')}</button>${t.notes ? `<div class="text-[11px] font-normal text-slate-400">${esc(t.notes)}</div>` : ''}</td>
-        <td class="p-2.5 text-right">${fmt(t.qty)}</td><td class="p-2.5 text-right">${fmt(t.unit)}</td>
-        <td class="p-2.5 text-right text-amber-600">${t.discount ? fmt(t.discount) : '-'}</td>
-        <td class="p-2.5 text-right font-bold text-slate-800 whitespace-nowrap">PKR ${fmt(t.net)}</td>
-        <td class="p-2.5 whitespace-nowrap">${t.mode && WALLETS[t.mode] ? WALLETS[t.mode].icon + ' ' + WALLETS[t.mode].label : '-'}</td>
-        <td class="p-2.5 whitespace-nowrap no-print">${acts(t)}</td></tr>`).join('')
+    $('txBody').innerHTML = shown.length ? shown.map(t => `<tr class="border-b hover:bg-slate-50">
+        <td class="no-print">${checkbox(t)}</td>
+        <td class="text-slate-600 whitespace-nowrap">${dateCell(t)}</td>
+        <td>${invoiceEditButton(t)}</td>
+        <td class="font-mono text-indigo-900"><span class="tx-cell-truncate" title="${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</span></td>
+        <td>${kindBadge(t.kind)}</td>
+        <td><span class="tx-cell-truncate" title="${esc(t.party || '-')}">${esc(t.party || '-')}</span></td>
+        <td class="font-semibold text-slate-800"><button type="button" title="${esc(t.title || '-')} ${esc(t.notes || '')}" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="tx-cell-truncate text-left text-indigo-700 hover:underline">${esc(t.title || '-')}</button></td>
+        <td class="text-right">${fmt(t.qty)}</td><td class="text-right">${fmt(t.unit)}</td>
+        <td class="text-right text-amber-600">${t.discount ? fmt(t.discount) : '-'}</td>
+        <td class="text-right font-bold text-slate-800">PKR ${fmt(t.net)}</td>
+        <td><span class="tx-cell-truncate" title="${esc(t.mode && WALLETS[t.mode] ? WALLETS[t.mode].label : '-')}">${t.mode && WALLETS[t.mode] ? WALLETS[t.mode].icon + ' ' + esc(WALLETS[t.mode].label) : '-'}</span></td>
+        <td class="whitespace-nowrap no-print">${acts(t)}</td></tr>`).join('')
         : `<tr><td colspan="13" class="p-8 text-center text-slate-400">No transactions found in this period.</td></tr>`;
     $('txCards2').innerHTML = shown.length ? shown.map(t => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex justify-between items-center gap-2"><span class="no-print">${checkbox(t)}</span>${kindBadge(t.kind)}${t.kind === 'purchase' && t.invoiceNo ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-xs text-indigo-700 hover:underline">${fmtDate(t.date)}</button>` : `<span class="text-xs text-slate-500">${fmtDate(t.date)}</span>`}</div>
@@ -918,7 +985,7 @@ function toggleTxSelection(uid, checked) {
     renderTransactions();
 }
 function toggleAllTx(checked) {
-    const shown = txList().slice(0, txLimit);
+    const shown = sortedTxList().slice(0, txLimit);
     shown.forEach(transaction => {
         if(transaction.id === undefined || transaction.id === null) return;
         if(checked) selectedTxUids.add(transaction.uid);
@@ -2334,6 +2401,6 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeItemLe
   <div><label class="block text-xs font-medium text-slate-700 mb-1">Note (optional)</label><input id="prNote" class="w-full border rounded-lg p-2.5 text-sm"></div>
   <div class="flex justify-between gap-2 pt-1"><button onclick="savePromise(true)" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Remove</button><div class="flex gap-2"><button onclick="document.getElementById('promiseModal').classList.add('hidden')" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="savePromise(false)" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg text-sm">Save</button></div></div>
  </div></div>
-    <script src="books-group.js"></script>
+<script src="books-group.js?v=20261024-1"></script>
 </body>
 </html>
