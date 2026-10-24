@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js?v=20261022-2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="nav.js?v=20261022-1"></script>
+    <script src="nav.js?v=20261024-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -656,13 +656,17 @@ const periodTxs = () => txs.filter(inRange);
 function showTab(t) {
     ['overview', 'inventory', 'transactions', 'parties'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
+    if(t === 'overview') renderOverview();
+    else if(t === 'inventory') renderInventory();
+    else if(t === 'transactions') renderTransactions();
+    else if(t === 'parties') renderParties();
     const names = { overview: 'Overview', inventory: 'Inventory', transactions: 'Transactions', parties: 'Students & Vendors' };
     let f = $('gFrom').value, to = $('gTo').value;
     $('printTitle').innerText = `Book Store — ${names[t]}${t === 'inventory' ? ' (current stock)' : ` — ${f || to ? fmtDate(f) + ' to ' + fmtDate(to) : 'All time'}`}`;
     window.scrollTo({ top: 0 });
 }
 function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
-function renderAll() { renderOverview(); renderInventory(); renderTransactions(); renderParties(); showTab(currentTab()); }
+function renderAll() { showTab(currentTab()); }
 
 function kindBadge(k) { return `<span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${KINDS[k].cls}">${KINDS[k].label}</span>`; }
 function card(c) { return `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c || 'text-slate-900'} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`; }
@@ -1259,7 +1263,6 @@ function viewAllRecentTx(kind) {
     txLimit = Number.MAX_SAFE_INTEGER;
     selectedTxUids.clear();
     showTab('transactions');
-    renderTransactions();
 }
 function deleteSelectedTx() {
     const selected = [...selectedTxUids].map(uid => txByUid[uid]).filter(Boolean);
@@ -1345,7 +1348,7 @@ async function runDeleteSelectedTx(selected) {
 
 // ---------------- PARTIES ----------------
 
-function viewParty(name) { $('txSearch').value = name; $('txType').value = 'ALL'; renderTransactions(); showTab('transactions'); }
+function viewParty(name) { $('txSearch').value = name; $('txType').value = 'ALL'; showTab('transactions'); }
 
 // ---------------- EXPORT ----------------
 function exportCsv(name, header, rows) {

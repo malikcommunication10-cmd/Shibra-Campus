@@ -6,8 +6,8 @@
     <title>Concept School Shibra Campus - Staff & Payroll</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js"></script>
-    <script src="nav.js"></script>
+    <script src="config.js?v=20261022-2"></script>
+    <script src="nav.js?v=20261024-1"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
@@ -1069,6 +1069,11 @@ function setThisMonth() {
 function showTab(t) {
     ['overview', 'staff', 'attendance', 'payroll', 'history'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
+    if(t === 'overview') renderOverview();
+    else if(t === 'staff') renderStaff();
+    else if(t === 'attendance') renderAttendance();
+    else if(t === 'payroll') renderPayroll();
+    else if(t === 'history') renderHistory();
     const names = { overview: 'Overview', staff: 'Staff Directory', attendance: 'Daily Attendance', payroll: 'Salary Sheet', history: 'Salary Payment History' };
     $('printTitle').innerText = `${names[t]}${t === 'payroll' || t === 'overview' ? ' — ' + monthLabel(curMonth()) : ''}`;
     window.scrollTo({ top: 0 });
@@ -1564,7 +1569,7 @@ async function saveAttendance() {
     } finally { hideLoading(); }
 }
 function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
-function renderAll() { renderOverview(); renderStaff(); renderAttendance(); renderPayroll(); renderHistory(); showTab(currentTab()); }
+function renderAll() { showTab(currentTab()); }
 
 function card(c) { return `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c || 'text-slate-900'} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`; }
 function avatar(name) { return `<span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold shrink-0">${esc(initials(name))}</span>`; }

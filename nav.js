@@ -9,6 +9,59 @@
     ];
     const page = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const pageData = {
+        'index.html': [
+            ['students', 'select=admis_no,student_name,status,class'],
+            ['fees', 'select=admis_no,student_name,class,voucher_id,period,type,payable,discount'],
+            ['accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date,remarks'],
+            ['books', 'select=*'],
+            ['settings', 'select=*&setting_key=eq.Book%20Promise'],
+            ['settings', 'select=setting_key,setting_value']
+        ],
+        'students.html': [
+            ['students', 'select=*'],
+            ['settings', 'select=setting_key,setting_value']
+        ],
+        'fees.html': [
+            ['students', 'select=*'],
+            ['increments', 'select=admis_no,effective_period,old_fee,new_fee,fee_type,annual_fund,remarks'],
+            ['accounts', 'select=voucher_id,amount_in,date,description,remarks'],
+            ['fees', 'select=*'],
+            ['settings', 'select=setting_key,setting_value']
+        ],
+        'books.html': [
+            ['books', 'select=*'],
+            ['settings', 'select=setting_key,setting_value'],
+            ['settings', 'select=*&setting_key=eq.Book%20Item'],
+            ['settings', 'select=*&setting_key=eq.Book%20Promise'],
+            ['accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date'],
+            ['students', 'select=admis_no,student_name,class,status']
+        ],
+        'accounts.html': [
+            ['accounts', 'select=*&order=date.asc,voucher_id.asc'],
+            ['fees', 'select=voucher_id,admis_no,student_name,class,period,type'],
+            ['staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes'],
+            ['settings', 'select=setting_key,setting_value']
+        ],
+        'staff.html': [
+            ['staff', 'select=*'],
+            ['payroll', 'select=*'],
+            ['staff_security_ledger', 'select=*'],
+            ['staff_salary_increments', 'select=*'],
+            ['settings', 'select=setting_key,setting_value']
+        ]
+    };
+    function prefetchPageData(file) {
+        const pageKey = PAGE_FILE[file];
+        if (!pageKey || typeof sbFetchAll !== 'function' || typeof can !== 'function' || !can(pageKey, 'v')) return;
+        const connection = navigator.connection;
+        if (connection && (connection.saveData || ['slow-2g', '2g'].includes(connection.effectiveType))) return;
+        const queries = pageData[file] || [];
+        Promise.all(queries.map(async ([table, query]) => {
+            const response = await sbFetchAll(table, query);
+            if (!response.ok) throw new Error(`${table} preload failed with HTTP ${response.status}`);
+        })).catch(error => console.warn(`Navigation data prefetch for ${file} failed:`, error));
+    }
     function build() {
         const aside = document.getElementById('appNav');
         if (!aside) return;
@@ -25,7 +78,7 @@
         const accountActions = me && me.email ? `<div class="flex gap-2 p-3 border-b border-white/10"><button id="appPwBtn" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Password</button><button onclick="sbLogout()" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Logout</button></div>` : '';
         const who = me && me.email ? `<div class="px-3 py-2 border-b border-white/10"><div class="min-w-0"><div class="text-sm font-semibold truncate">👤 ${esc(me.name || me.email)}</div><div class="text-[11px] text-indigo-300 truncate">${esc(me.role || '')} · ${esc(me.email)}</div>${me.closedThrough ? `<div class="text-[11px] text-amber-300 mt-0.5">🔒 Closed up to ${esc(me.closedThrough)}</div>` : ''}</div></div>` : '';
         aside.innerHTML = `${accountActions}<div class="p-5 border-b border-white/10"><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div>${who}
-            <nav class="flex-1 p-3 space-y-1 overflow-y-auto">${mainLinks.map(l => `<a href="${l[0]}" class="flex gap-2.5 items-center px-3 py-2.5 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}${reportMenu}</nav>`;
+            <nav class="flex-1 p-3 space-y-1 overflow-y-auto">${mainLinks.map(l => `<a href="${l[0]}" data-prefetch-page="${l[0]}" class="flex gap-2.5 items-center px-3 py-2.5 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}${reportMenu}</nav>`;
         document.body.insertAdjacentHTML('afterbegin',
             `<header id="appTop" class="md:hidden sticky top-0 z-40 bg-indigo-950 text-white flex items-center justify-between px-4 py-3 no-print"><div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus</div></div><button id="appMenuBtn" class="text-2xl px-2 min-h-11 min-w-11" aria-label="Open navigation menu" aria-controls="appNav" aria-expanded="false">☰</button></header>
              <div id="appBackdrop" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden"></div>
@@ -53,7 +106,25 @@
         };
         menuButton.onclick = () => setMenuOpen(menuButton.getAttribute('aria-expanded') !== 'true');
         backdrop.onclick = () => setMenuOpen(false);
-        aside.querySelectorAll('nav a').forEach(link => link.addEventListener('click', () => setMenuOpen(false)));
+        aside.querySelectorAll('nav a').forEach(link => {
+            let prefetchTimer = null;
+            const warm = () => {
+                if (prefetchTimer || link.dataset.prefetched) return;
+                prefetchTimer = setTimeout(() => {
+                    prefetchTimer = null;
+                    link.dataset.prefetched = 'true';
+                    prefetchPageData(link.dataset.prefetchPage);
+                }, 120);
+            };
+            link.addEventListener('pointerenter', event => {
+                if (event.pointerType !== 'touch') warm();
+            });
+            link.addEventListener('pointerleave', () => {
+                if (prefetchTimer) { clearTimeout(prefetchTimer); prefetchTimer = null; }
+            });
+            link.addEventListener('focus', warm);
+            link.addEventListener('click', () => setMenuOpen(false));
+        });
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && menuButton.getAttribute('aria-expanded') === 'true') {
                 setMenuOpen(false);
