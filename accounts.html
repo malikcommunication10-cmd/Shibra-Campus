@@ -7,7 +7,7 @@
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <script src="config.js?v=20261022-2"></script>
-    <script src="nav.js?v=20261022-1"></script>
+    <script src="nav.js?v=20261024-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -103,6 +103,7 @@
                 <button data-tab="heads" onclick="showTab('heads')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🗂️ Heads Summary</button>
                 <button data-tab="wallets" onclick="showTab('wallets')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🏦 Cash & Bank</button>
         <button data-tab="dues" onclick="showTab('dues')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🧾 Receivable / Payable</button>
+                <button data-tab="assets" onclick="showTab('assets')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🏫 Assets</button>
             </div>
 
             <div id="printHeader">
@@ -254,6 +255,35 @@
                     </table>
                 </div>
             </section>
+
+            <!-- FIXED ASSETS -->
+            <section id="tab-assets" class="hidden space-y-4">
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" id="assetCards"></div>
+                <div id="assetSetupNotice" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900">
+                    <b>Asset register database setup required.</b>
+                    <p class="mt-1">After <code>supabase_roles.sql</code> has been installed, run <code>supabase_fixed_assets.sql</code> in the Supabase SQL Editor, then refresh this tab.</p>
+                    <p id="assetSetupError" class="mt-2 text-xs"></p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <button id="assetOpeningBtn" onclick="openAssetEvent('opening')" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-xl text-sm font-semibold">🏁 Opening asset</button>
+                        <button id="assetPurchaseBtn" onclick="openAssetEvent('purchase')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-sm font-semibold">＋ New purchase</button>
+                        <button id="assetSaleBtn" onclick="openAssetEvent('sale')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl text-sm font-semibold">－ Sell asset</button>
+                        <button id="assetDepreciationBtn" onclick="openAssetEvent('depreciation')" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl text-sm font-semibold">↘ Depreciation</button>
+                        <input id="assetSearch" oninput="renderFixedAssets()" type="search" placeholder="Search name, code or category" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[180px]">
+                        <button onclick="loadFixedAssets()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-sm font-semibold">🔄 Refresh</button>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-3">Opening balances do not change cash/bank. Purchases and sale proceeds post to the selected account. Depreciation reduces book value only; depreciation expense and disposal gain/loss are not posted to Profit &amp; Loss.</p>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
+                    <div class="p-4 border-b flex justify-between items-center gap-2"><div><h3 class="font-bold text-sm text-indigo-900">Asset register</h3><p id="assetCount" class="text-xs text-slate-500 mt-1"></p></div><button onclick="exportFixedAssetsCsv()" class="no-print bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-semibold">⬇️ Export</button></div>
+                    <table class="w-full text-left border-collapse text-xs min-w-[760px]"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Asset</th><th class="p-2.5">Category</th><th class="p-2.5 text-right">Available</th><th class="p-2.5 text-right">Cost</th><th class="p-2.5 text-right">Depreciation</th><th class="p-2.5 text-right">Book value</th><th class="p-2.5">Actions</th></tr></thead><tbody id="assetBody"></tbody></table>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
+                    <div class="p-4 border-b"><h3 class="font-bold text-sm text-indigo-900">Asset activity</h3><p id="assetEventCount" class="text-xs text-slate-500 mt-1"></p></div>
+                    <table class="w-full text-left border-collapse text-xs min-w-[780px]"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th><th class="p-2.5">Asset</th><th class="p-2.5">Type</th><th class="p-2.5 text-right">Quantity</th><th class="p-2.5 text-right">Amount</th><th class="p-2.5">Cash / Bank</th><th class="p-2.5">Voucher</th><th class="p-2.5">Notes</th></tr></thead><tbody id="assetEventBody"></tbody></table>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -271,6 +301,30 @@
                 <div><label for="pwNotes" class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label><input id="pwNotes" type="text" class="w-full border rounded-lg p-2.5 text-sm"></div>
             </div>
             <div class="p-5 border-t flex justify-end gap-2"><button type="button" onclick="closePartnerWithdrawal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button type="button" onclick="savePartnerWithdrawal()" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm">Save withdrawal</button></div>
+        </div>
+    </div>
+
+    <div id="assetEventModal" class="fixed inset-0 bg-black/60 z-[85] hidden items-end sm:items-center justify-center sm:p-4 no-print">
+        <div class="bg-white w-full max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-center"><div><h3 id="assetModalTitle" class="text-lg font-bold text-indigo-950"></h3><p id="assetModalHint" class="text-xs text-slate-500 mt-1"></p></div><button type="button" onclick="closeAssetEvent()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+            <div class="p-5 space-y-3">
+                <div id="assetPickWrap"><label for="assetPick" class="block text-xs font-medium text-slate-700 mb-1">Asset</label><select id="assetPick" onchange="updateAssetEventFields()" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select></div>
+                <div id="assetNewFields" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label for="assetName" class="block text-xs font-medium text-slate-700 mb-1">Asset name</label><input id="assetName" maxlength="140" placeholder="e.g. Classroom furniture" class="w-full border rounded-lg p-2.5 text-sm"></div>
+                    <div><label for="assetCategory" class="block text-xs font-medium text-slate-700 mb-1">Category</label><input id="assetCategory" list="assetCategories" maxlength="100" placeholder="Furniture, equipment..." class="w-full border rounded-lg p-2.5 text-sm"><datalist id="assetCategories"><option>Furniture</option><option>Computer &amp; IT equipment</option><option>Office equipment</option><option>Vehicles</option><option>Machinery</option><option>Building improvements</option><option>Other equipment</option></datalist></div>
+                    <div class="sm:col-span-2"><label for="assetDescription" class="block text-xs font-medium text-slate-700 mb-1">Description / location (optional)</label><input id="assetDescription" maxlength="300" class="w-full border rounded-lg p-2.5 text-sm"></div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label for="assetDate" class="block text-xs font-medium text-slate-700 mb-1">Date</label><input id="assetDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div>
+                    <div id="assetQuantityWrap"><label for="assetQuantity" class="block text-xs font-medium text-slate-700 mb-1">Quantity</label><input id="assetQuantity" type="number" min="0.001" step="0.001" class="w-full border rounded-lg p-2.5 text-sm"></div>
+                    <div><label id="assetAmountLabel" for="assetAmount" class="block text-xs font-medium text-slate-700 mb-1">Amount (PKR)</label><input id="assetAmount" type="number" min="0.01" step="0.01" class="w-full border rounded-lg p-2.5 text-sm"></div>
+                    <div id="assetWalletWrap"><label id="assetWalletLabel" for="assetWallet" class="block text-xs font-medium text-slate-700 mb-1">Account</label><select id="assetWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select></div>
+                    <div id="assetPartyWrap" class="sm:col-span-2"><label id="assetPartyLabel" for="assetParty" class="block text-xs font-medium text-slate-700 mb-1">Vendor / buyer (optional)</label><input id="assetParty" maxlength="140" class="w-full border rounded-lg p-2.5 text-sm"></div>
+                    <div class="sm:col-span-2"><label for="assetNotes" class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label><input id="assetNotes" maxlength="500" class="w-full border rounded-lg p-2.5 text-sm"></div>
+                </div>
+                <p id="assetEventError" class="text-sm text-rose-600"></p>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2"><button type="button" onclick="closeAssetEvent()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button id="assetEventSave" type="button" onclick="saveAssetEvent()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save</button></div>
         </div>
     </div>
 
@@ -373,17 +427,22 @@ const KIND_META = {
     transfer: { label: 'Transfer', prefix: 'TV-', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200',    title: 'Transfer Voucher' },
     opening:  { label: 'Opening',  prefix: 'OB-', cls: 'bg-slate-100 text-slate-600 border-slate-200',      title: 'Opening Balance' }
 };
+const fixedAssetEntryMeta = entry => entry.isFixedAsset
+    ? { label: entry.kind === 'payment' ? 'Asset purchase' : 'Asset sale', cls: 'bg-sky-50 text-sky-700 border-sky-200' }
+    : (entry.isPartnerWithdrawal ? KIND_META.partner_withdrawal : KIND_META[entry.kind]);
 
 // ====================================================================================
 //  STATE + HELPERS
 // ====================================================================================
 let entries = [], entryById = {}, feesByVoucher = {};
+let fixedAssets = [], fixedAssetEvents = [], fixedAssetsLoaded = false;
 let BUSINESS_PARTNERS = [];
 let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
 let dbLimit = 300;
 let expandedDaybookGroups = new Set();
 let editingId = null, entryKind = 'receipt';
 document.addEventListener('shibra:me-ready', updatePartnerWithdrawalAccess);
+document.addEventListener('shibra:me-ready', updateFixedAssetAccess);
 
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -463,6 +522,13 @@ function updatePartnerWithdrawalAccess() {
     const button = $('partnerWithdrawalButton');
     if(button) button.classList.toggle('hidden', !ME || ME.role !== 'Admin');
 }
+function updateFixedAssetAccess() {
+    const allowed = can('accounts', 'a');
+    ['assetOpeningBtn', 'assetPurchaseBtn', 'assetSaleBtn', 'assetDepreciationBtn'].forEach(id => {
+        const button = $(id);
+        if(button) button.classList.toggle('hidden', !allowed);
+    });
+}
 
 function normalize(row, idx) {
     const id = String(row.voucher_id || '').trim();
@@ -470,7 +536,7 @@ function normalize(row, idx) {
     const from = String(row.from_account || '').trim(), to = String(row.to_account || '').trim();
     const desc = String(row.description || '').trim(), rem = String(row.remarks || '').trim();
     const up = id.toUpperCase();
-    let e = { id, idx, date: String(row.date || '').slice(0, 10), raw: row, notes: rem, legacy: false, isFee: false, isLiabilitySettlement: false, isPartnerWithdrawal: false, isSecurityRefund: securityRefundVouchers.has(id), manual: false, wallet2: null, fee: null };
+    let e = { id, idx, date: String(row.date || '').slice(0, 10), raw: row, notes: rem, legacy: false, isFee: false, isLiabilitySettlement: false, isPartnerWithdrawal: false, isFixedAsset: false, isSecurityRefund: securityRefundVouchers.has(id), manual: false, wallet2: null, fee: null };
 
     const mb = up.match(/^(AR|AP)-\d+$/), ms = up.match(/^((?:AR|AP|BK)-\d+)-/);
 
@@ -488,6 +554,10 @@ function normalize(row, idx) {
         Object.assign(e, { kind: 'transfer', wallet: normWallet(from), wallet2: normWallet(to), amount: inAmt || outAmt, head: 'Transfer', title: desc, manual: true });
     } else if(up.startsWith('OB-')) {
         Object.assign(e, { kind: 'opening', wallet: normWallet(to), amount: inAmt || outAmt, head: 'Opening Balance', title: desc || 'Opening Balance', manual: true });
+    } else if(up.startsWith('FA-P-')) {
+        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt, head: 'Fixed asset purchase', title: desc, manual: true, isFixedAsset: true });
+    } else if(up.startsWith('FA-S-')) {
+        Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt, head: 'Fixed asset sale', title: desc, manual: true, isFixedAsset: true });
     } else if(up.startsWith('PD-')) {
         Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt || inAmt, head: 'Partner Drawings',
             title: desc, manual: true, isPartnerWithdrawal: true });
@@ -539,6 +609,7 @@ async function initAccounts() {
         ]);
         INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; BUSINESS_PARTNERS = L['Business Partner'] || []; setupWallets(L['Payment Account']);
         updatePartnerWithdrawalAccess();
+        updateFixedAssetAccess();
         if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD);
         if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable');
         if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable');
@@ -561,6 +632,167 @@ async function initAccounts() {
         toast('Could not load data. Check your internet connection or API settings.', false);
     }
     hideLoading();
+}
+
+const ASSET_EVENT_LABELS = { opening: 'Opening asset', purchase: 'Purchase', sale: 'Sale', depreciation: 'Depreciation' };
+function assetBalances(asset) {
+    const rows = fixedAssetEvents.filter(event => String(event.asset_id) === String(asset.id));
+    const quantity = rows.reduce((sum, event) => sum + (Number(event.quantity_change) || 0), 0);
+    const cost = rows.reduce((sum, event) => sum + (Number(event.cost_change) || 0), 0);
+    const depreciation = rows.reduce((sum, event) => sum + (Number(event.accumulated_depreciation_change) || 0), 0);
+    return { quantity: Math.max(0, quantity), cost: Math.max(0, cost), depreciation: Math.max(0, depreciation), bookValue: Math.max(0, cost - depreciation) };
+}
+function renderFixedAssets() {
+    const totals = fixedAssets.reduce((sum, asset) => {
+        const row = assetBalances(asset);
+        sum.quantity += row.quantity; sum.cost += row.cost; sum.depreciation += row.depreciation; sum.bookValue += row.bookValue;
+        return sum;
+    }, { quantity: 0, cost: 0, depreciation: 0, bookValue: 0 });
+    $('assetCards').innerHTML = [
+        ['Items', fmt(fixedAssets.length)], ['Available units', fmt(totals.quantity)],
+        ['Original cost', 'PKR ' + fmt(totals.cost)], ['Net book value', 'PKR ' + fmt(totals.bookValue)]
+    ].map(([label, value]) => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"><div class="text-xs text-slate-500">${esc(label)}</div><div class="text-xl font-extrabold text-indigo-950 mt-1">${esc(value)}</div></div>`).join('');
+
+    const query = $('assetSearch').value.trim().toLowerCase();
+    const rows = fixedAssets.filter(asset => !query || [asset.asset_code, asset.name, asset.category, asset.description].join(' ').toLowerCase().includes(query));
+    $('assetCount').textContent = `${fmt(rows.length)} of ${fmt(fixedAssets.length)} assets`;
+    const canAddAssets = can('accounts', 'a');
+    $('assetBody').innerHTML = rows.length ? rows.map(asset => {
+        const balance = assetBalances(asset);
+        const buttons = balance.quantity > 0 && canAddAssets
+            ? `<button onclick="openAssetEvent('purchase',${Number(asset.id)})" class="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Buy more</button> <button onclick="openAssetEvent('sale',${Number(asset.id)})" class="px-2 py-1 rounded bg-indigo-50 text-indigo-700">Sell</button> ${balance.bookValue > 0 ? `<button onclick="openAssetEvent('depreciation',${Number(asset.id)})" class="px-2 py-1 rounded bg-amber-50 text-amber-700">Depreciate</button>` : ''}`
+            : balance.quantity > 0 ? 'Active' : 'Disposed';
+        return `<tr class="border-b"><td class="p-2.5 font-semibold">${esc(asset.name)}<small class="block text-slate-500">${esc(asset.asset_code || '')}${asset.description ? ' · ' + esc(asset.description) : ''}</small></td><td class="p-2.5">${esc(asset.category)}</td><td class="p-2.5 text-right">${fmt(balance.quantity)}</td><td class="p-2.5 text-right">PKR ${fmt(balance.cost)}</td><td class="p-2.5 text-right">PKR ${fmt(balance.depreciation)}</td><td class="p-2.5 text-right font-bold">PKR ${fmt(balance.bookValue)}</td><td class="p-2.5 whitespace-nowrap">${buttons}</td></tr>`;
+    }).join('') : '<tr><td colspan="7" class="p-8 text-center text-slate-400">No assets recorded yet. Add an opening asset or record a new purchase.</td></tr>';
+
+    const assetById = new Map(fixedAssets.map(asset => [String(asset.id), asset]));
+    $('assetEventCount').textContent = `${fmt(fixedAssetEvents.length)} transactions`;
+    $('assetEventBody').innerHTML = fixedAssetEvents.length ? fixedAssetEvents.map(event => {
+        const asset = assetById.get(String(event.asset_id));
+        const quantity = event.event_type === 'depreciation' ? '—' : fmt(Math.abs(Number(event.quantity_change) || 0));
+        const account = event.account_name ? `${event.account_name}${event.party ? ' · ' + event.party : ''}` : event.event_type === 'opening' ? 'Opening balance' : 'Non-cash';
+        return `<tr class="border-b"><td class="p-2.5 whitespace-nowrap">${fmtDate(event.event_date)}</td><td class="p-2.5">${esc(asset ? asset.name : 'Asset')}<small class="block text-slate-500">${esc(asset ? asset.asset_code || '' : '')}</small></td><td class="p-2.5">${esc(ASSET_EVENT_LABELS[event.event_type] || event.event_type)}</td><td class="p-2.5 text-right">${quantity}</td><td class="p-2.5 text-right">PKR ${fmt(event.amount)}</td><td class="p-2.5">${esc(account)}</td><td class="p-2.5">${esc(event.voucher_id || '—')}</td><td class="p-2.5">${esc(event.remarks || '—')}</td></tr>`;
+    }).join('') : '<tr><td colspan="8" class="p-8 text-center text-slate-400">No asset activity in the register.</td></tr>';
+}
+async function loadFixedAssets() {
+    $('assetSetupNotice').classList.add('hidden');
+    try {
+        const [assetResponse, eventResponse] = await Promise.all([
+            sbFetchAll('fixed_assets', 'select=*&order=asset_code.asc'),
+            sbFetchAll('fixed_asset_events', 'select=*&order=event_date.desc,id.desc')
+        ]);
+        if(!assetResponse.ok) throw new Error(await assetResponse.text());
+        if(!eventResponse.ok) throw new Error(await eventResponse.text());
+        const [assetRows, eventRows] = await Promise.all([assetResponse.json(), eventResponse.json()]);
+        if(!Array.isArray(assetRows) || !Array.isArray(eventRows)) throw new Error('The asset tables returned invalid data.');
+        fixedAssets = assetRows; fixedAssetEvents = eventRows; fixedAssetsLoaded = true;
+        renderFixedAssets();
+    } catch(error) {
+        fixedAssetsLoaded = false;
+        $('assetSetupError').textContent = error.message || 'Could not load asset data.';
+        $('assetSetupNotice').classList.remove('hidden');
+    }
+}
+function openAssetEvent(type, assetId = '') {
+    if(!can('accounts', 'a')) { toast('You do not have permission to add asset transactions.', false); return; }
+    const modal = $('assetEventModal');
+    modal.dataset.type = type;
+    $('assetEventError').textContent = '';
+    $('assetName').value = ''; $('assetCategory').value = ''; $('assetDescription').value = '';
+    $('assetDate').value = todayStr(); $('assetQuantity').value = type === 'depreciation' ? '' : '1';
+    $('assetAmount').value = ''; $('assetParty').value = ''; $('assetNotes').value = '';
+    const eligible = fixedAssets.filter(asset => assetBalances(asset).quantity > 0);
+    $('assetPick').innerHTML = (type === 'purchase' ? '<option value="new">New asset item</option>' : '')
+        + eligible.map(asset => `<option value="${esc(asset.id)}">${esc(asset.asset_code)} · ${esc(asset.name)} (${esc(asset.category)})</option>`).join('');
+    if(assetId && eligible.some(asset => String(asset.id) === String(assetId))) $('assetPick').value = String(assetId);
+    else if(type !== 'opening' && type !== 'purchase' && eligible.length) $('assetPick').value = String(eligible[0].id);
+    $('assetWallet').innerHTML = WALLET_CHOICES.map(wallet => `<option value="${esc(wallet)}">${esc(WALLETS[wallet].label)}</option>`).join('');
+    if(!eligible.length && (type === 'sale' || type === 'depreciation')) {
+        toast('Add an opening asset or purchase before recording this transaction.', false); return;
+    }
+    updateAssetEventFields();
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+    const isNew = type === 'opening' || (type === 'purchase' && $('assetPick').value === 'new');
+    setTimeout(() => $(isNew ? 'assetName' : type === 'depreciation' ? 'assetAmount' : 'assetQuantity').focus(), 20);
+}
+function updateAssetEventFields() {
+    const type = $('assetEventModal').dataset.type, isNew = type === 'opening' || (type === 'purchase' && $('assetPick').value === 'new');
+    const selected = fixedAssets.find(asset => String(asset.id) === $('assetPick').value);
+    const balance = selected ? assetBalances(selected) : null;
+    $('assetPickWrap').classList.toggle('hidden', type === 'opening');
+    $('assetNewFields').classList.toggle('hidden', !isNew);
+    $('assetQuantityWrap').classList.toggle('hidden', type === 'depreciation');
+    $('assetWalletWrap').classList.toggle('hidden', type === 'opening' || type === 'depreciation');
+    $('assetPartyWrap').classList.toggle('hidden', type === 'opening' || type === 'depreciation');
+    $('assetName').required = isNew; $('assetCategory').required = isNew;
+    $('assetDate').required = true; $('assetAmount').required = true;
+    $('assetQuantity').required = type !== 'depreciation';
+    $('assetWallet').required = type === 'purchase' || type === 'sale';
+    $('assetQuantity').max = type === 'sale' && balance ? balance.quantity : '';
+    $('assetAmount').max = type === 'depreciation' && balance ? balance.bookValue : '';
+    $('assetModalTitle').textContent = ({ opening: 'Register opening asset', purchase: 'Record asset purchase', sale: 'Record asset sale', depreciation: 'Record depreciation' })[type];
+    $('assetModalHint').textContent = type === 'opening' ? 'Record an asset already owned; no cash or bank transaction is created.' : type === 'depreciation' ? 'Reduces book value only; it does not post a depreciation expense or change cash/bank.' : type === 'sale' ? 'Sale proceeds post to the selected account; disposal gain/loss is not calculated.' : 'This purchase is saved to both the asset register and the Accounts daybook.';
+    $('assetAmountLabel').textContent = ({ opening: 'Opening value (PKR)', purchase: 'Purchase cost (PKR)', sale: 'Sale proceeds (PKR)', depreciation: 'Depreciation amount (PKR)' })[type];
+    $('assetWalletLabel').textContent = type === 'sale' ? 'Received in' : 'Paid from';
+    $('assetPartyLabel').textContent = type === 'sale' ? 'Buyer (optional)' : 'Vendor (optional)';
+    $('assetEventSave').textContent = type === 'opening' ? 'Save opening asset' : type === 'purchase' ? 'Save purchase' : type === 'sale' ? 'Save sale' : 'Save depreciation';
+}
+function closeAssetEvent() {
+    $('assetEventModal').classList.add('hidden'); $('assetEventModal').classList.remove('flex');
+}
+async function saveAssetEvent() {
+    const button = $('assetEventSave'), type = $('assetEventModal').dataset.type;
+    const isNew = type === 'opening' || (type === 'purchase' && $('assetPick').value === 'new');
+    const amount = Number($('assetAmount').value), quantity = Number($('assetQuantity').value), date = $('assetDate').value;
+    if(!date || !(amount > 0) || (type !== 'depreciation' && !(quantity > 0))) {
+        $('assetEventError').textContent = 'Enter a valid date and positive amount and quantity.'; return;
+    }
+    const payload = {
+        event_type: type, event_date: date, amount,
+        quantity: type === 'depreciation' ? null : quantity,
+        asset_id: isNew ? null : $('assetPick').value,
+        asset_name: isNew ? $('assetName').value.trim() : '',
+        category: isNew ? $('assetCategory').value.trim() : '',
+        description: isNew ? $('assetDescription').value.trim() : '',
+        account_name: type === 'purchase' || type === 'sale' ? $('assetWallet').value : null,
+        party: $('assetParty').value.trim(), remarks: $('assetNotes').value.trim()
+    };
+    if(isNew && (!payload.asset_name || !payload.category)) { $('assetEventError').textContent = 'Enter the asset name and category.'; return; }
+    if(type === 'sale' && quantity > assetBalances(fixedAssets.find(asset => String(asset.id) === String(payload.asset_id))).quantity) {
+        $('assetEventError').textContent = 'Sale quantity exceeds available units.'; return;
+    }
+    if(type === 'depreciation' && amount > assetBalances(fixedAssets.find(asset => String(asset.id) === String(payload.asset_id))).bookValue) {
+        $('assetEventError').textContent = 'Depreciation cannot exceed the current book value.'; return;
+    }
+    button.disabled = true; button.textContent = 'Saving...';
+    try {
+        const config = getSupabaseConfig();
+        const response = await fetch(`${config.url}/rest/v1/rpc/record_fixed_asset_event`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ p: payload })
+        });
+        if(!response.ok) throw new Error(await response.text());
+        const result = await response.json();
+        if(typeof sbCacheClear === 'function') { sbCacheClear('accounts'); sbCacheClear('fixed_assets'); sbCacheClear('fixed_asset_events'); }
+        closeAssetEvent();
+        toast(`${ASSET_EVENT_LABELS[type]} saved${result.voucher_id ? ' · ' + result.voucher_id : ''}`);
+        fixedAssetsLoaded = false;
+        await initAccounts();
+    } catch(error) {
+        $('assetEventError').textContent = error.message || 'Could not save the asset transaction.';
+    } finally {
+        button.disabled = false;
+        updateAssetEventFields();
+    }
+}
+function exportFixedAssetsCsv() {
+    if(!fixedAssets.length) { toast('There are no assets to export.', false); return; }
+    exportCsv('fixed-assets', ['Asset code', 'Asset', 'Category', 'Quantity', 'Cost', 'Depreciation', 'Book value'],
+        fixedAssets.map(asset => {
+            const balance = assetBalances(asset);
+            return [asset.asset_code, asset.name, asset.category, balance.quantity, balance.cost, balance.depreciation, balance.bookValue];
+        }));
 }
 
 // ====================================================================================
@@ -602,7 +834,7 @@ function scopeList() {
 //  TABS + RENDER
 // ====================================================================================
 function showTab(t) {
-    ['overview', 'daybook', 'fees', 'heads', 'wallets', 'dues'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    ['overview', 'daybook', 'fees', 'heads', 'wallets', 'dues', 'assets'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
     if (t === 'overview') renderOverview();
     else if (t === 'daybook') renderDaybook();
@@ -610,7 +842,11 @@ function showTab(t) {
     else if (t === 'heads') renderHeads();
     else if (t === 'wallets') renderWallets();
     else if (t === 'dues') renderDues();
-    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable' };
+    else if (t === 'assets') {
+        if (!fixedAssetsLoaded) loadFixedAssets();
+        else renderFixedAssets();
+    }
+    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable', assets: 'Assets' };
     let r = getRange();
     $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;
 }
@@ -620,7 +856,7 @@ function renderAll() {
     showTab(currentTab());
 }
 
-function sumKind(list, kind, w) { return list.filter(e => e.kind === kind && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal)) && (w === 'ALL' || e.wallet === w)).reduce((s, e) => s + e.amount, 0); }
+function sumKind(list, kind, w) { return list.filter(e => e.kind === kind && !e.isFixedAsset && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal)) && (w === 'ALL' || e.wallet === w)).reduce((s, e) => s + e.amount, 0); }
 
 function barRow(label, value, max, total, color) {
     let w = max > 0 ? Math.max(2, Math.round(value / max * 100)) : 0;
@@ -651,7 +887,7 @@ function renderOverview() {
     while(cur <= to) { months.push({ key: ymd(cur).slice(0, 7), label: cur.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), inc: 0, exp: 0 }); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1); }
     if(months.length > 12) months = months.slice(-12);
     let mm = {}; months.forEach(m => mm[m.key] = m);
-    list.forEach(e => { let m = mm[e.date.slice(0, 7)]; if(!m) return; if(e.kind === 'receipt') m.inc += e.amount; if(e.kind === 'payment' && !e.isLiabilitySettlement && !e.isPartnerWithdrawal) m.exp += e.amount; });
+    list.forEach(e => { let m = mm[e.date.slice(0, 7)]; if(!m || e.isFixedAsset) return; if(e.kind === 'receipt') m.inc += e.amount; if(e.kind === 'payment' && !e.isLiabilitySettlement && !e.isPartnerWithdrawal) m.exp += e.amount; });
     let max = Math.max(1, ...months.map(m => Math.max(m.inc, m.exp)));
     let W = Math.max(520, months.length * 70), H = 230, padL = 8, padB = 28, padT = 20, ch = H - padB - padT, gw = (W - padL) / Math.max(months.length, 1), bw = Math.min(22, gw / 3);
     const short = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : (v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + 'k' : String(Math.round(v)));
@@ -670,7 +906,7 @@ function renderOverview() {
 
     // top expense heads
     let heads = {};
-    list.filter(e => e.kind === 'payment' && !e.isLiabilitySettlement && !e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { heads[e.headLabel] = (heads[e.headLabel] || 0) + e.amount; });
+    list.filter(e => e.kind === 'payment' && !e.isFixedAsset && !e.isLiabilitySettlement && !e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { heads[e.headLabel] = (heads[e.headLabel] || 0) + e.amount; });
     let arr = Object.entries(heads).sort((a, b) => b[1] - a[1]).slice(0, 6), tot = Object.values(heads).reduce((s, v) => s + v, 0);
     $('topExpenses').innerHTML = arr.length ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, 'bg-rose-500')).join('') : '<p class="text-xs text-slate-400">No expenses in this period.</p>';
 
@@ -678,7 +914,7 @@ function renderOverview() {
     let recent = [...list].reverse().slice(0, 8);
     $('recentBody').innerHTML = recent.length ? recent.map(e => {
         let d = delta(e, r.wallet);
-        const meta = e.isPartnerWithdrawal ? KIND_META.partner_withdrawal : KIND_META[e.kind];
+        const meta = fixedAssetEntryMeta(e);
         return `<tr class="border-b"><td class="py-2 pr-3 text-slate-500 whitespace-nowrap">${fmtDate(e.date)}</td><td class="py-2 pr-3"><span class="px-2 py-0.5 rounded-md border ${meta.cls}">${meta.label}</span></td><td class="py-2 pr-3 text-slate-700">${esc(entryLabel(e))}</td><td class="py-2 text-right font-bold ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'} whitespace-nowrap">${e.kind === 'transfer' && r.wallet === 'ALL' ? 'PKR ' + fmt(e.amount) : (d >= 0 ? '+ ' : '- ') + 'PKR ' + fmt(Math.abs(d))}</td></tr>`;
     }).join('') : '<tr><td class="py-4 text-center text-slate-400">No entries in this period.</td></tr>';
     const partnerRows = list.filter(e => e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).slice().reverse();
@@ -761,9 +997,10 @@ function renderDaybook() {
     const renderEntryRow = (e, detail = false) => {
         let isT = e.kind === 'transfer' && r.wallet === 'ALL';
         let recAmt = e._d > 0 ? 'PKR ' + fmt(e._d) : '', payAmt = e._d < 0 ? 'PKR ' + fmt(-e._d) : '';
-        let kindBadge = `<span class="px-2 py-0.5 rounded-md border ${e.isPartnerWithdrawal ? KIND_META.partner_withdrawal.cls : KIND_META[e.kind].cls}">${e.isPartnerWithdrawal ? KIND_META.partner_withdrawal.label : KIND_META[e.kind].label}</span>${e.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
+        const entryMeta = fixedAssetEntryMeta(e);
+        let kindBadge = `<span class="px-2 py-0.5 rounded-md border ${entryMeta.cls}">${entryMeta.label}</span>${e.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
         let acct = e.kind === 'transfer' ? `${WALLETS[e.wallet].icon} → ${WALLETS[e.wallet2].icon}` : `${WALLETS[e.wallet].icon} ${WALLETS[e.wallet].label}`;
-        let canEdit = e.manual && !e.isSecurityRefund;
+        let canEdit = e.manual && !e.isSecurityRefund && !e.isFixedAsset;
         return `<tr class="border-b hover:bg-slate-50 align-top ${detail ? 'bg-slate-50/70' : ''}">
             <td class="p-2.5 whitespace-nowrap text-slate-600">${detail ? '<span class="pl-5">↳</span> ' : ''}${fmtDate(e.date)}</td>
             <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap" title="${esc(e.id)}">${esc(e.ref)}</td>
@@ -775,8 +1012,8 @@ function renderDaybook() {
             <td class="p-2.5 text-right font-semibold text-slate-700 whitespace-nowrap">${fmt(e._bal)}</td>
             <td class="p-2.5 whitespace-nowrap no-print">
                 <button onclick="printVoucher(${esc(JSON.stringify(e.id))})" title="Print voucher" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button>
-                ${e.isSecurityRefund ? '<span class="text-[10px] text-slate-400">Managed by Payroll</span>' : canEdit ? `<button onclick="editEntry(${esc(JSON.stringify(e.id))})" title="Edit" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>` : `<button onclick="quickEdit(${esc(JSON.stringify(e.id))})" title="Edit account / date / amount" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>`}
-                ${e.isSecurityRefund ? '' : `<button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`}
+                ${e.isFixedAsset ? '<span class="text-[10px] text-slate-400">Managed in Assets</span>' : e.isSecurityRefund ? '<span class="text-[10px] text-slate-400">Managed by Payroll</span>' : canEdit ? `<button onclick="editEntry(${esc(JSON.stringify(e.id))})" title="Edit" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>` : `<button onclick="quickEdit(${esc(JSON.stringify(e.id))})" title="Edit account / date / amount" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>`}
+                ${e.isSecurityRefund || e.isFixedAsset ? '' : `<button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`}
             </td></tr>`;
     };
     $('dbBody').innerHTML = shown.length ? shown.map(group => {
@@ -823,7 +1060,7 @@ function exportDaybookCsv() {
     let rows = daybookRows();
     if(!rows.length) { toast('No entries to export.', false); return; }
     exportCsv('daybook', ['Date', 'Voucher', 'Type', 'Account', 'Details', 'Receipt', 'Payment', 'Balance', 'Notes'],
-        rows.map(e => [e.date, e.id, e.isPartnerWithdrawal ? KIND_META.partner_withdrawal.label : KIND_META[e.kind].label, e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label, entryLabel(e), e._d > 0 ? e._d : '', e._d < 0 ? -e._d : '', e._bal, e.notes]));
+        rows.map(e => [e.date, e.id, fixedAssetEntryMeta(e).label, e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label, entryLabel(e), e._d > 0 ? e._d : '', e._d < 0 ? -e._d : '', e._bal, e.notes]));
 }
 
 // ---------------- FEE COLLECTION ----------------
@@ -870,7 +1107,7 @@ function renderHeads() {
     let r = getRange(), list = scopeList();
     const build = (kind, color, el) => {
         let map = {};
-        list.filter(e => e.kind === kind && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal)) && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { map[e.headLabel] = (map[e.headLabel] || 0) + e.amount; });
+        list.filter(e => e.kind === kind && !e.isFixedAsset && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal)) && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { map[e.headLabel] = (map[e.headLabel] || 0) + e.amount; });
         let arr = Object.entries(map).sort((a, b) => b[1] - a[1]), tot = arr.reduce((s, x) => s + x[1], 0);
         $(el).innerHTML = arr.length
             ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, color)).join('') + `<div class="flex justify-between text-sm font-bold border-t pt-2 mt-2"><span>Total</span><span>PKR ${fmt(tot)}</span></div>`
@@ -1291,6 +1528,7 @@ async function savePartnerWithdrawal() {
 }
 function editEntry(id) {
     let e = entryById[id]; if(!e || !e.manual) return;
+    if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
     if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     editingId = id;
     $('emDate').value = e.date; $('emAmount').value = e.amount; $('emHead').value = (e.kind === 'receipt' || e.kind === 'payment') ? e.head : '';
@@ -1302,6 +1540,7 @@ function editEntry(id) {
 }
 function quickEdit(id) {
     const e = entryById[id]; if(!e) return;
+    if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
     if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     $('qeVid').value = id; $('qeDate').value = e.date; $('qeAmount').value = e.amount; $('qeNotes').value = e.notes || '';
     $('qeInfo').innerText = e.isFee ? `Fee payment: ${e.fee.student || ''} - ${titleCase(e.fee.type || '')} ${e.fee.period || ''}` : `${e.headLabel || e.head || ''}${e.title ? ' - ' + e.title : ''}`;
@@ -1313,6 +1552,7 @@ function quickEdit(id) {
 function closeQuickEdit() { $('qeModal').classList.add('hidden'); }
 async function saveQuickEdit() {
     const id = $('qeVid').value, e = entryById[id]; if(!e) return;
+    if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
     if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     const date = $('qeDate').value, amt = parseFloat($('qeAmount').value) || 0, w = $('qeWallet').value, notes = $('qeNotes').value.trim();
     if(!date) { toast('Please enter a date.', false); return; }
@@ -1435,6 +1675,7 @@ async function saveEntry() {
 // ====================================================================================
 function deleteEntry(id) {
     let e = entryById[id]; if(!e) return;
+    if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
     if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
  if(e.kind === 'bill_raised' || e.kind === 'bill_received') { const n = entries.filter(x => x.billRef === e.id).length; if(n) { toast(`This bill has ${n} receipt/payment entr${n > 1 ? 'ies' : 'y'}. Delete those first.`, false); return; } }
     let msg = e.isFee

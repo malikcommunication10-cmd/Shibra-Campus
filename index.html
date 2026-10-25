@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Dashboard</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="config.js"></script>
-    <script src="nav.js"></script>
+    <script src="config.js?v=20261022-2"></script>
+    <script src="nav.js?v=20261024-1"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans" onload="initDashboard()">
 <div class="min-h-screen flex flex-col md:flex-row">
@@ -101,11 +101,15 @@ async function initDashboard(backgroundRefresh = false) {
             const isBill = /^(AR|AP)-\d+$/.test(id);
             if (isBill || !date || date > today) return;
 
-            let kind, wallet, otherWallet = '', amount, head = '';
+            let kind, wallet, otherWallet = '', amount, head = '', isFixedAsset = false;
             if (id.startsWith('TV-')) {
                 kind = 'transfer'; wallet = walletKey(from); otherWallet = walletKey(to); amount = amountIn || amountOut;
             } else if (id.startsWith('OB-')) {
                 kind = 'opening'; wallet = walletKey(to); amount = amountIn || amountOut;
+            } else if (id.startsWith('FA-P-')) {
+                kind = 'payment'; wallet = walletKey(from); amount = amountOut; head = 'Fixed Asset Purchase'; isFixedAsset = true;
+            } else if (id.startsWith('FA-S-')) {
+                kind = 'receipt'; wallet = walletKey(to); amount = amountIn; head = 'Fixed Asset Sale'; isFixedAsset = true;
             } else if (id.startsWith('PV-')) {
                 kind = 'payment'; wallet = walletKey(from); amount = amountOut || amountIn; head = to || 'Misc Expense';
             } else if (id.startsWith('RV-')) {
@@ -135,8 +139,8 @@ async function initDashboard(backgroundRefresh = false) {
                 }
                 return;
             }
-            const isIncome = kind === 'receipt';
-            const isExpense = kind === 'payment';
+            const isIncome = kind === 'receipt' && !isFixedAsset;
+            const isExpense = kind === 'payment' && !isFixedAsset;
             const delta = kind === 'payment' ? -amount : amount;
             if (date < monthStart || (kind === 'opening' && date === monthStart)) {
                 openingBalance += delta;
