@@ -32,11 +32,69 @@ function sbLoadXlsx() {
 const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1', SB_LOGOUT_REASON_KEY = 'sb_logout_reason_v1';
 const SB_IDLE_TIMEOUT = 5 * 60 * 1000;
 const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000, SB_DATA_CACHE_STALE = 5 * 60 * 1000;
+const SB_DATA_DB_NAME = 'shibra_data_cache_v1', SB_DATA_DB_STORE = 'responses';
 const _sbDataMemory = new Map(), _sbDataPending = new Map();
+let _sbDataDbPromise = null;
 function sbSession() { try { return JSON.parse(localStorage.getItem(SB_SESSION_KEY) || 'null'); } catch (e) { return null; } }
 function sbDataCacheUser() { return encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase()); }
 function sbDataCacheKey(table, query) {
     return `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_${table}_${encodeURIComponent(query)}`;
+}
+function sbOpenDataCache() {
+    if (!('indexedDB' in window)) return Promise.resolve(null);
+    if (!_sbDataDbPromise) {
+        _sbDataDbPromise = new Promise((resolve, reject) => {
+            const request = indexedDB.open(SB_DATA_DB_NAME, 1);
+            request.onupgradeneeded = () => {
+                if (!request.result.objectStoreNames.contains(SB_DATA_DB_STORE))
+                    request.result.createObjectStore(SB_DATA_DB_STORE, { keyPath: 'key' });
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error || new Error('Could not open the local data cache.'));
+            request.onblocked = () => reject(new Error('The local data cache is blocked by another tab.'));
+        }).catch(error => {
+            _sbDataDbPromise = null;
+            throw error;
+        });
+    }
+    return _sbDataDbPromise;
+}
+async function sbReadPersistentData(key) {
+    const db = await sbOpenDataCache();
+    if (!db) return null;
+    return new Promise((resolve, reject) => {
+        const request = db.transaction(SB_DATA_DB_STORE, 'readonly').objectStore(SB_DATA_DB_STORE).get(key);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('Could not read the local data cache.'));
+    });
+}
+async function sbWritePersistentData(value) {
+    const db = await sbOpenDataCache();
+    if (!db) return;
+    await new Promise((resolve, reject) => {
+        const request = db.transaction(SB_DATA_DB_STORE, 'readwrite').objectStore(SB_DATA_DB_STORE).put(value);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error || new Error('Could not save the local data cache.'));
+    });
+}
+async function sbDeletePersistentData(userPrefix, tableName) {
+    const db = await sbOpenDataCache();
+    if (!db) return;
+    await new Promise((resolve, reject) => {
+        const transaction = db.transaction(SB_DATA_DB_STORE, 'readwrite');
+        const request = transaction.objectStore(SB_DATA_DB_STORE).openCursor();
+        request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) return;
+            const key = String(cursor.key || '');
+            if (key.startsWith(userPrefix) && (!tableName || key.startsWith(`${userPrefix}${tableName}_`)))
+                cursor.delete();
+            cursor.continue();
+        };
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error || new Error('Could not clear the local data cache.'));
+        transaction.onabort = () => reject(transaction.error || new Error('Could not clear the local data cache.'));
+    });
 }
 function sbDataRevision(table) {
     try { return `${localStorage.getItem('sb_data_rev_all') || ''}|${localStorage.getItem(`sb_data_rev_${table}`) || ''}`; }
@@ -63,6 +121,7 @@ function sbCacheClear(table) {
             sessionStorage.removeItem('sb_settings_v2');
         }
     } catch (e) {}
+    sbDeletePersistentData(userPrefix, tableName).catch(error => console.warn('Could not clear the persistent data cache:', error));
 }
 function sbSaveSession(j, resetIdle = false) {
     const old = sbSession() || {};
@@ -415,6 +474,8 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
         if (sbDataRevision(table) !== revision) return { ok: true, status: response.status, json: async () => rows, text: async () => '' };
         const value = JSON.stringify(rows), expires = Date.now() + SB_DATA_CACHE_TTL, staleUntil = expires + SB_DATA_CACHE_STALE;
         _sbDataMemory.set(key, { revision, expires, staleUntil, packed: value });
+        sbWritePersistentData({ key, revision, expires, staleUntil, rows })
+            .catch(error => console.warn(`Could not persist cached ${table} data:`, error));
         try {
             if (value.length < 1800000)
                 sessionStorage.setItem(key, JSON.stringify({ revision, expires, staleUntil, rows }));
@@ -454,6 +515,25 @@ async function sbFetchAll(table, query) {
                 } else sessionStorage.removeItem(key);
             }
         } catch (e) {}
+        if (!cached) {
+            try {
+                const saved = await sbReadPersistentData(key);
+                if (saved && saved.revision === revision && Array.isArray(saved.rows)) {
+                    const staleUntil = Number(saved.staleUntil || saved.expires || 0);
+                    if (staleUntil > now) {
+                        cached = {
+                            revision,
+                            expires: Number(saved.expires) || 0,
+                            staleUntil,
+                            packed: JSON.stringify(saved.rows)
+                        };
+                        _sbDataMemory.set(key, cached);
+                    }
+                }
+            } catch (error) {
+                console.warn(`Could not read persistent ${table} cache:`, error);
+            }
+        }
     }
     if (cached && cached.staleUntil > now) {
         const rows = JSON.parse(cached.packed);
