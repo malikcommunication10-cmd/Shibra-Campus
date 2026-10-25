@@ -103,7 +103,7 @@
                 <button data-tab="heads" onclick="showTab('heads')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🗂️ Heads Summary</button>
                 <button data-tab="wallets" onclick="showTab('wallets')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🏦 Cash & Bank</button>
         <button data-tab="dues" onclick="showTab('dues')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🧾 Receivable / Payable</button>
-                <button data-tab="assets" onclick="showTab('assets')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🏫 Assets</button>
+                <button data-tab="assets" onclick="showTab('assets')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🏫 Purchases / Assets</button>
             </div>
 
             <div id="printHeader">
@@ -846,7 +846,7 @@ function showTab(t) {
         if (!fixedAssetsLoaded) loadFixedAssets();
         else renderFixedAssets();
     }
-    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable', assets: 'Assets' };
+    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable', assets: 'Purchases / Assets' };
     let r = getRange();
     $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;
 }
