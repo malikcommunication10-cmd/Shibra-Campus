@@ -6,8 +6,8 @@
     <title>Concept School Shibra Campus - Follow-up Calls</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js"></script>
-    <script src="nav.js"></script>
+    <script src="config.js?v=20261022-2"></script>
+    <script src="nav.js?v=20261025-4"></script>
     <style>
         .urdu-box { font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Segoe UI', sans-serif; }
         .mic-live { animation: micPulse 1.1s ease-in-out infinite; }
@@ -489,11 +489,10 @@ async function initFollowups() {
 }
 
 async function loadLogs(rerender = true) {
-    let c = getSupabaseConfig();
     try {
-        let res = await fetch(`${c.url}/rest/v1/call_logs?select=*&order=call_date.desc`, { headers: sbHeaders() });
-        let data = await res.json();
-        if(!res.ok || !Array.isArray(data)) {
+        const response = await sbFetchAll('call_logs', 'select=*&order=call_date.desc');
+        const data = await response.json();
+        if(!response.ok || !Array.isArray(data)) {
             logsTableMissing = true; allLogs = [];
             $('setupBanner').classList.remove('hidden');
         } else {

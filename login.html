@@ -6,7 +6,7 @@
     <title>Login - Concept School Shibra Campus</title>
     <script>window.SB_NO_GUARD = true;</script>
     <link rel="stylesheet" href="styles.css">
-    <script src="config.js"></script>
+    <script src="config.js?v=20261022-2"></script>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex items-center justify-center p-4 font-sans">
     <div class="w-full max-w-sm">
@@ -145,7 +145,7 @@
                 showErr(m.includes('invalid') ? 'The email or password is incorrect.' : (m.includes('confirm') ? 'This account is not confirmed yet. Ask the administrator.' : 'Could not sign in. Please try again.'));
                 btn.disabled = false; btn.innerText = 'Sign in'; return;
             }
-            sbSaveSession(j);
+            sbSaveSession(j, true);
             const me = await sbFetchMe();
             if (!me || me.error) { sbClearAuth(); showErr('The users table is not set up yet. Run supabase_roles.sql in Supabase, then try again.'); btn.disabled = false; btn.innerText = 'Sign in'; return; }
             if (me.noaccess || me.active === false) { sbClearAuth(); showErr(me.noaccess ? 'Your account has no role yet. Please ask the administrator.' : 'This account is switched off. Please ask the administrator.'); btn.disabled = false; btn.innerText = 'Sign in'; return; }
@@ -154,6 +154,13 @@
         } catch (err) { console.error(err); sbClearAuth(); showErr('No connection. Check your internet and try again.'); btn.disabled = false; btn.innerText = 'Sign in'; }
     }
     $('email').focus();
+    const logoutReason = sessionStorage.getItem(SB_LOGOUT_REASON_KEY);
+    if (logoutReason) {
+        sessionStorage.removeItem(SB_LOGOUT_REASON_KEY);
+        showErr(logoutReason === 'idle'
+            ? 'You were signed out after 5 minutes without activity.'
+            : 'You have been signed out.');
+    }
 </script>
 </body>
 </html>

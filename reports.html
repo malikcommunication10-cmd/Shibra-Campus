@@ -6,184 +6,75 @@
     <title>Business Reports - Shibra Campus</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js"></script>
-    <script src="nav.js"></script>
+    <script src="config.js?v=20261022-2"></script>
+    <script src="nav.js?v=20261025-4"></script>
     <style>
         .report-table{width:100%;border-collapse:collapse}
-        .report-table th,.report-table td{padding:.75rem 1rem;border-bottom:1px solid #f1f5f9;text-align:left;font-size:.85rem}
-        .report-table th{background-color:#f8fafc;color:#475569;font-size:.7rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase}
-        .report-table tbody tr:hover{background-color:#f8fafc}
+        .report-table th,.report-table td{padding:.6rem .75rem;border-bottom:1px solid #e2e8f0;text-align:left;font-size:.8rem}
+        .report-table th{color:#64748b;font-size:.7rem;text-transform:uppercase}
         .report-table td:last-child,.report-table th:last-child{text-align:right;font-variant-numeric:tabular-nums}
-        .report-filters{display:grid;grid-template-columns:repeat(1,minmax(0,1fr));gap:1rem;align-items:end}
+        .report-card-toggle::after{content:"⌄";display:inline-block;font-size:1rem;transition:transform .15s}
+        .report-card-toggle[aria-expanded="true"]::after{transform:rotate(180deg)}
+        .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem}
+        .report-kpi{min-width:0}
+        .report-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;align-items:end}
         .report-filters-note{grid-column:1/-1}
-        #kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
-        .report-section-content { display: none; }
-        .report-section-content.active { display: block; }
-        .sidebar-nav-btn { transition: all 0.2s ease; }
-        .sidebar-nav-btn.active { background-color: #4f46e5; color: white; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); }
-        .date-quick-btn { transition: all 0.15s ease; }
-        .date-quick-btn:hover { background-color: #e0e7ff; color: #3730a3; }
-        @media(min-width:768px){.report-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
-        @media(min-width:1024px){.report-filters{grid-template-columns:2fr 2fr 1fr}.report-filters-note{grid-column:1/-1}}
+        #kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+        @media(min-width:1024px){.report-filters{grid-template-columns:repeat(5,minmax(0,1fr))}.report-filters-note{grid-column:auto}}
         @media(min-width:1280px){#kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
-        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print,aside.internal-sidebar{display:none!important}}
+        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print{display:none!important}.report-grid{grid-template-columns:1fr 1fr}}
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans antialiased">
+<body class="bg-slate-100 text-slate-800 font-sans">
 <div class="min-h-screen flex flex-col md:flex-row">
     <aside id="appNav"></aside>
-    <main class="flex-1 min-w-0 p-4 md:p-8 space-y-6">
-        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
-            <div>
-                <h1 class="text-2xl md:text-3xl font-black tracking-tight text-indigo-950">Business Reports & Audit</h1>
-                <p class="text-sm text-slate-500 mt-0.5">School-wide operational and financial executive overview</p>
-            </div>
-            <div class="flex flex-wrap gap-2 no-print">
-                <button id="printReport" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition flex items-center gap-1.5">Print</button>
-                <button id="exportReport" class="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition flex items-center gap-1.5">Export CSV</button>
-                <button id="refreshReport" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition">Refresh</button>
-            </div>
+    <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
+        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div><h1 class="text-xl md:text-2xl font-extrabold text-indigo-950">Business Reports</h1><p class="text-sm text-slate-500">School-wide operational and financial overview</p></div>
+            <div class="flex flex-wrap gap-2 no-print"><button id="expandAllReports" class="px-3 py-2 rounded-xl border bg-white text-sm font-semibold">Expand all</button><button id="collapseAllReports" class="px-3 py-2 rounded-xl border bg-white text-sm font-semibold">Collapse all</button><button id="printReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Print</button><button id="exportReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Export CSV</button><button id="refreshReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Refresh</button></div>
         </header>
-
-        <!-- Easy Month & Year Picker Section -->
-        <section class="report-filters bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm no-print">
-            <div class="space-y-1.5">
-                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Quick Presets</label>
-                <div class="flex flex-wrap gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-                    <button type="button" onclick="quickSelect('today')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">Today</button>
-                    <button type="button" onclick="quickSelect('month')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">This Month</button>
-                    <button type="button" onclick="quickSelect('last_month')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">Last Month</button>
-                    <button type="button" onclick="quickSelect('year')" class="date-quick-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-slate-700 shadow-xs">This Year</button>
-                </div>
-            </div>
-            <div class="space-y-1.5">
-                <label for="monthPicker" class="block text-xs font-bold text-slate-600 uppercase tracking-wider">Select Month & Year</label>
-                <input id="monthPicker" type="month" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition cursor-pointer">
-            </div>
-            <div class="flex items-end">
-                <button id="applyReport" class="w-full px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-100 transition">Apply Report</button>
-            </div>
-            <!-- Hidden inputs -->
-            <input id="fromDate" type="hidden"><input id="toDate" type="hidden">
-            <p class="report-filters-note text-xs text-slate-500 font-medium pt-1">Aap asani se mahina aur saal select kar sakte hain.</p>
+        <section class="report-filters bg-white p-3 md:p-4 rounded-2xl border border-slate-200 no-print">
+            <div><label for="preset" class="block text-xs font-semibold text-slate-600 mb-1">Period</label><select id="preset" class="w-full border rounded-lg p-2 text-sm"><option value="today">Today</option><option value="month">This month</option><option value="last_month">Last month</option><option value="year">This year</option><option value="last_year">Last year</option><option value="custom">Custom</option></select></div>
+            <div><label for="fromDate" class="block text-xs font-semibold text-slate-600 mb-1">From</label><input id="fromDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
+            <div><label for="toDate" class="block text-xs font-semibold text-slate-600 mb-1">To</label><input id="toDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
+            <p class="report-filters-note text-[11px] text-slate-500">Transactions follow the selected period. Student and staff counts are current snapshots.</p>
+            <button id="applyReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Apply</button>
         </section>
-
-        <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm font-medium" role="status"></div>
-        <div class="flex items-center justify-between">
-            <p id="periodLabel" class="text-xs font-semibold text-slate-500 bg-slate-200/60 px-3 py-1 rounded-lg inline-block"></p>
-        </div>
-
-        <section id="kpis" class="grid grid-cols-2 gap-4"></section>
-
-        <!-- Main Workspace Layout with Page Sidebar -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-            <aside class="internal-sidebar bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-1.5 lg:sticky lg:top-4 no-print">
-                <div class="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Report Sections</div>
-                <button onclick="switchTab('overview')" id="nav-overview" class="sidebar-nav-btn active w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📊 Executive Overview</span></button>
-                <button onclick="switchTab('students')" id="nav-students" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>🎓 Students by Class</span></button>
-                <button onclick="switchTab('tuition')" id="nav-tuition" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>💰 Tuition Fee Distribution</span></button>
-                <button onclick="switchTab('tuitionFeeReport')" id="nav-tuitionFeeReport" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📑 Tuition Fee Report (All)</span></button>
-                <button onclick="switchTab('annualFundReport')" id="nav-annualFundReport" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📂 Annual Fund Report (All)</span></button>
-                <button onclick="switchTab('fees')" id="nav-fees" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📑 Fees Breakdown by Type</span></button>
-                <button onclick="switchTab('accounts')" id="nav-accounts" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>🏦 Account Activity</span></button>
-                <button onclick="switchTab('staff')" id="nav-staff" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>👥 Staff Attendance & Payroll</span></button>
-                <button onclick="switchTab('followups')" id="nav-followups" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📞 Follow-up Outcomes</span></button>
-                <button onclick="switchTab('books')" id="nav-books" class="sidebar-nav-btn w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-between"><span>📚 Books & Increments</span></button>
-            </aside>
-
-            <div class="lg:col-span-3 space-y-6">
-                <!-- Tab 1: Overview -->
-                <div id="tab-overview" class="report-section-content active space-y-6">
-                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                        <h2 class="text-lg font-black text-indigo-950">Welcome to Campus Audit & Business Reports</h2>
-                        <p class="text-sm text-slate-600 leading-relaxed">Select any specific section from the left sidebar to view reports instantly.</p>
-                    </div>
-                </div>
-
-                <!-- Tab 2: Students by Class -->
-                <div id="tab-students" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Students Enrolled by Class</div>
-                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
-                </div>
-
-                <!-- Tab 3: Monthly Tuition Fee Distribution -->
-                <div id="tab-tuition" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Students by Monthly Tuition Fee</div>
-                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Monthly tuition fee</th><th>Students</th></tr></thead><tbody id="tuitionRows"></tbody>
-                        <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
-                </div>
-
-                <!-- Tab 4: Tuition Fee Report (All Students) -->
-                <div id="tab-tuitionFeeReport" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Tuition Fee Report (All Students)</div>
-                    <div class="overflow-x-auto">
-                        <table class="report-table">
-                            <thead>
-                                <tr><th>Account / Student</th><th>Total Students / Count</th><th>Amount (Gross)</th><th>Discount</th><th>Paid</th><th>Pending Balance</th></tr>
-                            </thead>
-                            <tbody id="tuitionFeeReportRows"></tbody>
-                            <tfoot id="tuitionFeeReportFooter"></tfoot>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Tab 5: Annual Fund Report (All Students) -->
-                <div id="tab-annualFundReport" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Annual Fund Report (All Students)</div>
-                    <div class="overflow-x-auto">
-                        <table class="report-table">
-                            <thead>
-                                <tr><th>Account / Student</th><th>Total Students / Count</th><th>Amount (Gross)</th><th>Discount</th><th>Paid</th><th>Pending Balance</th></tr>
-                            </thead>
-                            <tbody id="annualFundReportRows"></tbody>
-                            <tfoot id="annualFundReportFooter"></tfoot>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Tab 6: Fees Breakdown by Type -->
-                <div id="tab-fees" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Fees Breakdown by Type</div>
-                    <div class="overflow-x-auto">
-                        <table class="report-table min-w-[1100px]">
-                            <thead>
-                                <tr><th rowspan="2" class="bg-slate-100">Fee type</th><th colspan="4" class="text-center bg-indigo-50/50 text-indigo-900 border-x">Active students</th><th colspan="4" class="text-center bg-rose-50/50 text-rose-900 border-x">Left students</th><th colspan="4" class="text-center bg-slate-100 text-slate-900 border-x">All records</th></tr>
-                                <tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr>
-                            </thead>
-                            <tbody id="feeRows"></tbody>
-                            <tfoot><tr class="font-bold bg-indigo-50/60 text-indigo-950"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Tab 7: Account Activity -->
-                <div id="tab-accounts" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">General Account Activity</div>
-                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
-                </div>
-
-                <!-- Tab 8: Staff Attendance & Payroll -->
-                <div id="tab-staff" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Staff Attendance Summary</div>
-                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
-                </div>
-
-                <!-- Tab 9: Follow-up Outcomes -->
-                <div id="tab-followups" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 md:p-5 border-b border-slate-100 font-bold text-indigo-950">Follow-up Call Outcomes</div>
-                    <div class="overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
-                </div>
-
-                <!-- Tab 10: Books & Increments -->
-                <div id="tab-books" class="report-section-content bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
-                    <div class="font-bold text-indigo-950 text-base border-b pb-2">Books Inventory & Salary Increments</div>
-                    <div id="booksSummary" class="text-sm text-slate-600 font-medium"></div>
-                    <div id="incrementSummary" class="text-sm text-slate-600 font-medium"></div>
-                </div>
-            </div>
-        </div>
-
-        <p class="text-xs text-slate-400 pb-6 text-center">Generated securely from system database records. Student/staff counts reflect live snapshots.</p>
+        <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm" role="status"></div>
+        <p id="periodLabel" class="text-xs text-slate-500"></p>
+        <section id="kpis" class="grid grid-cols-2 gap-3"></section>
+        <section class="report-grid">
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="classContent">Students by class</button><div id="classContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active students</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
+            </article>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="tuitionContent">Students by monthly tuition fee</button>
+                <div id="tuitionContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Monthly tuition fee</th><th>Students</th></tr></thead><tbody id="tuitionRows"></tbody>
+                    <tfoot><tr class="font-bold bg-indigo-50"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
+            </article>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="feeContent">Fees by type</button><div id="feeContent" class="report-card-content overflow-x-auto"><table class="report-table min-w-[1200px]"><thead><tr><th rowspan="2">Fee type</th><th colspan="4" class="text-center">Active students</th><th colspan="4" class="text-center">Left students</th><th colspan="4" class="text-center">All records</th></tr><tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr></thead><tbody id="feeRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot></table></div>
+            </article>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="accountContent">Account activity</button><div id="accountContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
+            </article>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="tuitionReceivableContent">Account Receivable · Tuition Fee</button><div id="tuitionReceivableContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="tuitionReceivableRows"></tbody></table></div>
+            </article>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="annualFundContent">Account Receivable · Annual Fund</button><div id="annualFundContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="annualFundRows"></tbody></table></div>
+            </article>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="attendanceContent">Staff attendance</button><div id="attendanceContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
+            </article>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="followupContent">Follow-up outcomes</button><div id="followupContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
+            </article>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="booksContent">Books & increments</button><div id="booksContent" class="report-card-content space-y-2"><div id="booksSummary" class="text-sm text-slate-600"></div><div id="incrementSummary" class="text-sm text-slate-600"></div></div>
+            </article>
+        </section>
+        <p class="text-[11px] text-slate-500">Generated from saved records. Student/staff counts and monthly tuition-fee distribution are current snapshots; monthly fee and payroll records are included when their month overlaps the selected range. Account inflow/outflow uses all dated account entries in range. Books without a saved date cannot be period-filtered.</p>
     </main>
 </div>
 <script>
@@ -193,97 +84,26 @@ const n = value => Number(value) || 0;
 const fmt = value => n(value).toLocaleString(undefined, {maximumFractionDigits: 2});
 const iso = date => date.toISOString().slice(0, 10);
 let reportData = null, reportRequestId = 0, reportFilterTimer = null;
-
-function switchTab(tabId) {
-    document.querySelectorAll('.report-section-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.sidebar-nav-btn').forEach(btn => btn.classList.remove('active'));
-    const targetContent = $(`tab-${tabId}`);
-    const targetBtn = $(`nav-${tabId}`);
-    if (targetContent) targetContent.classList.add('active');
-    if (targetBtn) targetBtn.classList.add('active');
-}
-
-function updateHiddenDatesFromMonthPicker() {
-    const val = $('monthPicker').value; // format YYYY-MM
-    if (!val) return;
-    const [year, month] = val.split('-').map(Number);
-    const firstDay = new Date(Date.UTC(year, month - 1, 1));
-    const lastDay = new Date(Date.UTC(year, month, 0));
-    $('fromDate').value = iso(firstDay);$('toDate').value = iso(lastDay);
-}
-
 function periodDates(preset) {
-    const now = new Date();
-    const y = now.getUTCFullYear(), m = now.getUTCMonth() + 1, d = now.getUTCDate();
+    const today = todayYmd().split('-').map(Number), y = today[0], m = today[1], d = today[2];
     const utc = (year, month, day) => new Date(Date.UTC(year, month - 1, day));
     if (preset === 'today') return [iso(utc(y, m, d)), iso(utc(y, m, d))];
     if (preset === 'last_month') return [iso(utc(y, m - 1, 1)), iso(utc(y, m, 0))];
     if (preset === 'year') return [iso(utc(y, 1, 1)), iso(utc(y, 12, 31))];
+    if (preset === 'last_year') return [iso(utc(y - 1, 1, 1)), iso(utc(y - 1, 12, 31))];
     return [iso(utc(y, m, 1)), iso(utc(y, m, d))];
 }
-
-function quickSelect(preset) {
-    const dates = periodDates(preset);
-    $('fromDate').value = dates[0];$('toDate').value = dates[1];
-    const dObj = new Date(dates[0]);
-    const yr = dObj.getUTCFullYear();
-    const mo = String(dObj.getUTCMonth() + 1).padStart(2, '0');
-    $('monthPicker').value = `${yr}-${mo}`;
-    load();
-}
-
+function setPreset(value) { const dates = periodDates(value); $('fromDate').value = dates[0]; $('toDate').value = dates[1]; }
 function status(message, ok) {
     const box = $('reportStatus'); box.textContent = message;
-    box.className = `rounded-xl border px-4 py-3 text-sm font-medium ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`;
+    box.className = `rounded-xl border px-4 py-3 text-sm ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`;
     box.classList.toggle('hidden', !message);
 }
-
 function rows(id, data, columns) {
     const list = Array.isArray(data) ? data : [];
     $(id).innerHTML = list.length ? list.map(row => `<tr>${columns.map(col => `<td>${esc(col(row))}</td>`).join('')}</tr>`).join('')
-        : `<tr><td colspan="${columns.length}" class="text-slate-400 italic py-3 text-center">No records for this period</td></tr>`;
+        : `<tr><td colspan="${columns.length}" class="text-slate-500">No records for this period</td></tr>`;
 }
-
-function renderDedicatedReport(data, feeKeyword, tbodyId, footerId) {
-    const list = Array.isArray(data) ? data : [];
-    const filteredRows = list.filter(row => new RegExp(feeKeyword, 'i').test(String(row.label || '')));
-
-    let totalStudentsCount = 0, totGross = 0, totDisc = 0, totPaid = 0, totBal = 0;
-
-    const html = filteredRows.length ? filteredRows.map(row => {
-        let studentsCount = n(row.count || row.active_count || 1);
-        let gross = n(row.money_in || row.payable || row.active_payable || 0);
-        let discount = n(row.discount || row.active_discount || 0);
-        let paid = n(row.collected || row.paid || row.money_in || 0);
-        let balance = Math.max(0, gross - discount - paid);
-
-        totalStudentsCount += studentsCount;
-        totGross += gross;
-        totDisc += discount;
-        totPaid += paid;
-        totBal += balance;
-
-        return `<tr>
-            <td>${esc(row.label)}</td>
-            <td>${fmt(studentsCount)}</td>
-            <td>${fmt(gross)}</td>
-            <td>${fmt(discount)}</td>
-            <td>${fmt(paid)}</td>
-            <td>${fmt(balance)}</td>
-        </tr>`;
-    }).join('') : `<tr><td colspan="6" class="text-slate-400 italic py-3 text-center">No records found</td></tr>`;
-
-    $(tbodyId).innerHTML = html;
-    $(footerId).innerHTML = `<tr class="font-bold bg-indigo-50/60 text-indigo-950">
-        <td>Total</td>
-        <td>${fmt(totalStudentsCount)}</td>
-        <td>${fmt(totGross)}</td>
-        <td>${fmt(totDisc)}</td>
-        <td>${fmt(totPaid)}</td>
-        <td>${fmt(totBal)}</td>
-    </tr>`;
-}
-
 function renderAccountRows(data) {
     const list = Array.isArray(data) ? data : [];
     const tuitionRows = list.filter(row => /(tuition|tution)\s*fee/i.test(String(row.label || '')));
@@ -291,34 +111,31 @@ function renderAccountRows(data) {
     const receivableRows = [...tuitionRows, ...annualFundRows];
     const otherRows = list.filter(row => !receivableRows.includes(row));
     const rowMarkup = row => `<tr><td>${esc(row.label)}</td><td>${fmt(row.money_in)}</td><td>${fmt(row.money_out)}</td></tr>`;
-    $('accountRows').innerHTML = otherRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-400 italic">No other account activity</td></tr>';
-    
-    // Render dedicated tabs for Tuition Fee & Annual Fund with All Students & breakdown
-    renderDedicatedReport(list, '(tuition|tution)\\s*fee', 'tuitionFeeReportRows', 'tuitionFeeReportFooter');
-    renderDedicatedReport(list, 'annual\\s*fund', 'annualFundReportRows', 'annualFundReportFooter');
+    $('accountRows').innerHTML = otherRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No other account activity for this period</td></tr>';
+    $('tuitionReceivableRows').innerHTML = tuitionRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No tuition-fee account activity for this period</td></tr>';
+    $('annualFundRows').innerHTML = annualFundRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No annual-fund account activity for this period</td></tr>';
 }
-
 function card(label, value, note) {
-    return `<article class="report-kpi bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider">${esc(label)}</p><p class="text-2xl font-black text-indigo-950 mt-2 break-words">${esc(value)}</p><p class="text-xs text-slate-500 font-medium mt-2 pt-2 border-t border-slate-100">${esc(note || '')}</p></article>`;
+    return `<article class="report-kpi bg-white p-4 rounded-2xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500">${esc(label)}</p><p class="text-xl font-extrabold text-indigo-950 mt-1 break-words">${esc(value)}</p><p class="text-[11px] text-slate-400 mt-1">${esc(note || '')}</p></article>`;
 }
-
 function render(data) {
     reportData = data;
     const st = data.students || {}, fees = data.fees || {}, accounts = data.accounts || {}, staff = data.staff || {}, followups = data.followups || {};
-    $('periodLabel').textContent = `Activity: ${data.from} to ${data.to} · Generated ${new Date(data.generated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    $('periodLabel').textContent = `Activity from ${data.from} through ${data.to} · generated ${new Date(data.generated_at).toLocaleString()}`;
     $('kpis').innerHTML = [
-        card('Students enrolled', fmt(st.total), `${fmt(st.active)} active students`),
-        card('Net fees payable', `Rs ${fmt(fees.payable)}`, `${fmt(fees.fee_rows)} fee rows · Disc: ${fmt(fees.discounts)}`),
-        card('Account inflow', `Rs ${fmt(accounts.money_in)}`, `${fmt(accounts.entries)} total entries`),
-        card('Account outflow', `Rs ${fmt(accounts.money_out)}`, 'Recorded campus expenses'),
-        card('Staff count', fmt(staff.total), `${fmt(staff.active)} active personnel`),
-        card('Payroll paid', `Rs ${fmt(staff.payroll_paid)}`, `${fmt(staff.payroll_rows)} payroll entries`),
-        card('Payroll unpaid', `Rs ${fmt(staff.payroll_unpaid)}`, 'Marked pending disbursement'),
-        card('Follow-up calls', fmt(followups.calls), `Promised: Rs ${fmt(followups.promised_amount)}`)
+        card('Students enrolled', fmt(st.total), `${fmt(st.active)} active now`),
+        card('Net fees payable', `Rs ${fmt(fees.payable)}`, `${fmt(fees.fee_rows)} fee rows · discounts Rs ${fmt(fees.discounts)} · collected Rs ${fmt(fees.collected_to_selected_vouchers)} · outstanding est. Rs ${fmt(fees.estimated_outstanding)}`),
+        card('Account inflow', `Rs ${fmt(accounts.money_in)}`, `${fmt(accounts.entries)} account entries`),
+        card('Account outflow', `Rs ${fmt(accounts.money_out)}`, 'All recorded account outflow'),
+        card('Staff', fmt(staff.total), `${fmt(staff.active)} active now`),
+        card('Payroll paid', `Rs ${fmt(staff.payroll_paid)}`, `${fmt(staff.payroll_rows)} payroll rows in period`),
+        card('Payroll unpaid', `Rs ${fmt(staff.payroll_unpaid)}`, 'Saved payroll marked unpaid'),
+        card('Follow-up calls', fmt(followups.calls), `Promises logged at those calls: Rs ${fmt(followups.promised_amount)}`)
     ].join('');
     rows('classRows', st.by_class, [row => row.label, row => fmt(row.count), row => fmt(row.left_count), row => fmt(row.net_count)]);
     $('classTotal').textContent = fmt(st.total);
-    $('classLeftTotal').textContent = fmt(st.left);$('classNetTotal').textContent = fmt(st.active);
+    $('classLeftTotal').textContent = fmt(st.left);
+    $('classNetTotal').textContent = fmt(st.active);
     rows('tuitionRows', st.by_tuition_fee, [row => `Rs ${fmt(row.label)}`, row => fmt(row.count)]);
     $('averageTuitionFee').textContent = `Rs ${fmt(st.average_tuition_fee)}`;
     const feeTypes = Array.isArray(fees.by_type) ? fees.by_type : [];
@@ -345,12 +162,11 @@ function render(data) {
     renderAccountRows(accounts.by_account);
     rows('attendanceRows', staff.attendance, [row => row.label, row => fmt(row.count)]);
     rows('followupRows', followups.by_outcome, [row => row.label, row => fmt(row.count)]);
-    $('booksSummary').textContent = `Books inventory: ${fmt(data.books && data.books.records)} saved records · ${fmt(data.books && data.books.transactions)} dated transactions · ${fmt(data.books && data.books.units)} units`;
-    $('incrementSummary').textContent = `Salary Increments: ${fmt(data.increments && data.increments.records)} records · Rs ${fmt(data.increments && data.increments.amount)} applied in range`;
+    $('booksSummary').textContent = `Books: ${fmt(data.books && data.books.records)} saved records · ${fmt(data.books && data.books.transactions)} dated transactions in period · ${fmt(data.books && data.books.units)} units`;
+    $('incrementSummary').textContent = `Increments (all saved records): ${fmt(data.increments && data.increments.records)} · Rs ${fmt(data.increments && data.increments.amount)} in the selected period`;
 }
-
 function exportReport() {
-    if (!flag('export')) { status('Export permission is required.', false); return; }
+    if (!flag('export')) { deny('Export permission is required to download reports.'); return; }
     if (!reportData) { status('Load a report before exporting.', false); return; }
     const result = reportData, flat = [];
     const add = (section, label, value) => flat.push({period_from:result.from, period_to:result.to, section, label, value});
@@ -369,21 +185,19 @@ function exportReport() {
     };
     const content = [columns.map(quote).join(','), ...flat.map(row => columns.map(key => quote(row[key])).join(','))].join('\r\n');
     const url = URL.createObjectURL(new Blob([content], {type:'text/csv;charset=utf-8'}));
-    const link = document.createElement('a'); link.href = url; link.download = `campus_reports_${result.from}_${result.to}.csv`; link.click();
+    const link = document.createElement('a'); link.href = url; link.download = `school_reports_${result.from}_${result.to}.csv`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
 async function load() {
-    updateHiddenDatesFromMonthPicker();
     const requestId = ++reportRequestId;
     reportData = null;
-    const from = $('fromDate').value, to =$('toDate').value;
+    const from = $('fromDate').value, to = $('toDate').value;
     if (!from || !to || from > to) {
-        $('applyReport').disabled =$('refreshReport').disabled = false;
+        $('applyReport').disabled = $('refreshReport').disabled = false;
         status('Choose a valid date range; From must be on or before To.', false);
         return;
     }
-    $('applyReport').disabled =$('refreshReport').disabled = true; status('', true);
+    $('applyReport').disabled = $('refreshReport').disabled = true; status('', true);
     try {
         const response = await fetch(`${SB_URL}/rest/v1/rpc/app_business_reports`, {
             method: 'POST', headers: {'Content-Type':'application/json'},
@@ -391,30 +205,41 @@ async function load() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || data.details || `Request failed (${response.status})`);
-        if (!data || !data.students || !data.fees) throw new Error('Unexpected response structure from report service.');
+        if (!data || !data.students || !data.fees) throw new Error('The report service returned an unexpected response.');
         if (requestId !== reportRequestId) return;
         render(data);
     } catch (error) {
         if (requestId !== reportRequestId) return;
         status(`Could not load business reports: ${error.message}`, false);
-        console.error(error);
+        console.error('Could not load business reports:', error);
     } finally {
-        if (requestId === reportRequestId) $('applyReport').disabled =$('refreshReport').disabled = false;
+        if (requestId === reportRequestId) $('applyReport').disabled = $('refreshReport').disabled = false;
     }
 }
-
-$('applyReport').onclick = load; 
-$('refreshReport').onclick = load; 
-$('printReport').onclick = () => window.print();$('exportReport').onclick = exportReport;
-$('monthPicker').onchange = load;
-
+function applyReportFiltersSoon() {
+    clearTimeout(reportFilterTimer);
+    reportFilterTimer = setTimeout(load, 250);
+}
+$('preset').onchange = () => {
+    if ($('preset').value !== 'custom') setPreset($('preset').value);
+    applyReportFiltersSoon();
+};
+['fromDate','toDate'].forEach(id => $(id).onchange = () => { $('preset').value = 'custom'; applyReportFiltersSoon(); });
+$('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print(); $('exportReport').onclick = exportReport;
+const reportCards = () => Array.from(document.querySelectorAll('.report-card'));
+const setReportCardExpanded = (button, expanded) => {
+    button.setAttribute('aria-expanded', String(expanded));
+    const content = document.getElementById(button.getAttribute('aria-controls'));
+    if (content) content.hidden = !expanded;
+};
+document.querySelectorAll('.report-card-toggle').forEach(button => {
+    button.onclick = () => setReportCardExpanded(button, button.getAttribute('aria-expanded') !== 'true');
+});
+$('expandAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), true));
+$('collapseAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), false));
 if (!flag('export')) $('exportReport').disabled = true;
-
 window.addEventListener('DOMContentLoaded', () => {
-    const now = new Date();
-    const yr = now.getUTCFullYear();
-    const mo = String(now.getUTCMonth() + 1).padStart(2, '0');
-    $('monthPicker').value = `${yr}-${mo}`;
+    setPreset('month');
     load();
 });
 </script>

@@ -62,163 +62,6 @@
             if (!response.ok) throw new Error(`${table} preload failed with HTTP ${response.status}`);
         })).catch(error => console.warn(`Navigation data prefetch for ${file} failed:`, error));
     }
-    function enableKeepAliveNavigation() {
-        const appFiles = new Set(links.map(link => link[0]));
-        const routeFromUrl = value => {
-            let url;
-            try { url = new URL(value, location.href); } catch (error) { return null; }
-            if (url.origin !== location.origin) return null;
-            const file = (url.pathname.split('/').pop() || 'index.html').toLowerCase();
-            return appFiles.has(file) ? file : null;
-        };
-        function setActiveNavigation(file, root = document) {
-            root.querySelectorAll('#appNav nav a[href]').forEach(link => {
-                const active = routeFromUrl(link.href) === file;
-                link.classList.toggle('bg-indigo-600', active);
-                link.classList.toggle('text-white', active);
-                link.classList.toggle('font-semibold', active);
-                link.classList.toggle('text-indigo-200', !active);
-            });
-            const reportGroup = root.querySelector('#appNav .app-report-group');
-            if (reportGroup) {
-                const active = ['reports.html', 'audit.html'].includes(file);
-                reportGroup.open = active;
-                reportGroup.classList.toggle('bg-white/5', active);
-            }
-        }
-
-        if (window.parent !== window) {
-            const style = document.createElement('style');
-            style.textContent = '#appNav,#appTop,#appBackdrop,#appDayBtn,#appDayModal,#appPwModal{display:none!important}body{min-height:100vh}';
-            document.head.appendChild(style);
-            document.addEventListener('click', event => {
-                const link = event.target.closest && event.target.closest('a[href]');
-                if (!link) return;
-                const file = routeFromUrl(link.href);
-                if (!file) return;
-                event.preventDefault();
-                event.stopImmediatePropagation();
-                window.parent.postMessage({ type: 'shibra:navigate', href: link.href }, location.protocol === 'file:' ? '*' : location.origin);
-            }, true);
-            return;
-        }
-
-        const pageMain = document.querySelector('main');
-        if (!pageMain || window.__shibraKeepAliveNavigation) return;
-        window.__shibraKeepAliveNavigation = true;
-
-        const initialFile = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
-        const instances = new Map([[initialFile, { main: pageMain }]]);
-        let activeFile = initialFile, host = null, loading = null;
-
-        function closeMobileMenu() {
-            const aside = document.getElementById('appNav'), backdrop = document.getElementById('appBackdrop');
-            const button = document.getElementById('appMenuBtn');
-            if (aside) aside.classList.add('-translate-x-full');
-            if (backdrop) backdrop.classList.add('hidden');
-            if (button) {
-                button.setAttribute('aria-expanded', 'false');
-                button.setAttribute('aria-label', 'Open navigation menu');
-            }
-            document.body.classList.remove('overflow-hidden');
-        }
-        function getHost() {
-            if (host) return host;
-            host = document.createElement('div');
-            host.id = 'appPageHost';
-            host.style.cssText = 'display:none;flex:1;min-width:0;height:100dvh;position:relative;background:#f8fafc';
-            pageMain.insertAdjacentElement('afterend', host);
-            const responsiveStyle = document.createElement('style');
-            responsiveStyle.textContent = '@media(max-width:767px){#appPageHost{height:calc(100dvh - 56px)}}';
-            document.head.appendChild(responsiveStyle);
-            loading = document.createElement('div');
-            loading.className = 'absolute inset-0 z-10 flex items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500';
-            loading.innerHTML = '<span class="mr-2 inline-block h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></span>Opening page…';
-            host.appendChild(loading);
-            return host;
-        }
-        function showFrame(file, frame, isReady) {
-            pageMain.hidden = true;
-            const pageHost = getHost();
-            pageHost.style.display = 'block';
-            pageHost.querySelectorAll('iframe[data-app-page]').forEach(item => { item.hidden = item !== frame; });
-            if (loading) loading.hidden = isReady;
-            activeFile = file;
-            setActiveNavigation(file);
-            if (location.origin !== 'null' && frame.contentDocument) setActiveNavigation(file, frame.contentDocument);
-        }
-        function navigate(file, href, options = {}) {
-            if (!appFiles.has(file)) return false;
-            const pageKey = PAGE_FILE[file];
-            if (typeof can === 'function' && typeof ME !== 'undefined' && ME && !can(pageKey, 'v')) return false;
-            closeMobileMenu();
-            if (file === activeFile && options.push !== false) return true;
-
-            if (file === initialFile) {
-                pageMain.hidden = false;
-                if (host) host.style.display = 'none';
-                activeFile = file;
-                setActiveNavigation(file);
-            } else {
-                let instance = instances.get(file);
-                if (!instance) {
-                    const pageHost = getHost();
-                    const frame = document.createElement('iframe');
-                    frame.title = links.find(link => link[0] === file)?.[2] || file;
-                    frame.dataset.appPage = file;
-                    frame.style.cssText = 'display:block;width:100%;height:100%;border:0;background:#f8fafc';
-                    frame.addEventListener('load', () => {
-                        instance.ready = true;
-                        if (location.origin !== 'null') {
-                            const framePath = frame.contentWindow.location.pathname.split('/').pop().toLowerCase();
-                            if (framePath === 'login.html') {
-                                location.replace('login.html');
-                                return;
-                            }
-                            if (frame.contentDocument) setActiveNavigation(file, frame.contentDocument);
-                        }
-                        if (activeFile === file && loading) loading.hidden = true;
-                    });
-                    instance = { frame, ready: false };
-                    instances.set(file, instance);
-                    pageHost.appendChild(frame);
-                    frame.src = href || file;
-                }
-                showFrame(file, instance.frame, instance.ready);
-            }
-            if (options.push !== false) {
-                try { history.pushState({ shibraAppPage: file }, '', href || file); }
-                catch (error) {
-                    if (location.protocol !== 'file:') throw error;
-                    console.warn('Browser history is unavailable for local file navigation:', error);
-                }
-            }
-            return true;
-        }
-
-        document.addEventListener('click', event => {
-            const link = event.target.closest && event.target.closest('a[href]');
-            if (!link || link.target === '_blank' || event.defaultPrevented) return;
-            const file = routeFromUrl(link.href);
-            if (!file) return;
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            if (file !== activeFile || location.pathname.split('/').pop().toLowerCase() !== file)
-                navigate(file, link.href);
-            else closeMobileMenu();
-        }, true);
-        window.addEventListener('message', event => {
-            const sameOrigin = event.origin === location.origin || (location.protocol === 'file:' && event.origin === 'null');
-            if (!sameOrigin || !event.data || event.data.type !== 'shibra:navigate') return;
-            const sourceAllowed = [...instances.values()].some(instance => instance.frame && instance.frame.contentWindow === event.source);
-            const file = routeFromUrl(event.data.href);
-            if (sourceAllowed && file) navigate(file, event.data.href);
-        });
-        window.addEventListener('popstate', () => {
-            const file = routeFromUrl(location.href);
-            if (file) navigate(file, location.href, { push: false });
-        });
-    }
     function build() {
         const aside = document.getElementById('appNav');
         if (!aside) return;
@@ -271,6 +114,15 @@
                     prefetchTimer = null;
                     link.dataset.prefetched = 'true';
                     prefetchPageData(link.dataset.prefetchPage);
+                    const target = new URL(link.href, location.href);
+                    const alreadyPrefetched = [...document.querySelectorAll('link[rel="prefetch"]')].some(hint => hint.href === target.href);
+                    if (target.origin === location.origin && !alreadyPrefetched) {
+                        const hint = document.createElement('link');
+                        hint.rel = 'prefetch';
+                        hint.href = target.href;
+                        hint.as = 'document';
+                        document.head.appendChild(hint);
+                    }
                 }, 120);
             };
             link.addEventListener('pointerenter', event => {
@@ -282,7 +134,6 @@
             link.addEventListener('focus', warm);
             link.addEventListener('click', () => setMenuOpen(false));
         });
-        enableKeepAliveNavigation();
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && menuButton.getAttribute('aria-expanded') === 'true') {
                 setMenuOpen(false);
