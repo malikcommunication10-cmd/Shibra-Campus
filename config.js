@@ -4,6 +4,26 @@
 const SB_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
 const SB_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
 function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
+let _sbXlsxLoading = null;
+function sbLoadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (!_sbXlsxLoading) {
+        _sbXlsxLoading = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            script.async = true;
+            script.onload = () => window.XLSX
+                ? resolve(window.XLSX)
+                : reject(new Error('The Excel reader loaded without its required API.'));
+            script.onerror = () => reject(new Error('Excel support could not load. Check your internet connection and try again.'));
+            document.head.appendChild(script);
+        }).catch(error => {
+            _sbXlsxLoading = null;
+            throw error;
+        });
+    }
+    return _sbXlsxLoading;
+}
 
 // ============================================================================
 //  LOGIN + USERS & ROLES.  Every page needs a session; every data request carries the user's token.

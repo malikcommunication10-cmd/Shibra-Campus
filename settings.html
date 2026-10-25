@@ -7,9 +7,9 @@
     <link rel="preconnect" href="https://tsnfwebctvjnmmweepiu.supabase.co" crossorigin>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261022-2"></script>
+    <script src="config.js?v=20261025-3"></script>
     <script>window.addEventListener("pagehide", () => { try { sessionStorage.removeItem("sb_settings_v1"); } catch (e) {} });</script>
-    <script src="nav.js?v=20261025-4"></script>
+    <script src="nav.js?v=20261025-5"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -218,16 +218,11 @@ const JSON_H = { "Content-Type": "application/json" };
 const enc = encodeURIComponent;
 
 async function fetchAll(table, select = '*') {
-    let c = getSupabaseConfig(), out = [], offset = 0, step = 1000;
-    while(true) {
-        let r = await fetch(`${c.url}/rest/v1/${table}?select=${select}&limit=${step}&offset=${offset}`, { headers: sbHeaders() });
-        if(!r.ok) throw new Error(table + ': ' + r.status);
-        let data = await r.json();
-        out.push(...data);
-        if(data.length < step) break;
-        offset += step;
-    }
-    return out;
+    const response = await sbFetchAll(table, `select=${select}`);
+    if(!response.ok) throw new Error(`${table}: ${response.status} ${await response.text()}`);
+    const data = await response.json();
+    if(!Array.isArray(data)) throw new Error(`${table}: unexpected response`);
+    return data;
 }
 
 // ====================================================================================

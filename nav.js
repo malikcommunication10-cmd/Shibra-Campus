@@ -49,6 +49,23 @@
             ['staff_security_ledger', 'select=*'],
             ['staff_salary_increments', 'select=*'],
             ['settings', 'select=setting_key,setting_value']
+        ],
+        'increments.html': [
+            ['increments', 'select=*'],
+            ['students', 'select=*'],
+            ['settings', 'select=setting_key,setting_value']
+        ],
+        'settings.html': [
+            ['settings', 'select=*'],
+            ['students', 'select=class'],
+            ['staff', 'select=designation'],
+            ['accounts', 'select=from_account,to_account,voucher_id,description'],
+            ['books', 'select=party_name,type']
+        ],
+        'users.html': [
+            ['app_users', 'select=*&order=created_at.asc'],
+            ['app_roles', 'select=*&order=created_at.asc'],
+            ['day_close', 'select=*&order=closed_date.desc']
         ]
     };
     function prefetchPageData(file) {

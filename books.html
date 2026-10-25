@@ -6,9 +6,8 @@
     <title>Concept School Shibra Campus - Book Store & Inventory</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261022-2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="nav.js?v=20261025-4"></script>
+    <script src="config.js?v=20261025-3"></script>
+    <script src="nav.js?v=20261025-5"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -1894,8 +1893,8 @@ function renderImpPreview() {
 }
 async function readImp() {
     const f = $('impFile').files[0]; if(!f) { toast('Choose a file first.', false); return; }
-    if(typeof XLSX === 'undefined') { toast('Excel reader could not load. Check your internet connection.', false); return; }
     try {
+        await sbLoadXlsx();
         const wb = /\.csv$/i.test(f.name) ? XLSX.read(await f.text(), { type: 'string', raw: true }) : XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
         const sheet = wb.Sheets[wb.SheetNames[0]];
         if(!sheet) { toast('The selected file has no worksheet to import.', false); return; }
@@ -1925,7 +1924,7 @@ async function readImp() {
             };
         }).filter(o => o.title || o.qty || o.buy);
         renderImpPreview();
-    } catch (e) { console.error(e); toast('Could not read this file.', false); }
+    } catch (e) { console.error(e); toast(e.message || 'Could not read this file.', false); }
 }
 function saveImp() {
     validateImpRows();

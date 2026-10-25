@@ -6,9 +6,8 @@
 <title>Fee Vouchers - Concept School Shibra Campus</title>
 <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261022-2"></script>
-    <script src="nav.js?v=20261025-4"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="config.js?v=20261025-3"></script>
+    <script src="nav.js?v=20261025-5"></script>
 <style>
 body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 .inp{width:100%;border:1px solid #cbd5e1;border-radius:.6rem;padding:.6rem .75rem;font-size:.85rem;background:#fff;outline:none}
@@ -886,13 +885,13 @@ function toISO(v,fix){
 }
 async function readImport(){
   const f=$('importFile').files[0];if(!f){showAlert("Choose an Excel or CSV file first.");return}
-  if(typeof XLSX==='undefined'){showAlert("Excel reader could not load. Check your internet connection.");return}
   showLoading("Reading file...");
   try{
+    await sbLoadXlsx();
     const wb=/\.csv$/i.test(f.name)?XLSX.read(await f.text(),{type:'string',raw:true}):XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
     const raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
     hideLoading();buildImportPlan(raw);
-  }catch(e){hideLoading();console.error(e);showAlert("Could not read this file.")}
+  }catch(e){hideLoading();console.error(e);showAlert(e.message || "Could not read this file.")}
 }
 function buildImportPlan(raw){
   const fix=$('importFixYear').checked;

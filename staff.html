@@ -6,9 +6,8 @@
     <title>Concept School Shibra Campus - Staff & Payroll</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261022-2"></script>
-    <script src="nav.js?v=20261025-4"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="config.js?v=20261025-3"></script>
+    <script src="nav.js?v=20261025-5"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -995,7 +994,10 @@ async function initStaff() {
         renderAll();
         if(payrollRepairErrors.length)
             toast(`Could not correct ${payrollRepairErrors.length} unpaid payroll bonus(es): ${payrollRepairErrors.join(' · ')}`, false);
-        if(attendanceOk) await loadAttendance(attendanceDate);
+        if(attendanceOk) loadAttendance(attendanceDate).catch(error => {
+            console.error('Could not load attendance:', error);
+            toast(error.message || 'Could not load attendance.', false);
+        });
     } catch (e) {
         console.error(e);
         toast(e.message || 'Could not load data. Check your internet connection or API settings.', false);
@@ -1340,9 +1342,9 @@ async function previewAttendanceReport() {
     if(attendanceDirty) { toast('Save or discard unsaved daily attendance changes before importing a report.', false); return; }
     const file = $('attendanceReportFile').files[0];
     if(!file) { toast('Choose the fingerprint attendance report first.', false); return; }
-    if(typeof XLSX === 'undefined') { toast('Excel reader did not load. Check your internet connection and reload the page.', false); return; }
     showLoading('Reading fingerprint attendance report...');
     try {
+        await sbLoadXlsx();
         const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
         const parsed = parseAttendanceReport(workbook);
         const response = await sbFetchAll('staff_attendance',
@@ -1484,11 +1486,12 @@ async function confirmAttendanceReportImport() {
 }
 async function loadAttendance(date) {
     if(!attendanceOk || !date) { attendanceRows = []; attendanceByStaff = {}; attendanceDrafts = {}; renderAttendance(); return; }
-    let c = getSupabaseConfig();
-    let res = await fetch(`${c.url}/rest/v1/staff_attendance?select=id,staff_id,staff_name,attendance_date,status,note,absence_exempt,late_exempt&attendance_date=eq.${encodeURIComponent(date)}`, { headers: sbHeaders() });
-    if(!res.ok) throw new Error('Could not load attendance: ' + await res.text());
-    let rows = await res.json();
-    attendanceRows = Array.isArray(rows) ? rows : [];
+    const response = await sbFetchAll('staff_attendance',
+        `select=id,staff_id,staff_name,attendance_date,status,note,absence_exempt,late_exempt&attendance_date=eq.${encodeURIComponent(date)}`);
+    if(!response.ok) throw new Error('Could not load attendance: ' + await response.text());
+    const rows = await response.json();
+    if(!Array.isArray(rows)) throw new Error('Could not load attendance: unexpected response.');
+    attendanceRows = rows;
     attendanceByStaff = {};
     attendanceDrafts = {};
     attendanceRows.forEach(row => {
