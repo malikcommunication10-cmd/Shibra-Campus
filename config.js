@@ -316,7 +316,7 @@ function sbQueueDataPreload() {
     const canUseSettings = ['settings', 'books', 'fees', 'accounts', 'staff', 'dashboard'].some(page => can(page, 'v'));
     const canUseStudents = ['books', 'fees', 'dashboard'].some(page => can(page, 'v'));
     if (canUseSettings) jobs.push(['settings', 'select=setting_key,setting_value']);
-    if (canUseStudents) jobs.push(['students', 'select=admis_no,student_name,class,status']);
+    if (canUseStudents && currentPageKey() !== 'dashboard') jobs.push(['students', 'select=admis_no,student_name,class,status']);
     if (!jobs.length) return;
 
     const run = () => {

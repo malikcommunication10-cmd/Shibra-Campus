@@ -6,8 +6,9 @@
     <title>Concept School Shibra Campus - Students Directory</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261022-2"></script>
-    <script src="nav.js?v=20261025-4"></script>
+    <script src="config.js?v=20261026-1"></script>
+    <script src="db.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261026-1"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans" onload="initPage()">
     
@@ -131,7 +132,7 @@
             tbody.innerHTML = `<tr><td colspan="11" class="p-4 text-center text-slate-400">Loading records...</td></tr>`;
 
             try {
-                let response = await sbFetchAll('students', 'select=*');
+                let response = await ERP.db.request('students', 'select=*');
                 let data = await response.json();
 
                 if(Array.isArray(data) && data.length > 0) {
@@ -262,7 +263,7 @@
         }
         async function createStudentVouchers(p) {
             const plan = vouchPlan(); if(!plan.length) return '';
-            const exResponse = await sbFetchAll('fees', 'select=voucher_id,admis_no,period,type');
+            const exResponse = await ERP.db.request('fees', 'select=voucher_id,admis_no,period,type');
             if(!exResponse.ok) throw new Error('Could not check existing fee vouchers. No new vouchers were created.');
             const ex = await exResponse.json();
             if(!Array.isArray(ex)) throw new Error('Could not verify existing fee vouchers. No new vouchers were created.');
@@ -326,7 +327,7 @@
             resetForm(); openStudentModal(); setNewMode(true);
             ['sr_no', 'admis_no'].forEach(id => { const el = document.getElementById(id); delete el.dataset.touched; el.oninput = () => { el.dataset.touched = '1'; }; });
             fillNextNumbers(allStudentsCache);                       // instantly from the loaded list
-            try { const r = await sbFetchAll('students', 'select=sr_no,admis_no'); const rows = r.ok ? await r.json() : null; if(Array.isArray(rows) && rows.length) fillNextNumbers(rows); } catch (e) { /* keep the cached values */ }
+            try { const r = await ERP.db.request('students', 'select=sr_no,admis_no'); const rows = r.ok ? await r.json() : null; if(Array.isArray(rows) && rows.length) fillNextNumbers(rows); } catch (e) { /* keep the cached values */ }
             setTimeout(() => document.getElementById('student_name').focus(), 60);
         }
         function cancelStudentForm() { resetForm(); closeStudentModal(); }

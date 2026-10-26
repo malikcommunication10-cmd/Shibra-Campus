@@ -6,8 +6,9 @@
     <title>Concept School Shibra Campus - Book Store & Inventory</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261025-3"></script>
-    <script src="nav.js?v=20261025-5"></script>
+    <script src="config.js?v=20261026-1"></script>
+    <script src="db.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261026-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -494,7 +495,7 @@ async function initBooks() {
         let [, [res, probe, probe2, invoiceProbe]] = await Promise.all([
             Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]),
             Promise.all([
-                sbFetchAll('books', 'select=*'),
+                ERP.db.request('books', 'select=*'),
                 fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() }),
                 fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() }),
                 fetch(`${c.url}/rest/v1/books?select=invoice_no&limit=1`, { headers: sbHeaders() })
@@ -1680,7 +1681,7 @@ async function openStudentSale() {
     if(!colsOk()) return;
     if(!hasExt || !hasItemCols) { toast('Run the SQL shown in the yellow box first, then refresh.', false); return; }
     showLoading('Loading students...');
-    if(!ssStudents) { try { const a = await (await sbFetchAll('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; } }
+    if(!ssStudents) { try { const a = await (await ERP.db.request('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; } }
     hideLoading();
     ssStudent = null; ssLines = [];
     $('ssStudent').value = ''; $('ssDate').value = todayStr(); $('ssDiscType').value = 'percentage'; $('ssDiscVal').value = 0; $('ssNotes').value = ''; $('ssWallet').value = 'cash'; $('ssPost').checked = true; $('ssPaidNow').value = '';
@@ -2007,7 +2008,7 @@ function saveImp() {
 let masterItems = [];
 async function loadMasterItems() {
     try {
-        const r = await sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Item');
+        const r = await ERP.db.request('settings', 'select=*&setting_key=eq.Book%20Item');
         const a = r.ok ? await r.json() : [];
         masterItems = (Array.isArray(a) ? a : []).map(x => { try { const o = JSON.parse(x.setting_value); return o && o.t ? { t: String(o.t).trim(), c: o.c || '', k: o.k || '', p: parseFloat(o.p) || 0, raw: x.setting_value } : null; } catch (e) { return null; } }).filter(Boolean);
     } catch (e) { masterItems = []; }
@@ -2073,12 +2074,12 @@ function deleteMasterItem(i) {
 let accRows = [], bookPromises = {}, bookDues = [], bookDuesMap = {};
 let statementViewMode = 'date';
 async function loadDuesData() {
-    try { const r = await sbFetchAll('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date'); const a = r.ok ? await r.json() : []; accRows = Array.isArray(a) ? a : []; } catch (e) { accRows = []; }
-    try { const r = await sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Promise'); const a = r.ok ? await r.json() : []; bookPromises = parsePromises(Array.isArray(a) ? a : []); } catch (e) { bookPromises = {}; }
+    try { const r = await ERP.db.request('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date'); const a = r.ok ? await r.json() : []; accRows = Array.isArray(a) ? a : []; } catch (e) { accRows = []; }
+    try { const r = await ERP.db.request('settings', 'select=*&setting_key=eq.Book%20Promise'); const a = r.ok ? await r.json() : []; bookPromises = parsePromises(Array.isArray(a) ? a : []); } catch (e) { bookPromises = {}; }
 }
 async function ensureStudents() {
     if(ssStudents) return;
-    try { const a = await (await sbFetchAll('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; }
+    try { const a = await (await ERP.db.request('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; }
 }
 function recomputeDues() {
     bookDues = computeBookDues(txs, accRows);

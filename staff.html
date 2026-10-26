@@ -6,8 +6,9 @@
     <title>Concept School Shibra Campus - Staff & Payroll</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261025-3"></script>
-    <script src="nav.js?v=20261025-5"></script>
+    <script src="config.js?v=20261026-1"></script>
+    <script src="db.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261026-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -954,13 +955,13 @@ async function initStaff() {
     try {
         let [, sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityRes, incrementsRes] = await Promise.all([
             settingsPromise,
-            sbFetchAll('staff', 'select=*'),
-            sbFetchAll('payroll', 'select=*'),
+            ERP.db.request('staff', 'select=*'),
+            ERP.db.request('payroll', 'select=*'),
             fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days,security_deduction&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`, { headers: sbHeaders() }),
-            sbFetchAll('staff_security_ledger', 'select=*'),
-            sbFetchAll('staff_salary_increments', 'select=*')
+            ERP.db.request('staff_security_ledger', 'select=*'),
+            ERP.db.request('staff_salary_increments', 'select=*')
         ]);
         let sRows = await sRes.json();
         if(!Array.isArray(sRows)) throw new Error('staff failed to load');
@@ -1170,7 +1171,7 @@ async function markMonthAttendancePresent() {
     showLoading(`Loading ${monthLabel(month)} attendance...`);
     let toInsert;
     try {
-        const response = await sbFetchAll('staff_attendance',
+        const response = await ERP.db.request('staff_attendance',
             `select=staff_id,attendance_date&attendance_date=gte.${monthStart(month)}&attendance_date=lte.${monthEnd(month)}`);
         if(!response.ok) throw new Error('Could not read monthly attendance: ' + await response.text());
         const rows = await response.json();
@@ -1347,7 +1348,7 @@ async function previewAttendanceReport() {
         await sbLoadXlsx();
         const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
         const parsed = parseAttendanceReport(workbook);
-        const response = await sbFetchAll('staff_attendance',
+        const response = await ERP.db.request('staff_attendance',
             `select=staff_id,attendance_date&attendance_date=gte.${monthStart(parsed.month)}&attendance_date=lte.${monthEnd(parsed.month)}`);
         if(!response.ok) throw new Error('Could not check existing attendance: ' + await response.text());
         const existingRows = await response.json();
@@ -1486,7 +1487,7 @@ async function confirmAttendanceReportImport() {
 }
 async function loadAttendance(date) {
     if(!attendanceOk || !date) { attendanceRows = []; attendanceByStaff = {}; attendanceDrafts = {}; renderAttendance(); return; }
-    const response = await sbFetchAll('staff_attendance',
+    const response = await ERP.db.request('staff_attendance',
         `select=id,staff_id,staff_name,attendance_date,status,note,absence_exempt,late_exempt&attendance_date=eq.${encodeURIComponent(date)}`);
     if(!response.ok) throw new Error('Could not load attendance: ' + await response.text());
     const rows = await response.json();
@@ -1671,7 +1672,7 @@ async function openSalaryIncrement() {
     }
     showLoading('Loading increment history...');
     try {
-        const latest = await sbFetchAll('staff_salary_increments', 'select=*');
+        const latest = await ERP.db.request('staff_salary_increments', 'select=*');
         if(!latest.ok) throw new Error('Could not load salary increment history: ' + await latest.text());
         const rows = await latest.json();
         if(!Array.isArray(rows)) throw new Error('Supabase returned invalid salary increment history.');
@@ -1926,14 +1927,14 @@ async function generatePayroll() {
     showLoading('Loading monthly attendance...');
     try {
         if(incrementsOk) {
-            const incrementResponse = await sbFetchAll('staff_salary_increments',
+            const incrementResponse = await ERP.db.request('staff_salary_increments',
                 `select=staff_id,effective_month,new_salary&effective_month=lte.${encodeURIComponent(month)}`);
             if(!incrementResponse.ok) throw new Error('Could not refresh salary increments before payroll generation: ' + await incrementResponse.text());
             const rows = await incrementResponse.json();
             if(!Array.isArray(rows)) throw new Error('Supabase returned invalid salary increments for payroll generation.');
             salaryIncrements = rows;
         }
-        const response = await sbFetchAll('staff_attendance',
+        const response = await ERP.db.request('staff_attendance',
             `select=staff_id,staff_name,attendance_date,status,absence_exempt,late_exempt,note&attendance_date=gte.${monthStart(month)}&attendance_date=lte.${monthEnd(month)}`);
         if(!response.ok) throw new Error('Could not read monthly attendance: ' + await response.text());
         const rows = await response.json();
@@ -2286,7 +2287,7 @@ async function confirmPay() {
             const refund = refunds.get(p.id) || 0;
             if(refund > 0) {
                 const c = getSupabaseConfig();
-                const response = await sbFetchAll('staff_security_ledger', `select=entry_type,amount&staff_id=eq.${encodeURIComponent(p.staffId)}`);
+                const response = await ERP.db.request('staff_security_ledger', `select=entry_type,amount&staff_id=eq.${encodeURIComponent(p.staffId)}`);
                 if(!response.ok) throw new Error('Could not verify the current security balance: ' + await response.text());
                 const entries = await response.json();
                 const current = Math.round(entries.reduce((sum, entry) => sum + (entry.entry_type === 'refund' ? -1 : 1) * (Number(entry.amount) || 0), 0) * 100) / 100;

@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Dashboard</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="config.js?v=20261022-2"></script>
-    <script src="nav.js?v=20261025-4"></script>
+    <script src="config.js?v=20261026-1"></script>
+    <script src="db.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261026-1"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans" onload="initDashboard()">
 <div class="min-h-screen flex flex-col md:flex-row">
@@ -64,11 +65,11 @@ async function initDashboard(backgroundRefresh = false) {
     if (!backgroundRefresh) $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 p-6">Loading...</div>';
     try {
         const [sR, fR, aR, bR, pR, settingLists] = await Promise.all([
-            sbFetchAll('students', 'select=admis_no,student_name,status,class'),
-            sbFetchAll('fees', 'select=admis_no,student_name,class,voucher_id,period,type,payable,discount'),
-            sbFetchAll('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date,remarks'),
-            sbFetchAll('books', 'select=*'),
-            sbFetchAll('settings', 'select=*&setting_key=eq.Book%20Promise'),
+            ERP.db.request('students', 'select=admis_no,student_name,status,class'),
+            ERP.db.request('fees', 'select=admis_no,student_name,class,voucher_id,period,type,payable,discount'),
+            ERP.db.request('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date,remarks'),
+            ERP.db.request('books', 'select=*'),
+            ERP.db.request('settings', 'select=*&setting_key=eq.Book%20Promise'),
             loadSettingLists()
         ]);
         if (loadToken !== dashboardLoadToken) return;

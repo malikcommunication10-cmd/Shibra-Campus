@@ -23,10 +23,7 @@
             ['settings', 'select=setting_key,setting_value']
         ],
         'fees.html': [
-            ['students', 'select=*'],
-            ['increments', 'select=admis_no,effective_period,old_fee,new_fee,fee_type,annual_fund,remarks'],
-            ['accounts', 'select=voucher_id,amount_in,date,description,remarks'],
-            ['fees', 'select=*'],
+            ...ERP.db.feeVoucherQueries,
             ['settings', 'select=setting_key,setting_value']
         ],
         'books.html': [
@@ -75,7 +72,7 @@
         if (connection && (connection.saveData || ['slow-2g', '2g'].includes(connection.effectiveType))) return;
         const queries = pageData[file] || [];
         Promise.all(queries.map(async ([table, query]) => {
-            const response = await sbFetchAll(table, query);
+            const response = await ERP.db.fetchResponse(table, query);
             if (!response.ok) throw new Error(`${table} preload failed with HTTP ${response.status}`);
         })).catch(error => console.warn(`Navigation data prefetch for ${file} failed:`, error));
     }
@@ -140,7 +137,7 @@
                         hint.as = 'document';
                         document.head.appendChild(hint);
                     }
-                }, 120);
+                }, 350);
             };
             link.addEventListener('pointerenter', event => {
                 if (event.pointerType !== 'touch') warm();

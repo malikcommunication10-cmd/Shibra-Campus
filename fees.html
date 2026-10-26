@@ -6,8 +6,9 @@
 <title>Fee Vouchers - Concept School Shibra Campus</title>
 <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261025-3"></script>
-    <script src="nav.js?v=20261025-5"></script>
+    <script src="config.js?v=20261026-1"></script>
+    <script src="db.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261026-1"></script>
 <style>
 body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 .inp{width:100%;border:1px solid #cbd5e1;border-radius:.6rem;padding:.6rem .75rem;font-size:.85rem;background:#fff;outline:none}
@@ -326,20 +327,13 @@ function makeVidGenerator(used){
 }
 
 /* ---------- Load ---------- */
-async function fetchAll(t, columns = '*') { const r = await sbFetchAll(t, `select=${columns}`); return await r.json(); }
 async function initFeePage(){
   showLoading("Loading data...");
   const settingsPromise = loadSettingLists();
   $('payDate').value=today();$('bulkPayDate').value=today();$('selectAllCheckbox').checked=false;
   let loaded;
   try {
-    loaded = await Promise.all([
-      settingsPromise,
-      fetchAll('students'),
-      fetchAll('increments', 'admis_no,effective_period,old_fee,new_fee,fee_type,annual_fund,remarks'),
-      fetchAll('accounts', 'voucher_id,amount_in,date,description,remarks'),
-      fetchAll('fees')
-    ]);
+    loaded = await Promise.all([settingsPromise, ERP.db.feeVoucherData()]);
     setFeeSchoolYear(await getSchoolYear());
     payChoices = await fillPaySelects(['payToAccount','bulkAccount']);
   } catch (e) {
@@ -354,7 +348,8 @@ async function initFeePage(){
     $('fromMonth').innerHTML=mo;$('toMonth').innerHTML=mo;resetRange(true);
   }
   try{
-    const [,students,increments,accounts,fees]=loaded;
+    const [,data]=loaded;
+    const {students,increments,accounts,fees}=data;
     if(Array.isArray(students)){allStudentsCache=students;populateClassDropdown(students)}
     incrementsCacheMap={};
     if(Array.isArray(increments))increments.forEach(i=>{const a=(i.admis_no||'').trim().toLowerCase();if(a)incrementsCacheMap[a]=i});

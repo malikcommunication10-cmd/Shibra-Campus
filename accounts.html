@@ -6,8 +6,9 @@
     <title>Concept School Shibra Campus - Accounts & Daybook</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261025-4"></script>
-    <script src="nav.js?v=20261025-5"></script>
+    <script src="config.js?v=20261026-1"></script>
+    <script src="db.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261026-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -602,9 +603,9 @@ async function initAccounts() {
         let [L, [aRes, fRes, securityRes]] = await Promise.all([
             settingsPromise,
             Promise.all([
-                sbFetchAll('accounts', 'select=*&order=date.asc,voucher_id.asc'),
-                sbFetchAll('fees', 'select=voucher_id,admis_no,student_name,class,period,type'),
-                sbFetchAll('staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes')
+                ERP.db.request('accounts', 'select=*&order=date.asc,voucher_id.asc'),
+                ERP.db.request('fees', 'select=voucher_id,admis_no,student_name,class,period,type'),
+                ERP.db.request('staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes')
             ])
         ]);
         INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; BUSINESS_PARTNERS = L['Business Partner'] || []; setupWallets(L['Payment Account']);
@@ -678,8 +679,8 @@ async function loadFixedAssets() {
     $('assetSetupNotice').classList.add('hidden');
     try {
         const [assetResponse, eventResponse] = await Promise.all([
-            sbFetchAll('fixed_assets', 'select=*&order=asset_code.asc'),
-            sbFetchAll('fixed_asset_transactions', 'select=*&order=event_date.desc,id.desc')
+            ERP.db.request('fixed_assets', 'select=*&order=asset_code.asc'),
+            ERP.db.request('fixed_asset_transactions', 'select=*&order=event_date.desc,id.desc')
         ]);
         if(!assetResponse.ok) throw new Error(await assetResponse.text());
         if(!eventResponse.ok) throw new Error(await eventResponse.text());
@@ -1202,7 +1203,7 @@ async function ensureBookDues() {
     if(_bd) return _bd;
     const accRaw = Object.values(entryById).map(e => e.raw);
     try {
-        const r = await sbFetchAll('books', 'select=*'); const rows = r.ok ? await r.json() : [];
+        const r = await ERP.db.request('books', 'select=*'); const rows = r.ok ? await r.json() : [];
         _bd = computeDues((Array.isArray(rows) ? rows : []).map(normBookRow), accRaw);
     } catch (e) { console.error(e); _bd = computeDues([], accRaw); }
     return _bd;

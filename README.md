@@ -32,9 +32,11 @@ The checked-in `styles.css` is the compiled Tailwind output. Rebuild it after ch
 11. Sign in as that administrator. Use **Users & Roles** to add users and assign least-privilege roles.
 12. From **System Settings → Rules & Defaults**, set **School year for fee vouchers** to the year that should be used for new fee periods. Existing fee records are not rewritten when this value changes.
 
+Signed-in users are automatically logged out after 5 minutes with no keyboard, pointer, touch, click, or scroll activity. Background data refreshes do not extend the timeout. Activity is shared across the app's tabs in the same browser.
+
 ### Admin password reset
 
-The Users & Roles page lets an active Admin set a new password for an existing user's login. Existing passwords cannot be viewed. Run `supabase_single_session.sql` first so the function can validate that the Admin is using the currently claimed, non-idle device session. Deploy the `admin-set-user-password` Supabase Edge Function from this repository with the Supabase CLI:
+The Users & Roles page lets an active Admin set a new password for an existing user's login. Existing passwords cannot be viewed. This feature checks the signed-in user's active `Admin` role on the server and does not require the single-device session feature. The app has returned to its normal multi-device login; do not run `supabase_single_session.sql`. If that migration was already applied, run `supabase_rollback_single_session.sql` in Supabase SQL Editor to restore the role-based access rules. Deploy the `admin-set-user-password` Supabase Edge Function from this repository with the Supabase CLI:
 
 ```powershell
 supabase login

@@ -6,8 +6,9 @@
     <title>Users & Roles - Concept School Shibra Campus</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261022-2"></script>
-    <script src="nav.js?v=20261025-4"></script>
+    <script src="config.js?v=20261026-1"></script>
+    <script src="db.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261026-1"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans" onload="initUsers()">
 <div id="toastBox" class="fixed top-4 right-4 z-[100] space-y-2"></div>
@@ -103,7 +104,7 @@ const adminCount = () => users.filter(u => u.active !== false && u.role === 'Adm
 
 async function initUsers() {
     try {
-        const [u, r, d] = await Promise.all([sbFetchAll('app_users', 'select=*&order=created_at.asc'), sbFetchAll('app_roles', 'select=*&order=created_at.asc'), sbFetchAll('day_close', 'select=*&order=closed_date.desc')]);
+        const [u, r, d] = await Promise.all([ERP.db.request('app_users', 'select=*&order=created_at.asc'), ERP.db.request('app_roles', 'select=*&order=created_at.asc'), ERP.db.request('day_close', 'select=*&order=closed_date.desc')]);
         users = u.ok ? await u.json() : []; roles = r.ok ? await r.json() : []; closes = d.ok ? await d.json() : [];
         if (!Array.isArray(users) || !Array.isArray(roles)) throw new Error('tables');
         if (!Array.isArray(closes)) closes = [];
