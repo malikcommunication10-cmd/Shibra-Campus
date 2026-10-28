@@ -1465,10 +1465,10 @@ async function renderDues() {
     const list = await ensureBookDues(), q = ($('duesSearch').value || '').trim().toLowerCase();
     const sumP = k => list.reduce((s, p) => s + Math.max(p[k].pending, 0), 0);
     const securityTotal = renderStaffSecurityPayable();
-    const vendorPayable = sumP('pay');
+    const vendorPayable = list.reduce((sum, party) => sum + party.pay.pending, 0);
     const card = (type, label, amount, color, subtitle) => `<button type="button" onclick="toggleDuesLedger('${type}')" aria-expanded="${duesLedgerSide === type}" class="text-left bg-white rounded-2xl border ${duesLedgerSide === type ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200'} p-4 shadow-sm hover:border-indigo-300 transition print-card"><div class="text-xs text-slate-500">${label}</div><div class="text-xl font-extrabold ${color} mt-1">${amount}</div><div class="text-[11px] ${color} mt-0.5">${subtitle}</div><div class="text-[11px] text-indigo-500 mt-1">${duesLedgerSide === type ? 'Click to close ledger' : 'Click to view ledger'} ${duesLedgerSide === type ? '↑' : '↓'}</div></button>`;
     $('duesCards').innerHTML = [
-        card('concept', 'Vendor payables', 'PKR ' + fmt(vendorPayable), vendorPayable > 0.005 ? 'text-rose-600' : 'text-emerald-700', 'Outstanding vendor balance'),
+        card('concept', 'Vendor payables', 'PKR ' + fmt(vendorPayable), vendorPayable > 0.005 ? 'text-rose-600' : 'text-emerald-700', vendorPayable > 0.005 ? 'Outstanding vendor balance' : vendorPayable < -0.005 ? 'Net vendor advance' : 'No outstanding vendor balance'),
         card('security', 'Staff security payable', staffSecurityReady ? 'PKR ' + fmt(securityTotal) : 'Unavailable', !staffSecurityReady ? 'text-amber-700' : securityTotal > 0.005 ? 'text-rose-600' : 'text-emerald-700', !staffSecurityReady ? 'Ledger data unavailable' : securityTotal > 0.005 ? 'Outstanding liability' : 'No outstanding liability')
     ].join('');
     renderDuesLedger(q, list);
