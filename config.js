@@ -612,7 +612,20 @@ const partyKey = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 function normBookRow(row) {
     const t = String(row.type ?? row.tx_type ?? '').trim().toLowerCase();
     const kind = t.includes('return') ? (t.includes('sale') ? 'sale_return' : 'purchase_return') : (t.includes('sale') ? 'sale' : 'purchase');
-    return { kind, party: String(row.party_name ?? row.party ?? '').trim(), net: parseFloat(row.net_amount ?? row.amount) || 0, voucher: String(row.voucher_no ?? '').trim(),
+    let party = String(row.party_name ?? row.party ?? '').trim().replace(/\s+/g, ' ');
+    if((kind === 'purchase' || kind === 'purchase_return') && /^purchase\s*:/i.test(party)) {
+        const alternateParty = String(row.party || '').trim().replace(/\s+/g, ' ');
+        if(alternateParty && !/^purchase\s*:/i.test(alternateParty)) party = alternateParty;
+        else {
+            const detail = party.replace(/^purchase\s*:\s*/i, '').trim();
+            const vendors = (typeof _settingLists !== 'undefined' && _settingLists && _settingLists['Book Vendor']) || [];
+            const configuredVendor = vendors.slice().sort((a, b) => b.length - a.length)
+                .find(vendor => detail.toLowerCase().endsWith(` - ${String(vendor).trim().toLowerCase()}`));
+            const separator = detail.lastIndexOf(' - ');
+            party = configuredVendor || (separator >= 0 ? detail.slice(separator + 3).trim() : detail);
+        }
+    }
+    return { kind, party, net: parseFloat(row.net_amount ?? row.amount) || 0, voucher: String(row.voucher_no ?? '').trim(),
         notes: String(row.notes ?? '').trim(), date: String(row.date ?? '').slice(0, 10), title: String(row.book ?? row.book_title ?? row.title ?? '').trim(), qty: parseFloat(row.qty) || 0 };
 }
 function computeDues(txs, accRows, opts) {
