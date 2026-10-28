@@ -1527,10 +1527,15 @@ function renderDuesLedger(query, parties) {
             group.purchase += entry.purchase;
             group.payment += entry.payment;
             if(entry.payment) {
-                const walletKey = entry.account ? normWallet(entry.account) : '';
+                const paymentVoucher = entryById[String(entry.voucher || '')];
+                const sourceAccount = entry.account
+                    || (paymentVoucher && paymentVoucher.raw && paymentVoucher.raw.from_account)
+                    || (paymentVoucher && paymentVoucher.wallet)
+                    || '';
+                const walletKey = sourceAccount ? normWallet(sourceAccount) : '';
                 const accountLabel = walletKey && WALLETS[walletKey]
                     ? WALLETS[walletKey].label
-                    : entry.account || 'Account not recorded';
+                    : sourceAccount || 'Account not recorded';
                 group.paymentAccounts.set(accountLabel, (group.paymentAccounts.get(accountLabel) || 0) + entry.payment);
             }
             if(entry.purchase) group.hasPurchase = true;
