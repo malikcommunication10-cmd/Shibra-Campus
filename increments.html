@@ -6,9 +6,9 @@
     <title>Concept School Shibra Campus - Bulk Annual Increments</title>
     <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
     <link rel="stylesheet" href="theme.css?v=1">
-    <script src="config.js?v=20261026-1"></script>
+    <script src="config.js?v=20261028-1"></script>
     <script src="db.js?v=20261026-1"></script>
-    <script src="nav.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261028-1"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans" onload="initPage()">
     
@@ -211,7 +211,8 @@ notify pgrst, 'reload schema';`;
 
         async function reloadFromDatabase() {
             showLoading("Reloading from the database...");
-            await fetchIncrementsCache(true);
+            sbCacheClear('students');
+            await Promise.all([fetchIncrementsCache(true), fetchStudents()]);
             filterIncrementStudents();
             hideLoading();
         }

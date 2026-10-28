@@ -31,14 +31,37 @@ function sbLoadXlsx() {
 // ============================================================================
 const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1', SB_LOGOUT_REASON_KEY = 'sb_logout_reason_v1';
 const SB_IDLE_TIMEOUT = 5 * 60 * 1000;
-const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000, SB_DATA_CACHE_STALE = 5 * 60 * 1000;
+const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_EXPIRY = Number.MAX_SAFE_INTEGER;
 const SB_DATA_DB_NAME = 'shibra_data_cache_v1', SB_DATA_DB_STORE = 'responses';
 const _sbDataMemory = new Map(), _sbDataPending = new Map();
-let _sbDataDbPromise = null;
+let _sbDataDbPromise = null, _sbDataTabId = '';
 function sbSession() { try { return JSON.parse(localStorage.getItem(SB_SESSION_KEY) || 'null'); } catch (e) { return null; } }
 function sbDataCacheUser() { return encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase()); }
+function sbDataCacheTab() {
+    if (_sbDataTabId) return _sbDataTabId;
+    try {
+        _sbDataTabId = sessionStorage.getItem('sb_data_tab_v1') || '';
+        if (!_sbDataTabId) {
+            _sbDataTabId = (window.crypto && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            sessionStorage.setItem('sb_data_tab_v1', _sbDataTabId);
+        }
+    } catch (e) {
+        _sbDataTabId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+    return _sbDataTabId;
+}
+function sbDataCacheScope() { return `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_${sbDataCacheTab()}__`; }
 function sbDataCacheKey(table, query) {
-    return `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_${table}_${encodeURIComponent(query)}`;
+    return `${sbDataCacheScope()}${table}_${encodeURIComponent(query)}`;
+}
+function sbDataCacheMatches(key, userPrefix, tableName) {
+    if (!key.startsWith(userPrefix)) return false;
+    if (!tableName) return true;
+    const suffix = key.slice(userPrefix.length), scopeEnd = suffix.indexOf('__');
+    const tableQuery = scopeEnd >= 0 ? suffix.slice(scopeEnd + 2) : suffix;
+    return tableQuery.startsWith(`${tableName}_`);
 }
 function sbOpenDataCache() {
     if (!('indexedDB' in window)) return Promise.resolve(null);
@@ -87,7 +110,7 @@ async function sbDeletePersistentData(userPrefix, tableName) {
             const cursor = request.result;
             if (!cursor) return;
             const key = String(cursor.key || '');
-            if (key.startsWith(userPrefix) && (!tableName || key.startsWith(`${userPrefix}${tableName}_`)))
+            if (sbDataCacheMatches(key, userPrefix, tableName))
                 cursor.delete();
             cursor.continue();
         };
@@ -104,12 +127,12 @@ function sbCacheClear(table) {
     const tableName = table ? String(table) : '';
     const userPrefix = `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_`;
     for (const key of _sbDataMemory.keys())
-        if (!tableName || key.startsWith(`${userPrefix}${tableName}_`)) _sbDataMemory.delete(key);
+        if (sbDataCacheMatches(key, userPrefix, tableName)) _sbDataMemory.delete(key);
     try {
         for (let i = sessionStorage.length - 1; i >= 0; i--) {
             const key = sessionStorage.key(i);
             if (key && key.startsWith(SB_DATA_CACHE_PREFIX)
-                && (!tableName || key.startsWith(`${userPrefix}${tableName}_`)))
+                && sbDataCacheMatches(key, userPrefix, tableName))
                 sessionStorage.removeItem(key);
         }
         const revision = `${Date.now()}_${Math.random()}`;
@@ -119,10 +142,38 @@ function sbCacheClear(table) {
             _settingLists = null;
             _settingListsRevision = '';
             sessionStorage.removeItem('sb_settings_v2');
+            sessionStorage.removeItem('sb_settings_v3');
         }
     } catch (e) {}
     sbDeletePersistentData(userPrefix, tableName).catch(error => console.warn('Could not clear the persistent data cache:', error));
 }
+function sbResetTabDataCacheOnReload() {
+    if (window.SB_NO_GUARD || !sbSession()) return;
+    let isReload = false;
+    try {
+        const navigation = performance.getEntriesByType('navigation');
+        isReload = navigation.length
+            ? navigation[0].type === 'reload'
+            : !!(performance.navigation && performance.navigation.type === 1);
+    } catch (e) {}
+    if (!isReload) return;
+
+    const userPrefix = `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_`;
+    const oldScope = sbDataCacheScope();
+    try {
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith(userPrefix)) sessionStorage.removeItem(key);
+        }
+        sessionStorage.removeItem('sb_data_tab_v1');
+        sessionStorage.removeItem(`sb_data_preload_v1_${sbDataCacheUser()}`);
+        sessionStorage.removeItem('sb_settings_v2');
+        sessionStorage.removeItem('sb_settings_v3');
+    } catch (e) {}
+    _sbDataTabId = '';
+    sbDeletePersistentData(oldScope).catch(error => console.warn('Could not clear the previous tab data cache:', error));
+}
+sbResetTabDataCacheOnReload();
 function sbSaveSession(j, resetIdle = false) {
     const old = sbSession() || {};
     const email = String((j.user && j.user.email) || old.email || '').toLowerCase();
@@ -250,7 +301,7 @@ window.fetch = async function (input, init) {
         if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
             const match = url.match(/\/rest\/v1\/([^/?]+)/);
             const resource = match ? decodeURIComponent(match[1]) : '';
-            sbCacheClear(resource && resource !== 'rpc' ? resource : '');
+            if (resource && resource !== 'rpc') sbCacheClear(resource);
         }
         if (!['GET', 'HEAD', 'OPTIONS'].includes(method)
             && !/\/rest\/v1\/day_close(?:[/?]|$)/.test(url)
@@ -281,6 +332,21 @@ const PERM_FLAGS = [['money', 'See money totals on the dashboard'], ['export', '
     ['closeday', 'Close / reopen the day'], ['requiredayclose', 'Require closing all previous days before working today'], ['editclosed', 'Change entries of closed or old days'], ['todayonly', 'Change (edit / delete) only the entries of the current open day']];
 const PAGE_FILE = {}; PAGES.forEach(p => { PAGE_FILE[p[2]] = p[0]; });
 const currentPageKey = () => PAGE_FILE[(location.pathname.split('/').pop() || 'index.html').toLowerCase()] || null;
+const PAGE_DATA_TABLES = {
+    dashboard: ['students', 'fees', 'accounts', 'books', 'settings'],
+    students: ['students', 'fees', 'settings'],
+    increments: ['increments', 'students', 'settings'],
+    fees: ['students', 'increments', 'accounts', 'fees', 'settings'],
+    followups: ['call_logs'],
+    books: ['books', 'settings', 'accounts', 'students'],
+    accounts: ['accounts', 'fees', 'staff_security_ledger', 'settings', 'fixed_assets', 'fixed_asset_transactions', 'books'],
+    staff: ['staff', 'payroll', 'staff_security_ledger', 'staff_salary_increments', 'staff_attendance', 'settings'],
+    settings: ['settings', 'students', 'staff', 'accounts', 'books'],
+    users: ['app_users', 'app_roles', 'day_close']
+};
+function sbRefreshCurrentPage() {
+    (PAGE_DATA_TABLES[currentPageKey()] || []).forEach(table => sbCacheClear(table));
+}
 let ME = null;
 const can = (page, act) => !!(ME && ME.perms && String((ME.perms.pages || {})[page] || '').includes(act));
 const flag = f => !!(ME && ME.perms && (ME.perms.flags || []).includes(f));
@@ -462,7 +528,7 @@ async function sbFetchAllUncached(table, query) {
     return { ok: true, status: 200, json: async () => rows, text: async () => '' };
 }
 
-// Cache briefly per signed-in user; expired data stays visible while a background refresh runs.
+// Keep read data for this browser tab; writes, refreshes, and sign-out invalidate it.
 function sbFetchAllNetwork(table, query, key, revision, background) {
     const existing = _sbDataPending.get(key);
     if (existing && existing.revision === revision) return existing.promise;
@@ -472,7 +538,7 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
         const rows = await response.json();
         if (!Array.isArray(rows)) return { ok: false, status: response.status, json: async () => rows, text: async () => '' };
         if (sbDataRevision(table) !== revision) return { ok: true, status: response.status, json: async () => rows, text: async () => '' };
-        const value = JSON.stringify(rows), expires = Date.now() + SB_DATA_CACHE_TTL, staleUntil = expires + SB_DATA_CACHE_STALE;
+        const value = JSON.stringify(rows), expires = SB_DATA_CACHE_EXPIRY, staleUntil = SB_DATA_CACHE_EXPIRY;
         _sbDataMemory.set(key, { revision, expires, staleUntil, packed: value });
         sbWritePersistentData({ key, revision, expires, staleUntil, rows })
             .catch(error => console.warn(`Could not persist cached ${table} data:`, error));
@@ -483,7 +549,10 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
         if (table === 'settings' && typeof _settingLists !== 'undefined') {
             _settingLists = null;
             _settingListsRevision = '';
-            try { sessionStorage.removeItem('sb_settings_v2'); } catch (e) {}
+            try {
+                sessionStorage.removeItem('sb_settings_v2');
+                sessionStorage.removeItem('sb_settings_v3');
+            } catch (e) {}
         }
         if (background) window.dispatchEvent(new CustomEvent('sb:data-cache-updated', { detail: { table, query } }));
         return { ok: true, status: response.status, json: async () => rows, text: async () => '' };

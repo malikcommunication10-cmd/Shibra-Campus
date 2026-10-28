@@ -7,9 +7,9 @@
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <link rel="stylesheet" href="theme.css?v=1">
-    <script src="config.js?v=20261026-1"></script>
+    <script src="config.js?v=20261028-1"></script>
     <script src="db.js?v=20261026-1"></script>
-    <script src="nav.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261028-1"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans" onload="initPage()">
     
@@ -45,7 +45,7 @@
                                 <option value="ALL">🔍 All Classes</option>
                             </select>
                         <select id="statusFilter" onchange="filterStudents()" class="border rounded-lg px-3 py-1.5 text-xs bg-slate-50 outline-none font-medium text-slate-700"><option value="ALL">All status</option><option value="ACTIVE">Active</option><option value="LEFT">Left / Graduated</option></select>
-                            <button onclick="initPage()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
+                            <button onclick="sbRefreshCurrentPage();initPage()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border transition flex items-center gap-1">🔄 Refresh</button>
                         </div>
                     </div>
                     <div class="overflow-x-auto max-h-[500px] flex-1">

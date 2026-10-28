@@ -7,9 +7,9 @@
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <link rel="stylesheet" href="theme.css?v=1">
-    <script src="config.js?v=20261026-1"></script>
+    <script src="config.js?v=20261028-1"></script>
     <script src="db.js?v=20261026-1"></script>
-    <script src="nav.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261028-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -108,7 +108,7 @@
                     </div>
                     <div><label class="block text-[11px] font-medium text-slate-500 mb-1">From</label><input id="gFrom" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
                     <div><label class="block text-[11px] font-medium text-slate-500 mb-1">To</label><input id="gTo" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
-                    <button onclick="initBooks()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
+                    <button onclick="sbRefreshCurrentPage();initBooks()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
                     <p class="text-[11px] text-slate-400 basis-full sm:basis-auto sm:ml-auto">Stock figures are always current; sales, purchases and profit follow the selected period.</p>
                 </div>
             </div>

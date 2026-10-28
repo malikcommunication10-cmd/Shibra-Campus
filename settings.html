@@ -8,10 +8,10 @@
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <link rel="stylesheet" href="theme.css?v=1">
-    <script src="config.js?v=20261026-1"></script>
+    <script src="config.js?v=20261028-1"></script>
     <script src="db.js?v=20261026-1"></script>
     <script>window.addEventListener("pagehide", () => { try { sessionStorage.removeItem("sb_settings_v1"); } catch (e) {} });</script>
-    <script src="nav.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261028-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -53,7 +53,7 @@
                     <p class="text-sm text-slate-500">Dropdown lists, rules and connection — one place that feeds every other page</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button onclick="sbCacheClear();initSettings()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
+                    <button onclick="sbRefreshCurrentPage();initSettings()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
                     </div>
             </div>
 

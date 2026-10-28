@@ -38,7 +38,9 @@
             ['accounts', 'select=*&order=date.asc,voucher_id.asc'],
             ['fees', 'select=voucher_id,admis_no,student_name,class,period,type'],
             ['staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes'],
-            ['settings', 'select=setting_key,setting_value']
+            ['settings', 'select=setting_key,setting_value'],
+            ['fixed_assets', 'select=*&order=asset_code.asc'],
+            ['fixed_asset_transactions', 'select=*&order=event_date.desc,id.desc']
         ],
         'staff.html': [
             ['staff', 'select=*'],
@@ -51,6 +53,9 @@
             ['increments', 'select=*'],
             ['students', 'select=*'],
             ['settings', 'select=setting_key,setting_value']
+        ],
+        'followups.html': [
+            ['call_logs', 'select=*&order=call_date.desc']
         ],
         'settings.html': [
             ['settings', 'select=*'],
@@ -120,7 +125,11 @@
         };
         menuButton.onclick = () => setMenuOpen(menuButton.getAttribute('aria-expanded') !== 'true');
         backdrop.onclick = () => setMenuOpen(false);
-        aside.querySelectorAll('nav a').forEach(link => {
+        document.querySelectorAll('a[href]').forEach(link => {
+            const target = new URL(link.href, location.href);
+            const targetFile = target.pathname.split('/').pop().toLowerCase();
+            if (target.origin !== location.origin || !PAGE_FILE[targetFile] || targetFile === page) return;
+            link.dataset.prefetchPage = targetFile;
             let prefetchTimer = null;
             const warm = () => {
                 if (prefetchTimer || link.dataset.prefetched) return;

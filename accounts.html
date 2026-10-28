@@ -6,9 +6,9 @@
     <title>Concept School Shibra Campus - Accounts & Daybook</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <script src="config.js?v=20261026-1"></script>
+    <script src="config.js?v=20261028-1"></script>
     <script src="db.js?v=20261026-1"></script>
-    <script src="nav.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261028-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -211,7 +211,7 @@
                         <label class="block text-[11px] font-medium text-slate-500 mb-1">Account</label>
                         <select id="gWallet" onchange="renderAll()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All accounts</option></select>
                     </div>
-                    <button onclick="initAccounts()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
+                    <button onclick="sbRefreshCurrentPage();initAccounts()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
                 </div>
             </div>
 
