@@ -1412,7 +1412,7 @@ function exportWalletsCsv() {
 }
 
 // ---------------- ACCOUNT LEDGERS ----------------
-let accountLedgerRows = [], accountLedgerOpening = 0, accountLedgerNormalSide = 'Dr', accountLedgerDisplayLimit = 300;
+let accountLedgerRows = [], accountLedgerOpening = 0, accountLedgerNormalSide = 'Dr', accountLedgerDisplayLimit = 300, accountLedgerPartyAliases = new Map();
 function ledgerBalanceText(balance, normalSide = accountLedgerNormalSide) {
     const side = balance === 0 ? '' : (balance > 0 ? normalSide : (normalSide === 'Dr' ? 'Cr' : 'Dr'));
     return `PKR ${fmt(Math.abs(balance))}${side ? ' ' + side : ''}`;
@@ -1483,7 +1483,7 @@ document.addEventListener('click', event => {
 async function renderAccountLedger() {
     const picker = $('ledgerAccount');
     accountLedgerDisplayLimit = 300;
-    selectedAccountLedgerKey = picker.value || selectedAccountLedgerKey;
+    selectedAccountLedgerKey = selectedAccountLedgerKey || picker.value || 'all';
     const parties = await ensureBookDues();
     const headMap = new Map();
     [...INCOME_HEADS, ...EXPENSE_HEADS, ...entries.map(entry => entry.headLabel)]
@@ -1492,10 +1492,54 @@ async function renderAccountLedger() {
             const key = partyKey(head);
             if(key) headMap.set(key, String(head).trim());
         });
-    const partyList = parties.filter(p =>
+    const sourceParties = parties.filter(p =>
         p.recvE.length || p.payE.length || p.recvS.length || p.payS.length
-    ).sort((a, b) => a.name.localeCompare(b.name));
-    const entriesByWallet = new Map(), entriesByHead = new Map(), partiesByKey = new Map();
+    );
+    const ledgerPartyName = name => {
+        const value = String(name || '').trim().replace(/\s+/g, ' ');
+        if(!/^sale\s*:/i.test(value)) return value;
+        const separator = value.lastIndexOf(' - ');
+        return separator >= 0 ? value.slice(separator + 3).trim() : value.replace(/^sale\s*:\s*/i, '').trim();
+    };
+    const studentLedgerIdentity = (name, admission) => {
+        const value = String(name || '').trim().replace(/\s+/g, ' ');
+        if(!value) return { key: '', name: '' };
+        const suffix = value.match(/\s*\(([^()]*)\)\s*$/);
+        const baseName = suffix ? value.slice(0, suffix.index).trim() : value;
+        const identifier = String(admission || (suffix && suffix[1]) || '').trim();
+        const displayName = identifier ? `${baseName} (${identifier})` : value;
+        return { key: partyKey(displayName), name: displayName };
+    };
+    const partiesByKey = new Map();
+    accountLedgerPartyAliases = new Map();
+    sourceParties.forEach(party => {
+        const name = ledgerPartyName(party.name), key = partyKey(name);
+        if(!key) return;
+        let grouped = partiesByKey.get(key);
+        if(!grouped) {
+            grouped = { key, name, recvE: [], payE: [], recvS: [], payS: [] };
+            partiesByKey.set(key, grouped);
+        }
+        ['recvE', 'payE', 'recvS', 'payS'].forEach(side => grouped[side].push(...party[side]));
+        accountLedgerPartyAliases.set(party.key, key);
+        accountLedgerPartyAliases.set(key, key);
+    });
+    const partyList = [...partiesByKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const studentBookParties = partyList.filter(party =>
+        party.recvE.some(entry => entry.src === 'book') || party.recvS.some(entry => entry.label === 'Sale return')
+    );
+    const studentBookKeys = new Set(studentBookParties.map(party => party.key));
+    const feeStudents = new Map(), feeEntriesByStudent = new Map();
+    entries.forEach(entry => {
+        if(!entry.isFee) return;
+        const student = studentLedgerIdentity(entry.fee?.student, entry.fee?.adm);
+        if(student.name && student.key) {
+            if(!feeStudents.has(student.key)) feeStudents.set(student.key, student.name);
+            if(!feeEntriesByStudent.has(student.key)) feeEntriesByStudent.set(student.key, []);
+            feeEntriesByStudent.get(student.key).push(entry);
+        }
+    });
+    const entriesByWallet = new Map(), entriesByHead = new Map();
     const addToIndex = (index, key, entry) => {
         if(!key) return;
         if(!index.has(key)) index.set(key, []);
@@ -1506,18 +1550,27 @@ async function renderAccountLedger() {
         [...new Set(walletKeys)].forEach(wallet => addToIndex(entriesByWallet, wallet, entry));
         addToIndex(entriesByHead, partyKey(entry.headLabel), entry);
     });
-    partyList.forEach(party => partiesByKey.set(party.key, party));
     const option = (key, label) => `<option value="${esc(key)}">${esc(label)}</option>`;
+    const bookPartyOptions = partyList.filter(party => !studentBookKeys.has(party.key));
     picker.innerHTML = [
         option('all', 'All ledgers'),
         '<optgroup label="Cash & bank">',
         ...Object.keys(WALLETS).map(key => option('wallet:' + key, `${WALLETS[key].icon} ${WALLETS[key].label}`)),
         '</optgroup><optgroup label="Income & expense heads">',
         ...[...headMap].sort((a, b) => a[1].localeCompare(b[1])).map(([key, name]) => option('head:' + key, name)),
+        '</optgroup><optgroup label="Student book sales">',
+        ...studentBookParties.map(party => option('party:' + party.key, party.name)),
+        '</optgroup><optgroup label="Student fee entries">',
+        ...[...feeStudents].sort((a, b) => a[1].localeCompare(b[1])).map(([key, name]) => option('fee:' + key, name)),
         '</optgroup><optgroup label="Book Store parties">',
-        ...partyList.map(p => option('party:' + p.key, p.name)),
+        ...bookPartyOptions.map(party => option('party:' + party.key, party.name)),
         '</optgroup>'
     ].join('');
+    if(selectedAccountLedgerKey.startsWith('party:')) {
+        const originalKey = selectedAccountLedgerKey.slice('party:'.length);
+        const canonicalKey = accountLedgerPartyAliases.get(originalKey);
+        if(canonicalKey) selectedAccountLedgerKey = 'party:' + canonicalKey;
+    }
     if(![...picker.options].some(item => item.value === selectedAccountLedgerKey)) {
         selectedAccountLedgerKey = 'all';
     }
@@ -1598,6 +1651,11 @@ async function renderAccountLedger() {
                 party.payS.forEach((entry, index) => push(entry.date, entry.voucher, entry.label || 'Payment / purchase return',
                     Math.max(0, Number(entry.amt)), Math.max(0, -Number(entry.amt)), 'Dr', 300000 + index));
             }
+        } else if(type === 'fee') {
+            normalSide = 'Cr';
+            (feeEntriesByStudent.get(key) || []).forEach(entry => {
+                push(entry.date, entry.ref || entry.id, entryParticulars(entry), 0, entry.amount, 'Dr', entry.idx);
+            });
         }
         events.sort((a, b) => a.date.localeCompare(b.date) || a.sequence - b.sequence || a.voucher.localeCompare(b.voucher));
         return { events, normalSide };
