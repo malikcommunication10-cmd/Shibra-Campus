@@ -645,13 +645,13 @@ function computeDues(txs, accRows, opts) {
             const b = bills[ref[1]]; if (!b) return;
             const amt = b.side === 'recv' ? inA : outA; if (amt <= 0) return;
             b.paid += amt;
-            P[b.pk][b.side === 'recv' ? 'recvS' : 'payS'].push({ date: d, amt, voucher: vid, bill: b.voucher, label: b.side === 'recv' ? 'Receipt' : 'Payment' });
+            P[b.pk][b.side === 'recv' ? 'recvS' : 'payS'].push({ date: d, amt, voucher: vid, bill: b.voucher, account: r.from_account, label: b.side === 'recv' ? 'Receipt' : 'Payment' });
             return;
         }
         if (up.startsWith('RV-') && partyKey(r.from_account) === partyKey(BOOK_SALE_HEAD) && inA > 0) {
             get(r.description).recvS.push({ date: d, amt: inA, voucher: vid, label: 'Receipt', pool: true });
         } else if (up.startsWith('PV-') && partyKey(r.to_account) === partyKey(BOOK_BUY_HEAD) && outA > 0) {
-            get(r.description).payS.push({ date: d, amt: outA, voucher: vid, label: 'Payment', pool: true });
+            get(r.description).payS.push({ date: d, amt: outA, voucher: vid, account: r.from_account, label: 'Payment', pool: true });
         }
     });
     const byDate = (a, b) => (a.date || '').localeCompare(b.date || '') || String(a.voucher).localeCompare(String(b.voucher));

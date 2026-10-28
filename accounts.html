@@ -1479,7 +1479,8 @@ function renderDuesLedger(query, parties) {
                 party: selectedVendor.name,
                 description: 'Payment',
                 purchase: 0,
-                payment: Number(entry.amt) || 0
+                payment: Number(entry.amt) || 0,
+                account: entry.account || ''
             }));
             selectedVendor.payS.filter(entry => entry.label === 'Purchase return').forEach(entry => addEntry(entry.date, {
                 voucher: entry.voucher || '',
@@ -1520,11 +1521,18 @@ function renderDuesLedger(query, parties) {
         const groups = new Map();
         transactions.forEach(entry => {
             const key = entry.date || 'unknown';
-            if(!groups.has(key)) groups.set(key, { key, date: entry.date, entries: [], purchase: 0, payment: 0, hasPurchase: false, hasPayment: false, opening: 0, balance: 0 });
+            if(!groups.has(key)) groups.set(key, { key, date: entry.date, entries: [], purchase: 0, payment: 0, paymentAccounts: new Map(), hasPurchase: false, hasPayment: false, opening: 0, balance: 0 });
             const group = groups.get(key);
             group.entries.push(entry);
             group.purchase += entry.purchase;
             group.payment += entry.payment;
+            if(entry.payment) {
+                const walletKey = entry.account ? normWallet(entry.account) : '';
+                const accountLabel = walletKey && WALLETS[walletKey]
+                    ? WALLETS[walletKey].label
+                    : entry.account || 'Account not recorded';
+                group.paymentAccounts.set(accountLabel, (group.paymentAccounts.get(accountLabel) || 0) + entry.payment);
+            }
             if(entry.purchase) group.hasPurchase = true;
             if(entry.payment) group.hasPayment = true;
             group.balance = entry.balance;
@@ -1552,8 +1560,11 @@ function renderDuesLedger(query, parties) {
             const purchaseRow = group.hasPurchase
                 ? renderDailyRow(group.purchase < 0 ? 'Purchase return' : 'Purchase', group.purchase, 0, purchaseBalance, 'bg-indigo-50/50 hover:bg-indigo-50')
                 : '';
+            const paymentDescription = `Payment${group.paymentAccounts.size
+                ? `<div class="mt-1 space-y-0.5 text-[11px] font-normal text-slate-500">${[...group.paymentAccounts].map(([account, amount]) => `<div>PKR ${fmt(amount)} from ${esc(account)}</div>`).join('')}</div>`
+                : ''}`;
             const paymentRow = group.hasPayment
-                ? renderDailyRow('Payment', 0, group.payment, group.balance, 'bg-white hover:bg-indigo-50/40')
+                ? renderDailyRow(paymentDescription, 0, group.payment, group.balance, 'bg-white hover:bg-indigo-50/40')
                 : '';
             return purchaseRow + paymentRow;
         }).join('');
