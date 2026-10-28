@@ -1303,7 +1303,9 @@ async function updateDuesPicker() {
     $('emPaymentModeWrap').classList.toggle('hidden', duesSide !== 'pay');
     bw.classList.add('hidden'); $('emBills').innerHTML = '';
     if(!duesSide) return;
-    $('emPartyLabel').innerText = duesSide === 'recv' ? 'Student / customer with pending bills' : 'Vendor / party with pending bills';
+    $('emPartyLabel').innerText = duesSide === 'recv'
+        ? 'Student / customer with pending bills'
+        : duesPaymentMode === 'standalone' ? 'Vendor / party (including settled and advance balances)' : 'Vendor / party with pending bills';
     const selectedParty = $('emParty').value;
     $('emParty').innerHTML = '<option value="">Loading...</option>';
     const pend = p => p[duesSide].pending;
@@ -1321,16 +1323,14 @@ async function updateDuesPicker() {
 function dueBills() { const d = (_bd || []).find(x => x.key === $('emParty').value); return d ? (duesSide === 'recv' ? d.recvE : d.payE).filter(e => e.rem > 0.005) : []; }
 function setDuesPaymentMode(mode) {
     duesPaymentMode = mode === 'standalone' ? 'standalone' : 'bills';
-    const selectedParty = $('emParty').value;
-    const billsWrap = $('emBillsWrap');
     if(duesSide !== 'pay') return;
-    if(duesPaymentMode === 'standalone') {
-        billsWrap.classList.add('hidden');
-        return;
-    }
-    if(selectedParty) pickDuesParty();
+    const selectedParty = $('emParty').value;
+    updateDuesPicker().then(() => {
+        if($('emParty').value) pickDuesParty(true);
+        else if(selectedParty) $('emTitle2').value = '';
+    });
 }
-function pickDuesParty() {
+function pickDuesParty(preserveAmount = false) {
     const bills = dueBills();
     const showBills = duesSide === 'recv' || duesPaymentMode === 'bills';
     $('emBillsLabel').innerText = duesSide === 'recv'
@@ -1343,7 +1343,10 @@ function pickDuesParty() {
         return;
     }
     $('emBills').innerHTML = bills.map((b, i) => `<label class="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"><input type="checkbox" class="bill-cb" data-i="${i}" checked onchange="billTick()"><span class="font-mono text-indigo-900">${esc(b.voucher)}</span><span class="flex-1 truncate">${fmtDate(b.date)} - ${esc(b.title || (b.src === 'acct' ? 'Bill' : 'Book Store'))}</span><b class="text-rose-600">${fmt(b.rem)}</b></label>`).join('');
-    billTick();
+    if(preserveAmount) {
+        const d = (_bd || []).find(x => x.key === $('emParty').value);
+        if(d) $('emTitle2').value = d.name;
+    } else billTick();
 }
 function billTick() {
     const bills = dueBills(); let sum = 0;
@@ -1427,6 +1430,12 @@ async function saveStandaloneVendorPayment(date, amount, w, notes) {
 async function startSettle(kind, key) {
     openEntry(kind);
     $('emHead').value = kind === 'receipt' ? 'Accounts Receivable' : 'Accounts Payable';
+    if(kind === 'payment') {
+        const party = (_bd || []).find(item => item.key === key);
+        duesPaymentMode = party && party.pay.pending > 0.005 ? 'bills' : 'standalone';
+        const modeRadio = document.querySelector(`input[name="duesPaymentMode"][value="${duesPaymentMode}"]`);
+        if(modeRadio) modeRadio.checked = true;
+    }
     await updateDuesPicker();
     $('emParty').value = key; pickDuesParty();
 }
@@ -1469,9 +1478,9 @@ async function renderDues() {
         const oldest = [...p.recvE, ...p.payE].filter(e => e.rem > 0.005).map(e => e.date).sort()[0];
         return `<tr class="border-b hover:bg-slate-50 align-top"><td class="p-2.5 font-semibold text-slate-800">${esc(p.name)}<div class="mt-1 font-normal">${chips(p)}</div></td>
         <td class="p-2.5 text-right font-bold ${p.recv.pending > 0.005 ? 'text-emerald-700' : 'text-slate-300'}">${p.recv.pending > 0.005 ? 'PKR ' + fmt(p.recv.pending) : '-'}</td>
-        <td class="p-2.5 text-right font-bold ${p.pay.pending > 0.005 ? 'text-rose-600' : 'text-slate-300'}">${p.pay.pending > 0.005 ? 'PKR ' + fmt(p.pay.pending) : '-'}</td>
+        <td class="p-2.5 text-right font-bold ${p.pay.pending > 0.005 ? 'text-rose-600' : p.pay.pending < -0.005 ? 'text-emerald-700' : 'text-slate-400'}">${p.pay.pending > 0.005 ? 'PKR ' + fmt(p.pay.pending) : p.pay.pending < -0.005 ? 'Advance PKR ' + fmt(-p.pay.pending) : 'Settled'}</td>
         <td class="p-2.5 text-slate-500 whitespace-nowrap">${fmtDate(oldest)}</td>
-        <td class="p-2.5 no-print" data-k="${esc(p.key)}">${p.recv.pending > 0.005 ? `<button onclick="startSettle('receipt', this.parentNode.dataset.k)" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold mr-1">Receive</button>` : ''}${p.pay.pending > 0.005 ? `<button onclick="startSettle('payment', this.parentNode.dataset.k)" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded font-semibold">Pay</button>` : ''}</td></tr>`;
+        <td class="p-2.5 no-print" data-k="${esc(p.key)}">${p.recv.pending > 0.005 ? `<button onclick="startSettle('receipt', this.parentNode.dataset.k)" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold mr-1">Receive</button>` : ''}${p.payE.length || p.payS.some(entry => entry.label === 'Payment') ? `<button onclick="startSettle('payment', this.parentNode.dataset.k)" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded font-semibold">${p.pay.pending > 0.005 ? 'Pay' : 'Pay advance'}</button>` : ''}</td></tr>`;
     }).join('') : '<tr><td colspan="5" class="p-8 text-center text-slate-400">No pending bills.</td></tr>';
     const remOf = {}; list.forEach(p => [...p.recvE, ...p.payE].forEach(e => { remOf[String(e.voucher).toUpperCase()] = e.rem; }));
     const bl = [...billEntries].sort((a, b) => b.date.localeCompare(a.date));
