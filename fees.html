@@ -38,10 +38,32 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
  table.rt td.nl::before{content:none}
 }
 @media print{
+ @page{size:A4 landscape;margin:7mm}
  body *{visibility:hidden!important}
  #ledgerModal,#ledgerModal *{visibility:visible!important}
- #ledgerModal{position:absolute!important;left:0;top:0;width:100%;background:#fff!important;display:block!important;padding:0!important}
- #ledgerSheet{box-shadow:none!important;max-height:none!important;max-width:100%!important}
+ #ledgerModal{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;background:#fff!important;display:block!important;padding:0!important}
+ #ledgerSheet{box-shadow:none!important;max-height:none!important;max-width:100%!important;width:100%!important;overflow:visible!important;padding:0!important;border-radius:0!important}
+ #ledgerSheet h3{font-size:13pt!important}
+ #ledgerSheet #ledgerStudentInfo{font-size:8pt!important}
+ #ledgerSheet table{width:100%!important;table-layout:fixed!important;font-size:7pt!important;border-collapse:collapse!important}
+ #ledgerSheet th,#ledgerSheet td{padding:3px 4px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important}
+ #ledgerSheet #ledgerTableHead th:nth-child(1){width:9%}
+ #ledgerSheet #ledgerTableHead th:nth-child(2){width:13%}
+ #ledgerSheet #ledgerTableHead th:nth-child(3){width:10%}
+ #ledgerSheet #ledgerTableHead th:nth-child(4){width:40%}
+ #ledgerSheet #ledgerTableHead th:nth-child(5),
+ #ledgerSheet #ledgerTableHead th:nth-child(6),
+ #ledgerSheet #ledgerTableHead th:nth-child(7){width:9%}
+ #ledgerSheet table.monthly-ledger th:nth-child(1){width:15%}
+ #ledgerSheet table.monthly-ledger th:nth-child(2){width:40%}
+ #ledgerSheet table.monthly-ledger th:nth-child(3),
+ #ledgerSheet table.monthly-ledger th:nth-child(4),
+ #ledgerSheet table.monthly-ledger th:nth-child(5){width:15%}
+ #ledgerSheet details:not([open])>:not(summary){display:block!important}
+ #ledgerSheet details summary{list-style:none!important}
+ #ledgerSheet .ledger-summary{font-size:8pt!important;padding:5px!important}
+ #ledgerSheet #ledgerDue{font-size:7pt!important}
+ #ledgerTableBody tr{break-inside:avoid}
  .no-print{display:none!important}
 }
 </style>
@@ -73,10 +95,10 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
 
     <!-- Stats -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Vouchers</div><div id="stCount" class="text-lg font-extrabold text-slate-900">0</div></div>
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Total payable</div><div id="stPayable" class="text-lg font-extrabold text-slate-900">0</div></div>
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Collected</div><div id="stPaid" class="text-lg font-extrabold text-emerald-600">0</div></div>
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Pending</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Active student vouchers</div><div id="stCount" class="text-lg font-extrabold text-slate-900">0</div><div id="stCountInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Net payable after discount</div><div id="stPayable" class="text-lg font-extrabold text-slate-900">0</div><div id="stPayableInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Collected</div><div id="stPaid" class="text-lg font-extrabold text-emerald-600">0</div><div id="stPaidInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Pending (net)</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div><div id="stBalInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
     </div>
 
     <div id="afBanner" class="hidden no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3"></div>
@@ -158,11 +180,15 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
           <thead class="bg-slate-50 sticky top-0"><tr>
             <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
             <th>Sr</th><th>Voucher ID</th><th>Admis No</th><th>Student</th><th>Siblings</th><th>Items</th><th>Period</th>
-            <th>Payable</th><th>Paid</th><th>Balance</th><th>Class</th><th>Status</th><th>Date(s)</th><th>Action</th></tr></thead>
+            <th>Net payable</th><th>Paid</th><th>Balance</th><th>Class</th><th>Status</th><th>Date(s)</th><th>Action</th></tr></thead>
           <tbody id="feesTableBody"><tr><td colspan="15" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
         </table>
       </div>
       <div id="summaryView" class="hidden overflow-x-auto md:max-h-[70vh]">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50 p-2 no-print">
+          <p id="summaryReceiptModeNote" class="text-xs text-slate-500">Paid amounts follow FIFO voucher allocations.</p>
+          <button id="summaryReceiptModeBtn" onclick="toggleSummaryReceiptMode()" class="btn b-gh" aria-pressed="false">💸 Show actual received by month</button>
+        </div>
         <table class="rt w-full border-collapse"><thead id="sumHead" class="bg-slate-50 sticky top-0"></thead><tbody id="sumBody"></tbody></table>
       </div>
       <div id="feesTableFooter" class="no-print border-t bg-slate-50 p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"></div>
@@ -174,12 +200,13 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
 <div id="ledgerModal" class="modal"><div id="ledgerSheet" class="sheet max-w-4xl">
   <div class="flex justify-between items-start border-b pb-3 mb-3 gap-2">
     <div><h3 class="font-bold text-indigo-950">Concept School - Student Fee Ledger</h3><p id="ledgerStudentInfo" class="text-xs text-slate-500 mt-0.5"></p></div>
-    <div class="flex gap-2 no-print"><button onclick="window.print()" class="btn b-pri">🖨️ Print</button><button onclick="closeLedgerModal()" class="btn b-gh">✕</button></div>
+    <div class="flex flex-wrap gap-2 no-print"><button id="ledgerViewToggle" onclick="toggleLedgerView()" class="btn b-gh" aria-pressed="false">Monthly view</button><button onclick="window.print()" class="btn b-pri">🖨️ Print</button><button onclick="closeLedgerModal()" class="btn b-gh">✕</button></div>
   </div>
-  <div class="overflow-x-auto mb-3"><table class="w-full text-xs text-left">
-    <thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr></thead>
+  <p id="ledgerViewNote" class="hidden mb-2 text-[11px] text-slate-500">Payments are shown in the month they were received, not distributed across earlier fee months.</p>
+  <div class="overflow-x-auto mb-3"><table id="ledgerTable" class="w-full text-xs text-left">
+    <thead id="ledgerTableHead" class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr></thead>
     <tbody id="ledgerTableBody"></tbody></table></div>
-  <div class="bg-slate-50 p-3 rounded-xl border flex flex-wrap justify-between gap-2 text-xs font-semibold">
+  <div class="ledger-summary bg-slate-50 p-3 rounded-xl border flex flex-wrap justify-between gap-2 text-xs font-semibold">
     <div>Total charges: <span id="ledgerTotalPayable" class="text-indigo-900"></span></div>
     <div>Paid: <span id="ledgerTotalPaid" class="text-emerald-600"></span></div>
     <div>Balance: <span id="ledgerTotalBalance" class="text-rose-600"></span></div>
@@ -189,7 +216,9 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
 <!-- Bulk pay -->
 <div id="bulkPayModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
   <h3 class="font-bold text-indigo-800 border-b pb-2">⚡ Bulk pay (FIFO)</h3>
-  <div><label class="lbl">Total filtered unpaid dues</label><input id="bulkTotalDues" readonly class="inp font-bold text-rose-600"></div>
+  <div><label id="bulkTotalDuesLabel" class="lbl">Total filtered unpaid dues</label><input id="bulkTotalDues" readonly class="inp font-bold text-rose-600"></div>
+  <p id="bulkScopeSummary" class="hidden rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-800"></p>
+  <div id="bulkScopeList" class="hidden max-h-36 overflow-y-auto rounded-lg border border-slate-200 divide-y text-xs"></div>
   <div><label class="lbl">Received amount</label><input type="number" id="bulkReceivedAmount" class="inp font-bold text-emerald-600"></div>
   <div><label class="lbl">Deposit to</label><select id="bulkAccount" class="inp"><option value="cash">Cash</option></select></div>
   <div><label class="lbl">Payment date</label><input type="date" id="bulkPayDate" class="inp"></div>
@@ -212,7 +241,11 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
       <div><label class="lbl">Amount</label><input type="number" id="payAmountIn" required class="inp font-bold text-emerald-600"></div>
       <div><label class="lbl">Date</label><input type="date" id="payDate" required class="inp"></div></div>
     <div><label class="lbl">Remarks</label><input id="payRemarks" placeholder="Optional" class="inp"></div>
-    <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closePayModal()" class="btn b-gh">Cancel</button><button type="submit" class="btn b-ok">Save receipt</button></div>
+    <div class="flex flex-wrap justify-end gap-2 pt-2">
+      <button type="button" onclick="closePayModal()" class="btn b-gh">Cancel</button>
+      <button type="button" onclick="openStudentBulkPayModal()" class="btn b-pri">⚡ Bulk pay dues up to today</button>
+      <button type="submit" class="btn b-ok">Save receipt</button>
+    </div>
   </form>
 </div></div>
 
@@ -400,6 +433,7 @@ function filterVouchers(){
  filtered=t;renderFeesTable(t);renderStudentSummary();
 }
 let viewMode='vouchers';
+let summaryReceiptMode='fifo';
 function toggleView(){
   viewMode=viewMode==='vouchers'?'summary':'vouchers';
   $('voucherView').classList.toggle('hidden',viewMode==='summary');
@@ -407,32 +441,66 @@ function toggleView(){
   $('viewBtn').innerText=viewMode==='summary'?'🧾 Voucher list':'👥 Student summary';
   renderStudentSummary();
 }
+function toggleSummaryReceiptMode(){
+  summaryReceiptMode=summaryReceiptMode==='fifo'?'received':'fifo';
+  renderStudentSummary();
+}
 function renderStudentSummary(){
   const mt=+$('toMonth').value||12,q=$('searchInput').value.trim().toLowerCase();
   const lbl=($('toMonth').selectedOptions[0]||{}).text||'Month';
+  const actual=summaryReceiptMode==='received',selectedIndex=SCHOOL_YEAR*12+mt-1;
   const by={};
   allFeesCache.forEach(r=>{
     const m=monthOrder[(r.period||'').trim()];if(!m)return;
 const k=normAdm(r.admis_no)||String(r.student_name||'').toLowerCase();
-const o=by[k]??={adm:r.admis_no,name:r.student_name,cls:r.class,prev:0,pay:0,paid:0,bal:0};
+const o=by[k]??={adm:r.admis_no,name:r.student_name,cls:r.class,prev:0,pay:0,paid:0,bal:0,vouchers:new Map(),receipts:new Map()};
 const net=r.net??(parseFloat(r.payable)||0),paid=parseFloat(r.totalPaid)||0;
-if(m>mt){o.bal-=paid;return}
-o.bal+=net-paid;
-    if(m<mt)o.prev+=net-paid;else{o.pay+=net;o.paid+=paid}
+const periodIndex=feePeriodIndex(r.period);
+const voucher=(r.voucher_id||'').trim();
+if(!o.vouchers.has(voucher))o.vouchers.set(voucher,periodIndex);
+if(!actual){
+  if(m>mt){o.bal-=paid;return}
+  o.bal+=net-paid;
+  if(m<mt)o.prev+=net-paid;else{o.pay+=net;o.paid+=paid}
+}else if(periodIndex!==null&&periodIndex<=selectedIndex){
+  if(periodIndex<selectedIndex)o.prev+=net;else o.pay+=net;
+}
   });
+  if(actual){
+    Object.values(by).forEach(o=>{
+      o.vouchers.forEach((fallbackPeriod,voucher)=>{
+        ((accountsDataMap[voucher]||{}).transactions||[]).forEach(transaction=>{
+          const amount=parseFloat(transaction.amount_in)||0;
+          if(amount<=0)return;
+          const date=String(transaction.date||'').slice(0,10),match=date.match(/^(\d{4})-(\d{2})/);
+          const receivedIndex=match?Number(match[1])*12+Number(match[2])-1:fallbackPeriod;
+          if(receivedIndex===null||receivedIndex===undefined||receivedIndex>selectedIndex)return;
+          o.receipts.set(receivedIndex,(o.receipts.get(receivedIndex)||0)+amount);
+        });
+      });
+      o.paid=o.receipts.get(selectedIndex)||0;
+      o.prev-=Array.from(o.receipts.entries()).reduce((sum,[index,amount])=>sum+(index<selectedIndex?amount:0),0);
+      o.bal=o.prev+o.pay-o.paid;
+    });
+  }
   let list=Object.values(by).filter(o=>!q||(o.name||'').toLowerCase().includes(q)||String(o.adm||'').toLowerCase().includes(q)).sort((a,b)=>b.bal-a.bal);
   const T={prev:0,pay:0,paid:0,bal:0};
-  $('sumHead').innerHTML=`<tr><th>Adm No</th><th>Student</th><th>Class</th><th>Previous balance</th><th>${esc(lbl)} payable</th><th>${esc(lbl)} paid</th><th>Total balance</th></tr>`;
+  $('summaryReceiptModeBtn').innerText=actual?'📊 Show FIFO allocation':'💸 Show actual received by month';
+  $('summaryReceiptModeBtn').setAttribute('aria-pressed',String(actual));
+  $('summaryReceiptModeNote').innerText=actual
+    ?`Actual cash received during ${lbl} is shown; balances use receipts by their received month. Voucher balances remain FIFO-based.`
+    :'Paid amounts follow FIFO voucher allocations; use this view to reconcile voucher balances.';
+  $('sumHead').innerHTML=`<tr><th>Adm No</th><th>Student</th><th>Class</th><th>${actual?'Balance before '+esc(lbl):'Previous balance'}</th><th>${esc(lbl)} payable</th><th>${actual?'Received in '+esc(lbl):esc(lbl)+' paid'}</th><th>${actual?'Balance after '+esc(lbl):'Total balance'}</th></tr>`;
   $('sumBody').innerHTML=list.map(o=>{
     T.prev+=o.prev;T.pay+=o.pay;T.paid+=o.paid;T.bal+=o.bal;
     return`<tr><td data-l="Adm No" class="font-mono">${esc(o.adm)||'-'}</td>
     <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(o.name||'')}'),decodeURIComponent('${encodeURIComponent(o.adm||'')}'))" class="text-indigo-600 underline">${esc(o.name)||'-'}</a></td>
     <td data-l="Class">${esc(o.cls)||'-'}</td>
-    <td data-l="Previous balance" class="${o.prev>0?'text-rose-600 font-bold':''}">PKR ${fmt(o.prev)}</td>
+    <td data-l="${actual?'Balance before '+esc(lbl):'Previous balance'}" class="${o.prev>0?'text-rose-600 font-bold':''}">PKR ${fmt(o.prev)}</td>
     <td data-l="${esc(lbl)} payable">PKR ${fmt(o.pay)}</td>
-    <td data-l="${esc(lbl)} paid" class="text-emerald-600 font-bold">PKR ${fmt(o.paid)}</td>
-    <td data-l="Total balance" class="font-extrabold ${o.bal>0?'text-rose-600':o.bal<0?'text-indigo-600':'text-slate-500'}">${o.bal<0?'Adv '+fmt(-o.bal):'PKR '+fmt(o.bal)}</td></tr>`}).join('')
-    +(list.length?`<tr class="bg-slate-100 font-bold"><td colspan="3" class="nl text-right">Total (${list.length} students, up to ${esc(lbl)}):</td><td data-l="Previous">PKR ${fmt(T.prev)}</td><td data-l="Payable">PKR ${fmt(T.pay)}</td><td data-l="Paid">PKR ${fmt(T.paid)}</td><td data-l="Balance" class="text-rose-600">PKR ${fmt(T.bal)}</td></tr>`:`<tr><td colspan="7" class="nl p-6 text-center text-slate-400">No students found.</td></tr>`);
+    <td data-l="${actual?'Received in '+esc(lbl):esc(lbl)+' paid'}" class="text-emerald-600 font-bold">PKR ${fmt(o.paid)}</td>
+    <td data-l="${actual?'Balance after '+esc(lbl):'Total balance'}" class="font-extrabold ${o.bal>0?'text-rose-600':o.bal<0?'text-indigo-600':'text-slate-500'}">${o.bal<0?'Adv '+fmt(-o.bal):'PKR '+fmt(o.bal)}</td></tr>`}).join('')
+    +(list.length?`<tr class="bg-slate-100 font-bold"><td colspan="3" class="nl text-right">Total (${list.length} students, up to ${esc(lbl)}):</td><td data-l="${actual?'Opening balance':'Previous'}">PKR ${fmt(T.prev)}</td><td data-l="Payable">PKR ${fmt(T.pay)}</td><td data-l="${actual?'Received':'Paid'}">PKR ${fmt(T.paid)}</td><td data-l="Balance" class="text-rose-600">PKR ${fmt(T.bal)}</td></tr>`:`<tr><td colspan="7" class="nl p-6 text-center text-slate-400">No students found.</td></tr>`);
 }
 function parsePeriod(x) {
   const t = String(x || '').trim().toLowerCase(); if(!t) return null;
@@ -536,14 +604,28 @@ function buildGroups(rows){
     return g;
   });
 }
+function feeStudentIsActive(group){
+  const admission=normAdm(group.adm),name=String(group.student||'').trim().toLowerCase();
+  const student=allStudentsCache.find(row=>admission&&normAdm(row.admis_no)===admission)
+    ||allStudentsCache.find(row=>name&&String(row.student_name||'').trim().toLowerCase()===name);
+  const status=String(student?.status||'').trim().toLowerCase();
+  return !!student&&(status===''||status==='active');
+}
+function statBalance(value){return value<0?`Advance ${fmt(-value)}`:fmt(value)}
 function renderFeesTable(rowsIn){
   const groups=buildGroups(rowsIn);currentGroups=groups;
   const tb=$('feesTableBody'),tf=$('feesTableFooter');$('selectAllCheckbox').checked=false;
   if(!groups.length){tb.innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
-   ['stCount','stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');return}
+   ['stCount','stPayable','stPaid','stBal','stCountInactive','stPayableInactive','stPaidInactive','stBalInactive'].forEach(i=>$(i).innerText='0');return}
+  const totals={active:{count:0,payable:0,paid:0,balance:0},inactive:{count:0,payable:0,paid:0,balance:0}};
   let sp=0,sd=0,sb=0,html='';
   groups.forEach((g,i)=>{
-    if(!g._out){sp+=g.net;sd+=g.paid;sb+=g.balance}
+    g.isActive=feeStudentIsActive(g);
+    if(!g._out){
+      sp+=g.net;sd+=g.paid;sb+=g.balance;
+      const total=totals[g.isActive?'active':'inactive'];
+      total.count++;total.payable+=g.net;total.paid+=g.paid;total.balance+=g.balance;
+    }
     const lock=isLocked(g.vid);
     const badge=g.status==='Paid'?'bg-emerald-50 text-emerald-700':g.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
     const bc=g.balance<0?'text-indigo-600 font-extrabold':g.balance>0?'text-rose-600 font-bold':'text-slate-500';
@@ -559,7 +641,7 @@ function renderFeesTable(rowsIn){
  <td data-l="Siblings">${esc(g.sib)||'-'}</td>
  <td data-l="Items" class="min-w-[160px]">${chips}</td>
  <td data-l="Period" class="text-indigo-600 font-medium">${esc(g.period)||'-'}</td>
- <td data-l="Payable" class="font-bold">PKR ${fmt(g.payable)}${g.discount>0?`<div class="text-[10px] text-indigo-600 font-semibold">Discount -${fmt(g.discount)}</div>`:''}</td>
+ <td data-l="Net payable" class="font-bold">PKR ${fmt(g.net)}${g.discount>0?`<div class="text-[10px] text-slate-400 font-medium">Gross ${fmt(g.payable)} · Discount -${fmt(g.discount)}</div>`:''}</td>
  <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(g.paid)}</td>
  <td data-l="Balance" class="${bc}">${bt}</td>
  <td data-l="Class">${esc(g.cls)||'-'}</td>
@@ -568,7 +650,10 @@ function renderFeesTable(rowsIn){
  <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok flex-1" style="padding:.35rem .5rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem" title="Add another fee to this voucher">➕ Item</button></div></td></tr>`;
   });
   tb.innerHTML=html;
-  $('stCount').innerText=groups.filter(g=>!g._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
+  $('stCount').innerText=fmt(totals.active.count);$('stCountInactive').innerText=`Inactive vouchers: ${fmt(totals.inactive.count)}`;
+  $('stPayable').innerText=fmt(totals.active.payable);$('stPayableInactive').innerText=`Inactive net payable: ${fmt(totals.inactive.payable)}`;
+  $('stPaid').innerText=fmt(totals.active.paid);$('stPaidInactive').innerText=`Inactive collected: ${fmt(totals.inactive.paid)}`;
+  $('stBal').innerText=statBalance(totals.active.balance);$('stBalInactive').innerText=`Inactive pending: ${statBalance(totals.inactive.balance)}`;
   tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}${groups.some(g=>g._out)?' <span class="font-normal text-slate-400">(grey rows are outside the selected months, not counted)</span>':''}</div>
  <div class="flex gap-2"><button onclick="openBulkPayModal()" class="btn b-pri flex-1 md:flex-none">⚡ Bulk pay</button>
  <button onclick="sendWhatsAppReminders()" class="btn b-ok flex-1 md:flex-none">WhatsApp reminders</button></div>`;
@@ -652,13 +737,78 @@ async function saveAddItem(){
 }
 
 /* ---------- Bulk pay ---------- */
+let bulkPayScope=null;
+function feePeriodIndex(period){
+  const value=String(period||'').trim().toLowerCase();
+  const yearMatch=value.match(/20\d{2}/),year=yearMatch?Number(yearMatch[0]):SCHOOL_YEAR;
+  const months=['january','february','march','april','may','june','july','august','september','october','november','december'];
+  let month=months.findIndex(name=>value.includes(name));
+  if(month<0){
+    const shortMonths=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+    month=shortMonths.findIndex(name=>new RegExp(`\\b${name}\\b`).test(value));
+  }
+  if(month<0){
+    const numeric=value.match(/^(20\d{2})[-/.](\d{1,2})$/)||value.match(/^(\d{1,2})[-/.](20\d{2})$/);
+    if(numeric){
+      const monthValue=Number(numeric[1])>31?Number(numeric[2]):Number(numeric[1]);
+      if(monthValue>=1&&monthValue<=12)month=monthValue-1;
+    }
+  }
+  return month<0||!year?null:year*12+month;
+}
+function openStudentBulkPayModal(){
+  const voucherId=$('payVoucherId').value.trim();
+  const selected=allFeesCache.find(row=>(row.voucher_id||'').trim()===voucherId);
+  if(!selected)return;
+  const admission=normAdm(selected.admis_no),name=String(selected.student_name||'').trim().toLowerCase();
+  const match=admission
+    ?row=>normAdm(row.admis_no)===admission
+    :row=>String(row.student_name||'').trim().toLowerCase()===name;
+  const cutoff=today().slice(0,7),cutoffIndex=feePeriodIndex(`${cutoff.slice(0,4)}-${cutoff.slice(5,7)}`);
+  const dues=buildGroups(allFeesCache.filter(row=>{
+    const period=feePeriodIndex(row.period);
+    return match(row)&&period!==null&&period<=cutoffIndex;
+  })).filter(group=>group.balance>0.005)
+    .sort((a,b)=>(feePeriodIndex(a.period)??0)-(feePeriodIndex(b.period)??0)||a.vid.localeCompare(b.vid));
+  if(!dues.length){
+    showAlert(`${selected.student_name||'This student'} has no pending fee vouchers up to ${new Date(`${cutoff}-01T00:00:00`).toLocaleDateString('en-GB',{month:'long',year:'numeric'})}.`);
+    return;
+  }
+  bulkPayScope=dues.map(group=>({
+    ...group,
+    voucher_id:group.vid,
+    type:[...new Set(group.rows.map(row=>tcase(row.type||'Tuition Fee')))].join(' + ')
+  }));
+  const total=dues.reduce((sum,group)=>sum+group.balance,0);
+  const through=new Date(`${cutoff}-01T00:00:00`).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const periods=[...new Set(dues.map(group=>group.period).filter(Boolean))];
+  $('bulkTotalDuesLabel').innerText=`${selected.student_name||'Student'} pending up to ${through}`;
+  $('bulkTotalDues').value=`PKR ${fmt(total)}`;
+  $('bulkReceivedAmount').value=total.toFixed(2);
+  $('bulkPayDate').value=today();
+  $('bulkPayRemarks').value=`Bulk fee payment through ${through}`;
+  if($('payToAccount').value)$('bulkAccount').value=$('payToAccount').value;
+  $('bulkScopeSummary').innerText=`${dues.length} unpaid voucher(s) · ${periods.join(', ')} · Payment will be distributed oldest first.`;
+  $('bulkScopeSummary').classList.remove('hidden');
+  $('bulkScopeList').innerHTML=dues.map(group=>
+    `<div class="flex justify-between gap-3 px-3 py-2"><span class="min-w-0"><b>${esc(group.period||'Fee')}</b> · ${esc([...new Set(group.rows.map(row=>tcase(row.type||'Tuition Fee')))].join(', '))}<span class="block text-[10px] text-slate-400">${esc(group.vid)}</span></span><b class="shrink-0 text-rose-700">PKR ${fmt(group.balance)}</b></div>`
+  ).join('');
+  $('bulkScopeList').classList.remove('hidden');
+  closePayModal();
+  $('bulkPayModal').classList.add('open');
+}
 function openBulkPayModal(){
+  bulkPayScope=null;
+  $('bulkTotalDuesLabel').innerText='Total filtered unpaid dues';
+  $('bulkScopeSummary').classList.add('hidden');
+  $('bulkScopeList').classList.add('hidden');
+  $('bulkScopeList').innerHTML='';
   if(!filtered.length){showAlert("No vouchers in the current filter.");return}
   let t=0;filtered.forEach(r=>{const b=parseFloat(r.balance)||0;if(b>0&&!r._out)t+=b});
   $('bulkTotalDues').value=`PKR ${t}`;$('bulkReceivedAmount').value=t>0?t:'';
   $('bulkPayModal').classList.add('open');
 }
-const closeBulkPayModal=()=>$('bulkPayModal').classList.remove('open');
+const closeBulkPayModal=()=>{$('bulkPayModal').classList.remove('open');bulkPayScope=null};
 
 function sendWhatsAppReminders(){
   if(!filtered.length){showAlert("No students in the current filter.");return}
@@ -691,18 +841,23 @@ function submitBulkFifoPayment(){
   const recv=parseFloat($('bulkReceivedAmount').value)||0,date=$('bulkPayDate').value;
   const remarks=$('bulkPayRemarks').value.trim()||"Bulk payment via FIFO";
   if(recv<=0){showAlert("Please enter a valid amount greater than 0.");return}
-  showConfirm(`PKR ${recv} will be distributed via FIFO. Any extra is saved as advance on the latest voucher. Proceed?`,async()=>{
+  const scoped=bulkPayScope?[...bulkPayScope]:null;
+  showConfirm(`PKR ${fmt(recv)} will be distributed ${scoped?'across this student’s vouchers due up to today':'via FIFO'}. Any extra is saved as advance on the latest included voucher. Proceed?`,async()=>{
     closeBulkPayModal();
     const ord=(a,b,dir)=>{const m1=monthOrder[(a.period||'').trim()]||(dir>0?99:0),m2=monthOrder[(b.period||'').trim()]||(dir>0?99:0);return m1-m2};
-    const sorted=[...filtered].sort((a,b)=>ord(a,b,1)||(isArr(b)-isArr(a)));
-    const newest=[...filtered].sort((a,b)=>ord(b,a,-1)||(isArr(a)-isArr(b)))[0];
-    const label=v=>`${v.type||'Tuition Fee'} (${v.period||''}) - ${v.student_name||''}`;
-    const mk=(v,sfx,amt,rm)=>({voucher_id:`${(v.voucher_id||'').trim()}-${sfx}`,from_account:label(v),to_account:$('bulkAccount').value||'cash',description:rm,amount_in:amt,amount_out:0,date,remarks:rm});
-    const nonce=Date.now(),pl=[];let rem=recv;
+    const targets=scoped||filtered;
+    const sorted=[...targets].sort((a,b)=>scoped
+      ?(feePeriodIndex(a.period)??0)-(feePeriodIndex(b.period)??0)||String(a.voucher_id||a.vid).localeCompare(String(b.voucher_id||b.vid))
+      :ord(a,b,1)||(isArr(b)-isArr(a)));
+    const newest=scoped?sorted[sorted.length-1]:[...targets].sort((a,b)=>ord(b,a,-1)||(isArr(a)-isArr(b)))[0];
+    const label=v=>`${v.type||[...new Set((v.rows||[]).map(row=>tcase(row.type||'Tuition Fee')))].join(' + ')||'Tuition Fee'} (${v.period||''}) - ${v.student_name||v.student||''}`;
+    const nonce=Date.now(),receiptId=`BR-${date.replace(/-/g,'')}-${nonce}-${Math.floor(Math.random()*1000)}`;
+    const mk=(v,sfx,amt,rm)=>({voucher_id:`${(v.voucher_id||v.vid||'').trim()}-${sfx}`,from_account:label(v),to_account:$('bulkAccount').value||'cash',description:`Bulk receipt ${receiptId}${rm?` · ${rm}`:''}`,amount_in:amt,amount_out:0,date,remarks:rm});
+    const pl=[];let rem=recv;
     for(const v of sorted){
       if(rem<=0)break;const bal=parseFloat(v.balance)||0;let amt=0;
       if(bal>0)amt=Math.min(rem,bal);
-      else if(v.voucher_id===newest.voucher_id)amt=rem;
+      else if((v.voucher_id||v.vid)===(newest.voucher_id||newest.vid))amt=rem;
       if(amt>0){pl.push(mk(v,`${nonce}-${Math.floor(Math.random()*1000)}`,amt,remarks));rem-=amt}
     }
     if(rem>0&&newest)pl.push(mk(newest,`${nonce}-adv`,rem,remarks+" (Advance)"));
@@ -732,39 +887,123 @@ function deleteSelectedVouchers(){
 }
 
 /* ---------- Ledger ---------- */
+let ledgerViewMode='detailed',ledgerViewData=null;
 function periodStart(p){const d=parsePeriod(p),m=d?MONTHS.indexOf(d)+1:1;return `${SCHOOL_YEAR}-${String(m).padStart(2,'0')}-01`}
+function toggleLedgerView(){
+  if(!ledgerViewData)return;
+  ledgerViewMode=ledgerViewMode==='detailed'?'monthly':'detailed';
+  renderStudentLedger();
+}
+function renderStudentLedger(){
+  if(!ledgerViewData)return;
+  const monthly=ledgerViewMode==='monthly';
+  const events=monthly?ledgerViewData.monthlyEvents:ledgerViewData.events;
+  $('ledgerTable').classList.toggle('monthly-ledger',monthly);
+  $('ledgerTableHead').innerHTML=monthly
+    ?'<tr><th class="p-2">Month</th><th class="p-2">Fee items</th><th class="p-2">Charge</th><th class="p-2">Received</th><th class="p-2">Balance</th></tr>'
+    :'<tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr>';
+  $('ledgerViewToggle').innerText=monthly?'Detailed view':'Monthly view';
+  $('ledgerViewToggle').setAttribute('aria-pressed',String(monthly));
+  $('ledgerViewNote').classList.toggle('hidden',!monthly);
+  let running=0,charges=0,paid=0,html='';
+  events.forEach(event=>{
+    running=Math.round((running+event.debit-event.credit)*100)/100;
+    charges+=event.debit;paid+=event.credit;
+    const balance=running<0?`Adv ${fmt(-running)}`:fmt(running);
+    if(monthly){
+      html+=`<tr class="border-b ${event.debit?'bg-slate-50/70':''}"><td class="p-2 font-semibold whitespace-nowrap">${esc(event.label)}</td><td class="p-2 text-slate-600 whitespace-nowrap">${esc(event.description)||'-'}</td><td class="p-2 font-bold whitespace-nowrap">${event.debit?fmt(event.debit):'0'}</td><td class="p-2 font-bold text-emerald-600 whitespace-nowrap">${fmt(event.credit)}</td><td class="p-2 font-bold whitespace-nowrap ${running>0?'text-rose-600':running<0?'text-indigo-600':'text-slate-500'}">${balance}</td></tr>`;
+    }else{
+      const future=event.debit>0&&event.date.slice(0,7)>today().slice(0,7);
+      html+=`<tr class="border-b ${event.ord?'':'bg-slate-50/70'} ${future?'opacity-60':''}"><td class="p-2 font-mono whitespace-nowrap ${event.ord?'':'text-slate-400'}">${event.ord?event.date:event.date.slice(0,7)}</td><td class="p-2 font-mono text-indigo-900 whitespace-nowrap">${esc(event.vid)||'-'}</td><td class="p-2 text-indigo-600 whitespace-nowrap">${esc(event.period)||'-'}</td><td class="p-2 text-slate-600 whitespace-nowrap">${event.desc}</td><td class="p-2 font-bold whitespace-nowrap">${event.debit?fmt(event.debit):''}</td><td class="p-2 font-bold text-emerald-600 whitespace-nowrap">${event.credit?fmt(event.credit):''}</td><td class="p-2 font-bold whitespace-nowrap ${running>0?'text-rose-600':running<0?'text-indigo-600':'text-slate-500'}">${balance}</td></tr>`;
+    }
+  });
+  $('ledgerTableBody').innerHTML=html||`<tr><td colspan="${monthly?5:7}" class="p-4 text-center text-slate-400">No vouchers found for this student.</td></tr>`;
+  const due=Math.round((ledgerViewData.dueCharges-paid)*100)/100;
+  $('ledgerTotalPayable').innerText=fmt(charges);
+  $('ledgerTotalPaid').innerText=fmt(paid);
+  $('ledgerTotalBalance').innerText=running<0?`Adv ${fmt(-running)}`:fmt(running);
+  $('ledgerDue').innerText=ledgerViewData.future?`Due up to this month: ${due<0?'Adv '+fmt(-due):fmt(due)} (the grey rows are later months)`:'';
+}
 function openStudentLedger(name,adm){
-  // a real ledger: every voucher is a CHARGE, every payment is a CREDIT on the day it was received, and the balance runs on
   const nm=(name||'').trim().toLowerCase(),an=normAdm(adm||'');
   const list=allFeesCache.filter(r=>an?normAdm(r.admis_no)===an:(r.student_name||'').trim().toLowerCase()===nm);
   const byV=new Map();
   list.forEach(r=>{const k=(r.voucher_id||'').trim();let g=byV.get(k);if(!g){g={vid:k,rows:[]};byV.set(k,g)}g.rows.push(r)});
-  const ev=[];let cls='';
+  const ev=[],bulkReceipts=new Map(),monthlyRows=new Map();let cls='';
+  const getMonthRow=index=>{
+    if(!monthlyRows.has(index))monthlyRows.set(index,{label:`${MONTHS[((index%12)+12)%12]} ${Math.floor(index/12)}`,items:new Set(),debit:0,credit:0});
+    return monthlyRows.get(index);
+  };
   byV.forEach(g=>{
     const R=g.rows,fr=R[0];if(!cls)cls=fr.class||'-';
     const net=R.reduce((s,r)=>s+(r.net??(parseFloat(r.payable)||0)),0);
     const items=R.length>1?R.map(r=>`${itemName(r)} ${fmt(r.net??r.payable)}`).join(' + '):itemName(R[0]);
     const dn=R.filter(r=>r.discount>0).map(r=>`Discount ${fmt(r.discount)}: ${esc((r.remarks||'').split(' | ').find(x=>x.startsWith('Discount '))?.replace(/^Discount [^:]*: /,'')||'')}`).join('; ');
     ev.push({date:periodStart(fr.period),ord:0,vid:g.vid,period:fr.period,desc:`${esc(items)}${dn?` <span class="text-indigo-600 font-semibold">(${dn})</span>`:''}`,debit:net,credit:0});
-    ((accountsDataMap[g.vid]||{}).transactions||[]).forEach(t=>ev.push({date:String(t.date||'').slice(0,10)||periodStart(fr.period),ord:1,vid:g.vid,period:fr.period,desc:esc(t.description||t.remarks||'Payment received'),debit:0,credit:parseFloat(t.amount_in)||0}));
+    const periodIndex=feePeriodIndex(fr.period);
+    const chargeIndex=periodIndex??Number(periodStart(fr.period).slice(0,4))*12+Number(periodStart(fr.period).slice(5,7))-1;
+    const chargeMonth=getMonthRow(chargeIndex);
+    chargeMonth.debit+=net;R.forEach(r=>chargeMonth.items.add(itemName(r)));
+  ((accountsDataMap[g.vid]||{}).transactions||[]).forEach(t=>{
+    const amount=parseFloat(t.amount_in)||0;
+    if(amount<=0)return;
+    const date=String(t.date||'').slice(0,10)||periodStart(fr.period);
+    const receivedMatch=date.match(/^(\d{4})-(\d{2})/);
+    const receivedIndex=receivedMatch?Number(receivedMatch[1])*12+Number(receivedMatch[2])-1:periodIndex;
+    if(receivedIndex!==null&&receivedIndex!==undefined)getMonthRow(receivedIndex).credit+=amount;
+    const description=String(t.description||t.remarks||'Payment received');
+    const receiptMatch=description.match(/\bBulk receipt (BR-[\w-]+)/i);
+    const legacyBulk=/bulk (?:fee )?payment|payment via fifo/i.test(`${description} ${t.remarks||''}`);
+    const voucherSuffix=String(t.voucher_id||'').startsWith(`${g.vid}-`)
+      ?String(t.voucher_id).slice(g.vid.length+1).match(/^(\d+)-/)
+      :null;
+    const receiptKey=receiptMatch
+      ?`bulk:${receiptMatch[1]}`
+      :legacyBulk&&voucherSuffix
+        ?`legacy-bulk:${date}:${voucherSuffix[1]}`
+        :null;
+    if(!receiptKey){
+      ev.push({date,ord:1,vid:g.vid,period:fr.period,desc:esc(description),debit:0,credit:amount});
+      return;
+    }
+    let receipt=bulkReceipts.get(receiptKey);
+    if(!receipt){
+      receipt={date,ord:1,vid:receiptMatch?receiptMatch[1]:'Bulk receipt',period:'Multiple periods',
+        receiptId:receiptMatch?receiptMatch[1]:'',description,allocations:[],debit:0,credit:0};
+      bulkReceipts.set(receiptKey,receipt);
+    }
+    receipt.credit+=amount;
+    receipt.allocations.push({period:fr.period,label:[...new Set(R.map(itemName))].join(' + '),amount});
+  });
+  });
+  bulkReceipts.forEach(receipt=>{
+  const allocations=[...receipt.allocations].sort((a,b)=>
+    (feePeriodIndex(a.period)??0)-(feePeriodIndex(b.period)??0)||a.label.localeCompare(b.label));
+  const allocationDetails=allocations.map(allocation=>
+    `<div class="flex justify-between gap-3"><span>${esc(allocation.period||'Fee')} · ${esc(allocation.label||'Fee')}</span><b>${fmt(allocation.amount)}</b></div>`
+  ).join('');
+  const note=String(receipt.description||'').replace(/^\s*Bulk receipt BR-[\w-]+\s*[·-]?\s*/i,'').trim();
+  receipt.desc=`<details class="max-w-md"><summary class="cursor-pointer font-semibold text-indigo-700">${receipt.receiptId?`Bulk receipt ${esc(receipt.receiptId)}`:'Bulk payment received'} · adjusted across ${allocations.length} voucher(s)</summary><div class="mt-1 space-y-1 rounded-lg bg-indigo-50 p-2 text-[11px]">${note?`<div class="mb-1 text-slate-600">${esc(note)}</div>`:''}${allocationDetails}<div class="flex justify-between gap-3 border-t border-indigo-200 pt-1 font-bold"><span>Total applied to this ledger</span><span>${fmt(receipt.credit)}</span></div></div></details>`;
+  ev.push(receipt);
   });
   ev.sort((a,b)=>a.date.localeCompare(b.date)||a.ord-b.ord||String(a.vid).localeCompare(String(b.vid)));
-  const curYm=today().slice(0,7);let run=0,tc=0,tp=0,dueCh=0,future=false,html='';
-  ev.forEach(e=>{
-    run=Math.round((run+e.debit-e.credit)*100)/100;tc+=e.debit;tp+=e.credit;
-    const fut=e.debit>0&&e.date.slice(0,7)>curYm;if(fut)future=true;if(e.debit>0&&!fut)dueCh+=e.debit;
-    html+=`<tr class="border-b ${e.ord?'':'bg-slate-50/70'} ${fut?'opacity-60':''}"><td class="p-2 font-mono ${e.ord?'':'text-slate-400'}">${e.ord?e.date:e.date.slice(0,7)}</td><td class="p-2 font-mono text-indigo-900">${esc(e.vid)||'-'}</td><td class="p-2 text-indigo-600">${esc(e.period)||'-'}</td><td class="p-2 text-slate-600">${e.desc}</td><td class="p-2 font-bold">${e.debit?'PKR '+fmt(e.debit):''}</td><td class="p-2 font-bold text-emerald-600">${e.credit?'PKR '+fmt(e.credit):''}</td><td class="p-2 font-bold ${run>0?'text-rose-600':run<0?'text-indigo-600':'text-slate-500'}">${run<0?'Adv '+fmt(-run):'PKR '+fmt(run)}</td></tr>`;
-  });
-  $('ledgerTableBody').innerHTML=html||'<tr><td colspan="7" class="p-4 text-center text-slate-400">No vouchers found for this student.</td></tr>';
+  const curYm=today().slice(0,7),dueCharges=ev.filter(e=>e.debit>0&&e.date.slice(0,7)<=curYm).reduce((sum,e)=>sum+e.debit,0);
+  const future=ev.some(e=>e.debit>0&&e.date.slice(0,7)>curYm);
+  const sortedMonths=[...monthlyRows.keys()].sort((a,b)=>a-b),monthlyEvents=[];
+  if(sortedMonths.length){
+    for(let index=sortedMonths[0];index<=sortedMonths[sortedMonths.length-1];index++){
+      const row=monthlyRows.get(index)||getMonthRow(index);
+      monthlyEvents.push({label:row.label,description:[...row.items].join(', ')||'—',debit:row.debit,credit:row.credit});
+    }
+  }
+  ledgerViewData={events:ev,monthlyEvents,dueCharges,future};
+  ledgerViewMode='detailed';
   const ref=list[0]||{};
   $('ledgerStudentInfo').innerText=`Student: ${name} | Class: ${cls||'-'}${ref.admis_no?' | Admis No: '+ref.admis_no:''}${ref[FEES_SIBLINGS_COL]?' | Siblings: '+ref[FEES_SIBLINGS_COL]:''}`;
-  $('ledgerTotalPayable').innerText=`PKR ${fmt(tc)}`;$('ledgerTotalPaid').innerText=`PKR ${fmt(tp)}`;
-  $('ledgerTotalBalance').innerText=run<0?`Adv ${fmt(-run)}`:`PKR ${fmt(run)}`;
-  const due=Math.round((dueCh-tp)*100)/100;
-  $('ledgerDue').innerText=future?`Due up to this month: ${due<0?'Adv '+fmt(-due):'PKR '+fmt(due)} (the grey rows are later months)`:'';
+  renderStudentLedger();
   $('ledgerModal').classList.add('open');
 }
-const closeLedgerModal=()=>$('ledgerModal').classList.remove('open');
+const closeLedgerModal=()=>{$('ledgerModal').classList.remove('open');ledgerViewData=null};
 
 /* ---------- Single payment ---------- */
 function openPayModal(vId){
