@@ -165,6 +165,7 @@
                         </select>
                         <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
                         <button onclick="exportDaybookCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
+                        <button id="dbDeleteSelected" onclick="deleteSelectedDaybookEntries()" disabled class="bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg text-sm font-semibold">Delete selected (0)</button>
                     </div>
                     <p id="dbCount" class="text-xs text-slate-500 mt-2"></p>
                 </div>
@@ -179,7 +180,7 @@
                     <table class="w-full min-w-[1050px] text-left border-collapse text-xs">
                         <thead class="sticky top-0 z-10 bg-slate-100 text-slate-600 border-b border-slate-200 shadow-sm">
                             <tr>
-                                <th class="p-3">Date</th><th class="p-3">Voucher</th><th class="p-3">Type</th><th class="p-3">Account</th>
+                                <th class="p-3 no-print"><input id="dbSelectAll" type="checkbox" aria-label="Select all eligible filtered entries" title="Select all eligible entries matching the current filters" onchange="toggleDaybookSelectAll(this.checked)"></th><th class="p-3">Date</th><th class="p-3">Voucher</th><th class="p-3">Type</th><th class="p-3">Account</th>
                                 <th class="p-3">Particulars</th><th class="p-3 text-right">Money in</th><th class="p-3 text-right">Money out</th><th class="p-3 text-right">Running balance</th><th class="p-3 no-print"></th>
                             </tr>
                         </thead>
@@ -447,6 +448,7 @@ let fixedAssets = [], fixedAssetEvents = [], fixedAssetsLoaded = false;
 let BUSINESS_PARTNERS = [];
 let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
 let dbLimit = 300;
+let dbSelectedEntries = new Set();
 let editingId = null, entryKind = 'receipt';
 document.addEventListener('shibra:me-ready', updatePartnerWithdrawalAccess);
 document.addEventListener('shibra:me-ready', updateFixedAssetAccess);
@@ -956,6 +958,42 @@ function daybookRows(applyFilters = true) {
         return true;
     });
 }
+function isDaybookEntryDeletable(e) {
+    if(!e || e.isFixedAsset || e.isSecurityRefund) return false;
+    if((e.kind === 'bill_raised' || e.kind === 'bill_received') && entries.some(x => x.billRef === e.id)) return false;
+    return true;
+}
+function updateDaybookSelectionControls(eligibleRows) {
+    const eligibleIds = new Set(eligibleRows.map(e => e.id));
+    dbSelectedEntries = new Set([...dbSelectedEntries].filter(id => eligibleIds.has(id)));
+    const selectAll = $('dbSelectAll');
+    const deleteButton = $('dbDeleteSelected');
+    const selectedCount = dbSelectedEntries.size;
+    if(selectAll) {
+        selectAll.checked = eligibleRows.length > 0 && selectedCount === eligibleRows.length;
+        selectAll.indeterminate = selectedCount > 0 && selectedCount < eligibleRows.length;
+        selectAll.disabled = eligibleRows.length === 0;
+    }
+    if(deleteButton) {
+        deleteButton.innerText = `Delete selected (${selectedCount})`;
+        deleteButton.disabled = selectedCount === 0;
+    }
+}
+function toggleDaybookSelection(checkbox) {
+    const id = checkbox.dataset.entryId, entry = entryById[id];
+    if(!isDaybookEntryDeletable(entry)) {
+        checkbox.checked = false;
+        return;
+    }
+    if(checkbox.checked) dbSelectedEntries.add(id);
+    else dbSelectedEntries.delete(id);
+    updateDaybookSelectionControls(daybookRows().filter(isDaybookEntryDeletable));
+}
+function toggleDaybookSelectAll(checked) {
+    const eligibleRows = daybookRows().filter(isDaybookEntryDeletable);
+    dbSelectedEntries = checked ? new Set(eligibleRows.map(e => e.id)) : new Set();
+    renderDaybook();
+}
 function renderDaybook() {
     let r = getRange(), list = scopeList();
     let opening = balanceBefore(r.from, r.wallet), rec = 0, pay = 0;
@@ -969,6 +1007,8 @@ function renderDaybook() {
     $('dbStrip').innerHTML = strip.map(s => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${s.t}</div><div class="text-xl font-extrabold ${s.c} mt-1">PKR ${fmt(s.v)}</div></div>`).join('');
 
     const rows = daybookRows();
+    const eligibleRows = rows.filter(isDaybookEntryDeletable);
+    updateDaybookSelectionControls(eligibleRows);
     const isNewestFirst = $('dbOrder').value === 'desc';
     const orderedEntries = isNewestFirst ? [...rows].reverse() : rows;
     const openingBalance = balanceBefore(r.from, r.wallet);
@@ -977,7 +1017,7 @@ function renderDaybook() {
     $('dbCount').innerText = `${rows.length} ledger entr${rows.length === 1 ? 'y' : 'ies'} · ${isNewestFirst ? 'newest first' : 'oldest first'}`;
     const shown = ledgerRows.slice(0, dbLimit);
     const renderBoundaryRow = (label, balance) => `<tr class="bg-slate-50 border-y border-slate-200 font-semibold">
-        <td colspan="7" class="p-3 text-slate-600">${label}</td>
+        <td class="no-print"></td><td colspan="7" class="p-3 text-slate-600">${label}</td>
         <td class="p-3 text-right font-bold text-indigo-900 whitespace-nowrap">PKR ${fmt(balance)}</td>
         <td class="no-print"></td>
     </tr>`;
@@ -990,7 +1030,9 @@ function renderDaybook() {
         let canEdit = e.manual && !e.isSecurityRefund && !e.isFixedAsset;
         const balanceClass = balance < 0 ? 'text-rose-700' : 'text-indigo-900';
         const transferNote = isAllWalletTransfer ? `<div class="text-[11px] text-slate-500">Account transfer · PKR ${fmt(e.amount)}</div>` : '';
+        const canDelete = isDaybookEntryDeletable(e);
         return `<tr class="hover:bg-indigo-50/40 align-top">
+            <td class="p-3 no-print">${canDelete ? `<input type="checkbox" aria-label="Select voucher ${esc(e.ref)}" data-entry-id="${esc(e.id)}" ${dbSelectedEntries.has(e.id) ? 'checked' : ''} onchange="toggleDaybookSelection(this)">` : '<input type="checkbox" disabled aria-label="This entry must be managed from its source page" title="Manage this entry from its source page">'}</td>
             <td class="p-3 whitespace-nowrap text-slate-600">${fmtDate(e.date)}</td>
             <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap" title="${esc(e.id)}">${esc(e.ref)}</td>
             <td class="p-2.5 whitespace-nowrap">${kindBadge}</td>
@@ -1006,7 +1048,7 @@ function renderDaybook() {
             </td></tr>`;
     };
     if(!shown.length) {
-        $('dbBody').innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">No entries found in this period.</td></tr>';
+        $('dbBody').innerHTML = '<tr><td colspan="10" class="p-8 text-center text-slate-400">No entries found in this period.</td></tr>';
     } else {
         const firstBoundary = isNewestFirst ? closingBalance : openingBalance;
         const lastBoundary = isNewestFirst ? openingBalance : closingBalance;
@@ -1699,6 +1741,66 @@ async function saveEntry() {
 // ====================================================================================
 //  DELETE
 // ====================================================================================
+function deleteSelectedDaybookEntries() {
+    const selected = daybookRows().filter(e => dbSelectedEntries.has(e.id) && isDaybookEntryDeletable(e));
+    if(!selected.length) {
+        dbSelectedEntries.clear();
+        renderDaybook();
+        return;
+    }
+    const ids = selected.map(e => e.id);
+    confirmBox(`Permanently delete ${ids.length} selected entr${ids.length === 1 ? 'y' : 'ies'}? Fee payments will reopen the related balances. Entries managed by Assets or Payroll cannot be deleted here.`, 'Delete selected', async () => {
+        showLoading('Deleting selected entries...');
+        const deletedIds = new Set(), failures = [];
+        let deletionAttempted = false;
+        try {
+            const c = getSupabaseConfig();
+            for(let i = 0; i < ids.length; i += 50) {
+                const batch = ids.slice(i, i + 50);
+                try {
+                    const encodedIds = batch.map(id => encodeURIComponent(id)).join(',');
+                    deletionAttempted = true;
+                    const res = await fetch(`${c.url}/rest/v1/accounts?voucher_id=in.(${encodedIds})`, {
+                        method: 'DELETE',
+                        headers: sbHeaders({ "Prefer": "return=representation" })
+                    });
+                    if(!res.ok) {
+                        failures.push(`Batch ${Math.floor(i / 50) + 1}: ${await res.text()}`);
+                        continue;
+                    }
+                    const gone = await res.json();
+                    if(!Array.isArray(gone)) {
+                        failures.push(`Batch ${Math.floor(i / 50) + 1}: the database returned an unexpected response.`);
+                        continue;
+                    }
+                    gone.forEach(row => {
+                        if(row && row.voucher_id != null) deletedIds.add(String(row.voucher_id));
+                    });
+                    if(gone.length !== batch.length) {
+                        failures.push(`Batch ${Math.floor(i / 50) + 1}: expected ${batch.length} deletions but the database confirmed ${gone.length}.`);
+                    }
+                } catch(err) {
+                    console.error('Could not delete a selected Daybook batch.', err);
+                    failures.push(`Batch ${Math.floor(i / 50) + 1}: ${err.message || 'connection error'}`);
+                }
+            }
+            hideLoading();
+            if(deletedIds.size > 0) dbSelectedEntries.clear();
+            if(deletionAttempted) await initAccounts();
+            if(failures.length) {
+                console.error('Some selected Daybook entries were not confirmed as deleted.', failures);
+                toast(`Deleted ${deletedIds.size} of ${ids.length}. Some entries could not be deleted; see the console for details.`, false);
+            } else {
+                toast(`${deletedIds.size} selected entr${deletedIds.size === 1 ? 'y' : 'ies'} deleted.`);
+            }
+        } catch(err) {
+            hideLoading();
+            console.error('Could not complete the selected Daybook deletion.', err);
+            toast(`Could not complete deletion. ${deletedIds.size} of ${ids.length} deletions were confirmed.`, false);
+        }
+    });
+}
+
 function deleteEntry(id) {
     let e = entryById[id]; if(!e) return;
     if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
