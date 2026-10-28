@@ -648,9 +648,11 @@ function computeDues(txs, accRows, opts) {
             P[b.pk][b.side === 'recv' ? 'recvS' : 'payS'].push({ date: d, amt, voucher: vid, bill: b.voucher, label: b.side === 'recv' ? 'Receipt' : 'Payment' });
             return;
         }
-        const p = P[partyKey(r.description)]; if (!p) return;     // older receipts / payments matched by party name
-        if (up.startsWith('RV-') && partyKey(r.from_account) === partyKey(BOOK_SALE_HEAD) && inA > 0) p.recvS.push({ date: d, amt: inA, voucher: vid, label: 'Receipt', pool: true });
-        else if (up.startsWith('PV-') && partyKey(r.to_account) === partyKey(BOOK_BUY_HEAD) && outA > 0) p.payS.push({ date: d, amt: outA, voucher: vid, label: 'Payment', pool: true });
+        if (up.startsWith('RV-') && partyKey(r.from_account) === partyKey(BOOK_SALE_HEAD) && inA > 0) {
+            get(r.description).recvS.push({ date: d, amt: inA, voucher: vid, label: 'Receipt', pool: true });
+        } else if (up.startsWith('PV-') && partyKey(r.to_account) === partyKey(BOOK_BUY_HEAD) && outA > 0) {
+            get(r.description).payS.push({ date: d, amt: outA, voucher: vid, label: 'Payment', pool: true });
+        }
     });
     const byDate = (a, b) => (a.date || '').localeCompare(b.date || '') || String(a.voucher).localeCompare(String(b.voucher));
     const r2 = n => Math.round(n * 100) / 100;
@@ -661,7 +663,7 @@ function computeDues(txs, accRows, opts) {
         const total = E.reduce((t, e) => t + e.amt, 0), settled = S.reduce((t, x) => t + x.amt, 0);
         return { total: r2(total), settled: r2(settled), pending: r2(total - settled) };
     };
-    return Object.values(P).filter(p => p.recvE.length || p.payE.length).map(p => {
+    return Object.values(P).filter(p => p.recvE.length || p.payE.length || p.recvS.length || p.payS.length).map(p => {
         p.recv = side(p.recvE, p.recvS); p.pay = side(p.payE, p.payS);
         p.last = [...p.recvE, ...p.payE, ...p.recvS, ...p.payS].reduce((m, x) => ((x.date || '') > m ? x.date : m), '');
         return p;

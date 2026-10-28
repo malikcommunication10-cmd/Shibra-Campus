@@ -368,8 +368,21 @@
                         <label id="emPartyLabel" class="block text-xs font-medium text-slate-700 mb-1">Pending party</label>
                         <select id="emParty" onchange="pickDuesParty()" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
                     </div>
+                    <div id="emPaymentModeWrap" class="hidden">
+                        <div class="text-xs font-medium text-slate-700 mb-1">Payment method</div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="flex items-start gap-2 border rounded-lg p-2.5 text-xs cursor-pointer">
+                                <input type="radio" name="duesPaymentMode" value="bills" checked onchange="setDuesPaymentMode(this.value)">
+                                <span><b>Against selected bills</b><span class="block text-slate-500 mt-0.5">Oldest selected first; any extra clears other due bills, then remains as advance.</span></span>
+                            </label>
+                            <label class="flex items-start gap-2 border rounded-lg p-2.5 text-xs cursor-pointer">
+                                <input type="radio" name="duesPaymentMode" value="standalone" onchange="setDuesPaymentMode(this.value)">
+                                <span><b>Vendor payment</b><span class="block text-slate-500 mt-0.5">No bill selection; apply to oldest due bills, with any extra as advance.</span></span>
+                            </label>
+                        </div>
+                    </div>
                     <div id="emBillsWrap" class="hidden">
-                        <div class="text-xs font-medium text-slate-700 mb-1">Pending bills (tick the bills to settle; the voucher number stays the same)</div>
+                        <div id="emBillsLabel" class="text-xs font-medium text-slate-700 mb-1">Pending bills</div>
                         <div id="emBills" class="max-h-48 overflow-y-auto border rounded-lg divide-y bg-white"></div>
                     </div>
                 <div id="emWalletFieldsWrap" class="grid grid-cols-2 gap-3">
@@ -1209,6 +1222,7 @@ let billEntries = [];
 let duesLedgerSide = null;
 let duesLedgerOrder = 'oldest';
 let selectedVendorLedgerKey = '';
+let duesPaymentMode = 'bills';
 async function ensureBookDues() {
     if(_bd) return _bd;
     const accRaw = Object.values(entryById).map(e => e.raw);
@@ -1225,18 +1239,49 @@ async function updateDuesPicker() {
     const wrap = $('emPartyWrap'), bw = $('emBillsWrap'); if(!wrap) return;
     const isR = entryKind === 'receipt' && isRecvHead($('emHead').value), isP = entryKind === 'payment' && isPayHead($('emHead').value);
     duesSide = (!editingId && (isR || isP)) ? (isR ? 'recv' : 'pay') : null;
-    wrap.classList.toggle('hidden', !duesSide); bw.classList.add('hidden'); $('emBills').innerHTML = '';
+    wrap.classList.toggle('hidden', !duesSide);
+    $('emPaymentModeWrap').classList.toggle('hidden', duesSide !== 'pay');
+    bw.classList.add('hidden'); $('emBills').innerHTML = '';
     if(!duesSide) return;
     $('emPartyLabel').innerText = duesSide === 'recv' ? 'Student / customer with pending bills' : 'Vendor / party with pending bills';
+    const selectedParty = $('emParty').value;
     $('emParty').innerHTML = '<option value="">Loading...</option>';
     const pend = p => p[duesSide].pending;
-    const list = (await ensureBookDues()).filter(p => pend(p) > 0.005).sort((a, b) => pend(b) - pend(a));
-    $('emParty').innerHTML = list.length ? '<option value="">- choose -</option>' + list.map(p => `<option value="${esc(p.key)}">${esc(p.name)} - pending PKR ${fmt(pend(p))}</option>`).join('') : '<option value="">No pending bills</option>';
+    const list = (await ensureBookDues())
+        .filter(p => duesSide === 'pay' && duesPaymentMode === 'standalone'
+            ? p.payE.length > 0 || p.payS.some(entry => entry.label === 'Payment')
+            : pend(p) > 0.005)
+        .sort((a, b) => pend(b) - pend(a) || a.name.localeCompare(b.name));
+    const partyBalanceLabel = p => pend(p) > 0.005
+        ? `pending PKR ${fmt(pend(p))}`
+        : pend(p) < -0.005 ? `advance PKR ${fmt(-pend(p))}` : 'settled';
+    $('emParty').innerHTML = list.length ? '<option value="">- choose -</option>' + list.map(p => `<option value="${esc(p.key)}">${esc(p.name)} - ${partyBalanceLabel(p)}</option>`).join('') : '<option value="">No pending bills</option>';
+    if(list.some(p => p.key === selectedParty)) $('emParty').value = selectedParty;
 }
 function dueBills() { const d = (_bd || []).find(x => x.key === $('emParty').value); return d ? (duesSide === 'recv' ? d.recvE : d.payE).filter(e => e.rem > 0.005) : []; }
+function setDuesPaymentMode(mode) {
+    duesPaymentMode = mode === 'standalone' ? 'standalone' : 'bills';
+    const selectedParty = $('emParty').value;
+    const billsWrap = $('emBillsWrap');
+    if(duesSide !== 'pay') return;
+    if(duesPaymentMode === 'standalone') {
+        billsWrap.classList.add('hidden');
+        return;
+    }
+    if(selectedParty) pickDuesParty();
+}
 function pickDuesParty() {
     const bills = dueBills();
-    $('emBillsWrap').classList.toggle('hidden', !bills.length);
+    const showBills = duesSide === 'recv' || duesPaymentMode === 'bills';
+    $('emBillsLabel').innerText = duesSide === 'recv'
+        ? 'Pending bills (tick bills to settle; the amount is applied oldest-first).'
+        : 'Pending bills (selected bills are prioritized oldest-first; extra applies to other due bills, then remains as advance).';
+    $('emBillsWrap').classList.toggle('hidden', !showBills || !bills.length);
+    if(!showBills) {
+        const d = (_bd || []).find(x => x.key === $('emParty').value);
+        if(d) $('emTitle2').value = d.name;
+        return;
+    }
     $('emBills').innerHTML = bills.map((b, i) => `<label class="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"><input type="checkbox" class="bill-cb" data-i="${i}" checked onchange="billTick()"><span class="font-mono text-indigo-900">${esc(b.voucher)}</span><span class="flex-1 truncate">${fmtDate(b.date)} - ${esc(b.title || (b.src === 'acct' ? 'Bill' : 'Book Store'))}</span><b class="text-rose-600">${fmt(b.rem)}</b></label>`).join('');
     billTick();
 }
@@ -1253,8 +1298,11 @@ async function saveAgainstBills(kind, date, amount, w, notes) {
     if(!d) { toast('Please choose the party first.', false); return; }
     const bills = dueBills(), ticked = [...document.querySelectorAll('.bill-cb')].filter(cb => cb.checked).map(cb => bills[+cb.dataset.i]).filter(Boolean);
     if(!ticked.length) { toast('Tick at least one bill to settle.', false); return; }
-    const cap = ticked.reduce((s, b) => s + b.rem, 0);
-    if(amount > cap + 0.005) { toast(`The amount is more than the ticked bills (PKR ${fmt(cap)}).`, false); return; }
+    const cap = ticked.reduce((sum, bill) => sum + bill.rem, 0);
+    if(kind === 'receipt' && amount > cap + 0.005) {
+        toast(`The amount is more than the ticked bills (PKR ${fmt(cap)}).`, false);
+        return;
+    }
     let left = amount; const stamp = String(Date.now()).slice(-7), rows = [];
     ticked.sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach((b, i) => {
         if(left <= 0.004) return;
@@ -1263,14 +1311,58 @@ async function saveAgainstBills(kind, date, amount, w, notes) {
         rows.push(kind === 'receipt' ? { voucher_id: vid, from_account: 'Accounts Receivable', to_account: w, description: d.name, amount_in: a, amount_out: 0, date, remarks: rem }
                                      : { voucher_id: vid, from_account: w, to_account: 'Accounts Payable', description: d.name, amount_in: 0, amount_out: a, date, remarks: rem });
     });
+    if(left > 0.004 && kind === 'payment') {
+        rows.push({
+            voucher_id: genVoucherNo('payment'),
+            from_account: w,
+            to_account: BOOK_BUY_HEAD,
+            description: d.name,
+            amount_in: 0,
+            amount_out: left,
+            date,
+            remarks: `Vendor payment excess; applied oldest-first${notes ? ' | ' + notes : ''}`
+        });
+    }
     showLoading('Saving...');
     try {
         const c = getSupabaseConfig();
         const res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(rows) });
         if(!res.ok) { const t = await res.text(); hideLoading(); toast('Could not save: ' + t, false); return; }
-        closeEntry(); toast(`${kind === 'receipt' ? 'Received' : 'Paid'} PKR ${fmt(amount)} against ${rows.map(r => r.voucher_id.split('-').slice(0, 2).join('-')).join(', ')}.`);
+        closeEntry(); toast(`${kind === 'receipt' ? 'Received' : 'Paid'} PKR ${fmt(amount)}${kind === 'payment' ? ` to ${d.name}; allocated oldest-first.` : ` against ${rows.map(r => r.voucher_id.split('-').slice(0, 2).join('-')).join(', ')}.`}`);
         await initAccounts();
     } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
+}
+async function saveStandaloneVendorPayment(date, amount, w, notes) {
+    const d = (_bd || []).find(x => x.key === $('emParty').value);
+    if(!d) { toast('Please choose the vendor first.', false); return; }
+    const id = genVoucherNo('payment');
+    const payload = {
+        voucher_id: id,
+        from_account: w,
+        to_account: BOOK_BUY_HEAD,
+        description: d.name,
+        amount_in: 0,
+        amount_out: amount,
+        date,
+        remarks: notes
+    };
+    showLoading('Saving vendor payment...');
+    try {
+        const c = getSupabaseConfig();
+        const res = await fetch(`${c.url}/rest/v1/accounts`, {
+            method: 'POST',
+            headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
+            body: JSON.stringify(payload)
+        });
+        if(!res.ok) { hideLoading(); toast('Could not save vendor payment: ' + await res.text(), false); return; }
+        closeEntry();
+        toast(`Vendor payment of PKR ${fmt(amount)} recorded for ${d.name}; applied oldest-first.`);
+        await initAccounts();
+    } catch(err) {
+        hideLoading();
+        console.error(err);
+        toast('Could not connect to the database.', false);
+    }
 }
 async function startSettle(kind, key) {
     openEntry(kind);
@@ -1494,6 +1586,9 @@ function renderDuesLedger(query, parties) {
 
 function openEntry(kind) {
     editingId = null;
+    duesPaymentMode = 'bills';
+    const billModeRadio = document.querySelector('input[name="duesPaymentMode"][value="bills"]');
+    if(billModeRadio) billModeRadio.checked = true;
     $('emBatchRows').innerHTML = '';
     $('emDate').value = todayStr(); $('emAmount').value = ''; $('emHead').value = ''; $('emTitle2').value = ''; $('emNotes').value = '';
     setWalletValue('emWallet', WALLET_CHOICES[0]); setWalletValue('emWallet2', WALLET_CHOICES[1] || WALLET_CHOICES[0]);
@@ -1670,6 +1765,10 @@ async function saveEntry() {
     if(!date) { toast('Please enter a date.', false); return; }
     if(batchMode && !batchItems.length) { toast('Add at least one entry.', false); return; }
     if(amount <= 0) { toast('Amount must be greater than 0.', false); return; }
+ if(duesSide && !editingId && kind === 'payment' && duesPaymentMode === 'standalone') {
+     if(batchItems.length > 1) { toast('Vendor payments must be recorded one voucher at a time.', false); return; }
+     await saveStandaloneVendorPayment(date, amount, w, notes); return;
+ }
  if(duesSide && !editingId && (kind === 'receipt' || kind === 'payment')) {
      if(batchItems.length > 1) { toast('Pending bills must be settled one entry at a time.', false); return; }
      await saveAgainstBills(kind, date, amount, w, notes); return;
