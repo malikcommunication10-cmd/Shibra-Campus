@@ -6,7 +6,6 @@
     <title>Concept School Shibra Campus - Accounts & Daybook</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <link rel="stylesheet" href="theme.css?v=1">
     <script src="config.js?v=20261026-1"></script>
     <script src="db.js?v=20261026-1"></script>
     <script src="nav.js?v=20261026-1"></script>
@@ -16,15 +15,132 @@
         .tab-off:hover { background:#f1f5f9; }
         #entryModal.em-batch-mode > div { width:min(96vw, 1500px); max-width:1500px; }
         .em-batch-grid { display:grid; grid-template-columns:minmax(80px, .8fr) minmax(120px, 1.1fr) minmax(120px, 1fr) minmax(150px, 1.35fr) minmax(120px, 1.1fr) 40px; gap:8px; align-items:center; min-width:740px; }
+        body { background:#f3f6fb !important; color:#172033; }
+        main { max-width:1680px; margin:0 auto; }
+        .page-hero { position:relative; isolation:isolate; overflow:hidden; border:0 !important; color:#fff; background:linear-gradient(115deg,#101d3a 0%,#1d3764 58%,#256b70 100%) !important; box-shadow:0 18px 38px rgba(22,39,75,.16) !important; }
+        .page-hero:after { content:""; position:absolute; z-index:-1; width:320px; height:320px; right:-85px; top:-190px; border:1px solid rgba(255,255,255,.16); border-radius:50%; box-shadow:0 0 0 34px rgba(255,255,255,.035),0 0 0 72px rgba(255,255,255,.025); }
+        .page-hero h2 { color:#fff !important; letter-spacing:-.04em; font-size:clamp(1.6rem,2.4vw,2.25rem); }
+        .page-hero p { color:#d5e0f1 !important; max-width:680px; }
+        .page-kicker { color:#a5f3e5; text-transform:uppercase; letter-spacing:.16em; font-weight:800; font-size:10px; }
+        .page-actions { display:flex; flex-wrap:wrap; gap:8px; position:relative; z-index:1; }
+        .page-actions button { min-height:40px; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.1); color:#fff; border-radius:11px; padding:9px 13px; font-size:12px; font-weight:700; transition:background .15s,transform .15s; }
+        .page-actions button:hover { background:rgba(255,255,255,.2); transform:translateY(-1px); }
+        .page-actions button:first-child { color:#12332f; background:#a7f3d0; border-color:#a7f3d0; }
+        .page-actions button:first-child:hover { background:#6ee7b7; }
+        .filter-panel { border:1px solid #dce4ef !important; border-radius:16px !important; box-shadow:0 5px 16px rgba(28,45,77,.045) !important; }
+        .workspace-tabs-sticky { position:sticky; top:0; z-index:40; margin:0 0 1.25rem; padding:4px 0; background:#f3f6fb; }
+        .workspace-tabs { display:flex; gap:5px; padding:5px; border:1px solid #dfe6f0; border-radius:15px; background:rgba(233,238,246,.96); overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; backdrop-filter:blur(12px); }
+        .workspace-tabs .tabbtn { position:relative; flex:0 0 auto; border:1px solid transparent; border-radius:11px; padding:10px 14px; color:#53627a; font-weight:700; transition:background .15s,color .15s,box-shadow .15s; white-space:nowrap; }
+        .workspace-tabs .tab-off { background:transparent; color:#53627a; }
+        .workspace-tabs .tab-off:hover { background:rgba(255,255,255,.72); color:#1e293b; }
+        .workspace-tabs .tab-on { background:#fff; color:#162544; border-color:#fff; box-shadow:0 2px 6px rgba(29,48,80,.11); }
+        .workspace-tabs .tab-on:after { content:""; position:absolute; left:14px; right:14px; bottom:2px; height:3px; border-radius:999px; background:#148b7b; }
+        main .bg-white.rounded-2xl.border { border-color:#e1e7f0; border-radius:17px; box-shadow:0 5px 18px rgba(31,48,77,.045); }
+        main table thead { background:#f2f5fa !important; color:#526078 !important; }
+        main table thead th { font-size:10px; text-transform:uppercase; letter-spacing:.07em; font-weight:800; }
+        main table tbody tr { border-color:#edf0f5; }
+        main table tbody tr:hover { background:#f6f9fd; }
+        main .metric-card { transition:transform .18s ease,box-shadow .18s ease; }
+        main .metric-card:hover { transform:translateY(-2px); box-shadow:0 10px 24px rgba(31,48,77,.1); }
+        #kpiCards .metric-card, #dbStrip .metric-card, #walletCards .metric-card, #accountLedgerSummary .metric-card, #feeCards .metric-card { min-height:108px; border-top:3px solid #cbd5e1 !important; }
+        #kpiCards .metric-card:nth-child(4n+1), #dbStrip .metric-card:nth-child(4n+1) { border-top-color:#10b981 !important; }
+        #kpiCards .metric-card:nth-child(4n+2), #dbStrip .metric-card:nth-child(4n+2) { border-top-color:#f43f5e !important; }
+        #kpiCards .metric-card:nth-child(4n+3), #dbStrip .metric-card:nth-child(4n+3) { border-top-color:#4f46e5 !important; }
+        #kpiCards .metric-card:nth-child(4n), #dbStrip .metric-card:nth-child(4n) { border-top-color:#0f766e !important; }
+        #feeCards .metric-card:first-child { border-top-color:#10b981 !important; }
+        #feeCards .metric-card:nth-child(2) { border-top-color:#4f46e5 !important; }
+        #feeCards .metric-card:nth-child(3) { border-top-color:#f59e0b !important; }
+        #feeCards .metric-card:nth-child(4) { border-top-color:#0f766e !important; }
+        #walletCards .metric-card { border-top-color:#4f46e5 !important; }
+        #walletCards .metric-card:last-child { border-top-color:#10b981 !important; }
+        #kpiCards .metric-card > div:first-child, #dbStrip .metric-card > div:first-child { color:#62718a; font-weight:700; }
+        #kpiCards .metric-card > div:nth-child(2), #dbStrip .metric-card > div:nth-child(2) { letter-spacing:-.03em; }
+        #kpiCards .metric-card > div:nth-child(2), #dbStrip .metric-card > div:nth-child(2), #walletCards .metric-card > div:nth-child(2), #feeCards .metric-card > div:nth-child(2), #accountLedgerSummary .metric-card > div:nth-child(2), #duesCards .metric-card > div:nth-child(2) { font-variant-numeric:tabular-nums; }
+        #monthChart svg rect[fill="#10b981"], #monthChart svg rect[fill="#f43f5e"] { transform-box:fill-box; transform-origin:center bottom; animation:chart-bar-grow .65s cubic-bezier(.2,.7,.25,1) both; }
+        #monthChart svg rect[fill="#f43f5e"] { animation-delay:.08s; }
+        #topExpenses > div > div:last-child > div:last-child, #incomeHeads > div > div:last-child > div:last-child, #expenseHeads > div > div:last-child > div:last-child { transform-origin:left center; animation:head-bar-grow .55s cubic-bezier(.2,.7,.25,1) both; }
+        @keyframes chart-bar-grow { from { transform:scaleY(.04); opacity:.5; } to { transform:scaleY(1); opacity:1; } }
+        @keyframes head-bar-grow { from { transform:scaleX(.03); opacity:.5; } to { transform:scaleX(1); opacity:1; } }
+        #tab-daybook > .bg-white.rounded-2xl.overflow-x-auto { border-radius:17px; }
+        #tab-daybook #dbBody tr:not(:first-child):not(:last-child) td { padding-top:13px; padding-bottom:13px; }
+        #tab-daybook #dbBody td:nth-child(7) { background:#ecfdf5; }
+        #tab-daybook #dbBody td:nth-child(8) { background:#fff1f2; }
+        #tab-daybook #dbBody tr:hover td:nth-child(7) { background:#d1fae5; }
+        #tab-daybook #dbBody tr:hover td:nth-child(8) { background:#ffe4e6; }
+        #tab-daybook #dbBody tr.ledger-boundary td { padding-top:10px; padding-bottom:10px; background:#f1f5f9; border-top:1px solid #cbd5e1; border-bottom:1px solid #cbd5e1; }
+        #tab-daybook #dbBody tr.ledger-boundary td:nth-child(7), #tab-daybook #dbBody tr.ledger-boundary td:nth-child(8) { background:#f1f5f9; }
+        #tab-daybook #dbBody td:nth-child(4) span { display:inline-flex; align-items:center; border-radius:999px; padding:2px 9px; font-size:10px; font-weight:700; }
+        #tab-daybook .scroll-area thead th { position:sticky; top:0; z-index:10; }
+        #tab-daybook #dbBody td:nth-child(7), #tab-daybook #dbBody td:nth-child(8), #tab-daybook #dbBody td:nth-child(9), #accountLedgerBody td:nth-last-child(-n+3), #tab-wallets #walletBody td:not(:first-child) { font-variant-numeric:tabular-nums; }
+        #tab-daybook #dbSelectAll, #tab-daybook [data-entry-id] { width:16px; height:16px; accent-color:#0f766e; }
+        #dbCount { color:#62718a; font-weight:600; }
+        #dbDeleteSelected { margin-left:auto; }
+        #accountLedgerSearch, #ledgerAccount { min-height:44px !important; font-size:14px !important; }
+        .ledger-picker { position:relative; }
+        .ledger-picker-menu { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:50; padding:8px; border:1px solid #dbe3ee; border-radius:12px; background:#fff; box-shadow:0 16px 36px rgba(15,23,42,.16); }
+        .ledger-picker-options { max-height:320px; overflow-y:auto; overscroll-behavior:contain; }
+        .ledger-picker-group { padding:8px 10px 4px; color:#64748b; font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+        .ledger-picker-option { display:block; width:100%; padding:9px 10px; border:0; border-radius:8px; background:#fff; color:#334155; text-align:left; font-size:13px; cursor:pointer; }
+        .ledger-picker-option:hover, .ledger-picker-option:focus, .ledger-picker-option[aria-selected="true"] { outline:none; background:#eef2ff; color:#312e81; }
+        #accountLedgerBody td:last-child { font-weight:800; font-variant-numeric:tabular-nums; }
+        #accountLedgerLedgerHeader.hidden { display:none; }
+        #duesCards > button:first-child { border-top:3px solid #f59e0b !important; }
+        #duesCards > button:nth-child(2) { border-top:3px solid #f43f5e !important; }
+        #duesCards > button[aria-expanded="true"] { box-shadow:0 0 0 2px rgba(79,70,229,.13),0 8px 22px rgba(31,48,77,.08); }
+        #tab-dues details { overflow:hidden; }
+        #tab-dues details > summary { position:relative; list-style:none; padding:15px 44px 15px 16px !important; background:#f8fafc; transition:background .15s; }
+        #tab-dues details > summary::-webkit-details-marker { display:none; }
+        #tab-dues details > summary:after { content:"＋"; position:absolute; right:16px; top:50%; transform:translateY(-50%); color:#4f46e5; font-size:18px; }
+        #tab-dues details[open] > summary { background:#eef2ff; border-bottom:1px solid #e1e7f0; }
+        #tab-dues details[open] > summary:after { content:"−"; }
+        #tab-heads #incomeHeads, #tab-heads #expenseHeads { font-variant-numeric:tabular-nums; }
+        #tab-heads > .grid > div:first-child { border-top:3px solid #10b981; }
+        #tab-heads > .grid > div:nth-child(2) { border-top:3px solid #f43f5e; }
+        #tab-ledgers #accountLedgerSummary .metric-card { border-top:3px solid #4f46e5 !important; }
+        #tab-assets .bg-white.rounded-2xl.border { overflow:hidden; }
+        #tab-assets .bg-white.rounded-2xl.border > .p-4.border-b { background:#fafbfe; }
+        #tab-assets .bg-white.rounded-2xl.border button { transition:transform .15s,box-shadow .15s,background .15s; }
+        #tab-assets .bg-white.rounded-2xl.border button:hover { transform:translateY(-1px); }
+        .page-section-heading { color:#152542; font-size:14px; font-weight:800; letter-spacing:-.01em; }
+        .filter-heading { color:#182947; font-size:12px; font-weight:800; margin:0 0 10px 1px; }
+        .filter-panel select, .filter-panel input { border-color:#dbe3ee; border-radius:10px; background:#f8fafc; min-height:38px; }
+        .filter-panel select:focus, .filter-panel input:focus { outline:2px solid rgba(20,139,123,.2); border-color:#148b7b; background:#fff; }
+        #entryModal, #partnerWithdrawalModal, #assetEventModal, #qeModal, #confirmModal { backdrop-filter:blur(5px); }
+        #entryModal > div, #partnerWithdrawalModal > div, #assetEventModal > div, #qeModal > div, #confirmModal > div { animation:modal-enter .2s ease-out both; }
+        #entryModal input, #entryModal select, #partnerWithdrawalModal input, #partnerWithdrawalModal select, #assetEventModal input, #assetEventModal select, #qeModal input, #qeModal select { min-height:44px; }
+        #emAmount, #pwAmount, #assetAmount, #qeAmount { font-size:19px !important; font-variant-numeric:tabular-nums; }
+        @keyframes modal-enter { from { opacity:0; transform:translateY(10px) scale(.99); } to { opacity:1; transform:translateY(0) scale(1); } }
+        @media (max-width:767px) {
+            main.flex-1 { padding-left:12px !important; padding-right:12px !important; }
+            .page-hero { padding:18px !important; gap:14px !important; }
+            .page-actions { width:100%; }
+            .page-actions button { flex:1 1 calc(50% - 8px); }
+            .workspace-tabs-sticky { margin-left:-2px; margin-right:-2px; }
+            .workspace-tabs { border-radius:12px; }
+            .workspace-tabs .tabbtn { padding:9px 11px; font-size:12px; }
+            #tab-ledgers #accountLedgerSearch, #tab-ledgers #ledgerPickerButton { width:100%; }
+            #tab-ledgers table { min-width:760px; }
+            #tab-daybook .scroll-area { max-height:72vh; }
+            #entryModal > div, #partnerWithdrawalModal > div, #assetEventModal > div { max-height:92dvh; border-radius:18px 18px 0 0; }
+        }
+        @media (prefers-reduced-motion:reduce) {
+            *, *:before, *:after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+        }
         #printHeader { display:none; }
         @media print {
             aside, .no-print, #mobileBar, #fab, #entryModal, #settingsModal, #confirmModal, #toast, #loadingOverlay { display:none !important; }
             #printHeader { display:block !important; margin-bottom:10px; }
-            body { background:#fff !important; }
+            body { background:#fff !important; color:#111 !important; }
             main { padding:0 !important; }
             .print-card { box-shadow:none !important; border:1px solid #cbd5e1 !important; }
-            table { font-size:10px !important; }
+            .workspace-tabs-sticky, .workspace-tabs, .page-hero, .filter-panel { display:none !important; }
+            .metric-card { box-shadow:none !important; transform:none !important; }
+            main table { font-size:10px !important; }
+            main table thead { position:static !important; }
+            #tab-daybook #dbBody td:nth-child(7), #tab-daybook #dbBody td:nth-child(8) { background:#fff !important; }
             .scroll-area { max-height:none !important; overflow:visible !important; }
+            details:not([open]) > :not(summary) { display:block !important; }
+            summary { display:none !important; }
         }
     </style>
 </head>
@@ -58,21 +174,23 @@
 
         <!-- MAIN -->
         <main class="flex-1 p-4 md:p-8 min-w-0 pb-24 md:pb-8">
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
-                <div>
-                    <h2 class="text-2xl font-extrabold text-indigo-950">Accounts & Daybook</h2>
-                    <p class="text-sm text-slate-500">Receipts, payments, cash / bank balances and reports — all in one place</p>
+            <div class="page-hero p-5 md:p-7 rounded-2xl mb-5 flex flex-col xl:flex-row xl:justify-between xl:items-center gap-5 no-print">
+                <div class="relative z-10">
+                    <div class="page-kicker mb-2">Shibra Campus · Finance</div>
+                    <h2 class="font-extrabold">Accounts & Daybook</h2>
+                    <p id="pageContext" class="text-sm mt-2">A clear view of receipts, payments, balances and account ledgers. Every transaction is traceable from entry to running balance.</p>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <button onclick="openEntry('receipt')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➕ Receipt</button>
-                    <button onclick="openEntry('payment')" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">➖ Payment</button>
-                    <button id="partnerWithdrawalButton" onclick="openPartnerWithdrawal()" class="hidden bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🤝 Partner withdrawal</button>
-                    <button onclick="openEntry('transfer')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">🔁 Transfer</button>
+                <div class="page-actions">
+                    <button onclick="openEntry('receipt')">＋ New receipt</button>
+                    <button onclick="openEntry('payment')">− New payment</button>
+                    <button id="partnerWithdrawalButton" onclick="openPartnerWithdrawal()" class="hidden">Partner withdrawal</button>
+                    <button onclick="openEntry('transfer')">⇄ Transfer</button>
                     </div>
             </div>
 
             <!-- GLOBAL FILTER -->
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
+            <div class="filter-panel bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
+                <div class="filter-heading">Report period & account</div>
                 <div class="flex flex-wrap items-end gap-3">
                     <div>
                         <label class="block text-[11px] font-medium text-slate-500 mb-1">Period</label>
@@ -89,7 +207,7 @@
                     </div>
                     <div><label class="block text-[11px] font-medium text-slate-500 mb-1">From</label><input id="gFrom" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
                     <div><label class="block text-[11px] font-medium text-slate-500 mb-1">To</label><input id="gTo" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
-                    <div>
+                    <div id="globalWalletFilter">
                         <label class="block text-[11px] font-medium text-slate-500 mb-1">Account</label>
                         <select id="gWallet" onchange="renderAll()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All accounts</option></select>
                     </div>
@@ -98,14 +216,17 @@
             </div>
 
             <!-- TABS -->
-            <div class="flex flex-wrap gap-2 mb-4 no-print">
+            <div class="workspace-tabs-sticky no-print">
+            <div class="workspace-tabs">
                 <button data-tab="overview" onclick="showTab('overview')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-on">📊 Overview</button>
                 <button data-tab="daybook" onclick="showTab('daybook')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📒 Daybook</button>
                 <button data-tab="fees" onclick="showTab('fees')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🎓 Fee Collection</button>
                 <button data-tab="heads" onclick="showTab('heads')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🗂️ Heads Summary</button>
                 <button data-tab="wallets" onclick="showTab('wallets')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🏦 Cash & Bank</button>
-        <button data-tab="dues" onclick="showTab('dues')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🧾 Receivable / Payable</button>
+                <button data-tab="ledgers" onclick="showTab('ledgers')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📚 Account ledgers</button>
+                <button data-tab="dues" onclick="showTab('dues')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🧾 Receivable / Payable</button>
                 <button data-tab="assets" onclick="showTab('assets')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🏫 Purchases / Assets</button>
+            </div>
             </div>
 
             <div id="printHeader">
@@ -148,6 +269,7 @@
 
             <!-- DAYBOOK -->
             <section id="tab-daybook" class="hidden space-y-4">
+                <div class="flex flex-wrap items-end justify-between gap-2"><div><div class="page-section-heading">Daily ledger</div><p class="text-xs text-slate-500 mt-1">Transactions are listed chronologically with a running cash balance.</p></div><div class="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-full px-3 py-1.5">Money in · Money out · Balance</div></div>
                 <div id="dbStrip" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
                 <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
                     <div class="flex flex-wrap gap-2 items-center">
@@ -241,7 +363,7 @@
                 <summary class="p-3 font-bold text-sm text-indigo-900 cursor-pointer">Manage bill records and pending party balances</summary>
                 <div class="space-y-3 p-3 pt-0">
             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
-                <table class="w-full text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Party (open bills)</th><th class="p-2.5 text-right">To receive</th><th class="p-2.5 text-right">To pay</th><th class="p-2.5">Oldest bill</th><th class="p-2.5 no-print"></th></tr></thead><tbody id="duesBody"></tbody></table>
+                <table class="w-full text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Party (open bills)</th><th class="p-2.5 text-right">Receivable / refund</th><th class="p-2.5 text-right">Payable / refund</th><th class="p-2.5">Oldest bill</th><th class="p-2.5 no-print"></th></tr></thead><tbody id="duesBody"></tbody></table>
             </div>
             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
                 <div class="p-3 font-bold text-sm text-indigo-900 border-b">Bills created in Accounts</div>
@@ -266,6 +388,47 @@
                         </thead>
                         <tbody id="walletBody"></tbody>
                     </table>
+                </div>
+            </section>
+
+            <section id="tab-ledgers" class="hidden space-y-4">
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
+                    <div class="flex flex-wrap items-end gap-3 justify-between">
+                        <div class="min-w-[220px] flex-1">
+                            <label for="ledgerPickerButton" class="block text-xs font-semibold text-slate-600 mb-1">Choose account or party</label>
+                            <div id="ledgerPicker" class="ledger-picker">
+                                <button id="ledgerPickerButton" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="ledgerPickerMenu" onclick="toggleLedgerPicker()" class="w-full min-h-[44px] border rounded-lg px-3 py-2.5 text-sm bg-white text-left flex items-center justify-between gap-3">
+                                    <span id="ledgerPickerLabel" class="truncate">Loading ledgers…</span><span aria-hidden="true" class="text-slate-400">⌄</span>
+                                </button>
+                                <div id="ledgerPickerMenu" class="ledger-picker-menu hidden">
+                                    <input id="ledgerPickerSearch" type="search" autocomplete="off" placeholder="Search ledgers..." aria-label="Search accounts and ledgers" oninput="renderLedgerPickerOptions()" class="w-full border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none mb-2">
+                                    <div id="ledgerPickerOptions" class="ledger-picker-options" role="listbox" aria-label="Accounts and ledgers"></div>
+                                </div>
+                            </div>
+                            <select id="ledgerAccount" aria-hidden="true" tabindex="-1" class="hidden">
+                                <option value="">Loading ledgers…</option>
+                            </select>
+                        </div>
+                        <div class="min-w-[220px] flex-1">
+                            <label for="accountLedgerSearch" class="block text-xs font-semibold text-slate-600 mb-1">Search ledger transactions</label>
+                            <input id="accountLedgerSearch" type="search" oninput="accountLedgerDisplayLimit=300;renderAccountLedgerRows()" placeholder="Date, voucher, ledger, student or amount" class="w-full border rounded-lg px-3 py-2.5 text-sm bg-white">
+                        </div>
+                        <div class="flex gap-2 no-print">
+                            <button onclick="exportAccountLedgerCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
+                            <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-2">Date range follows the filters above. Search checks every ledger when “All ledgers” is selected.</p>
+                </div>
+                <div id="accountLedgerSummary" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
+                    <table class="w-full min-w-[760px] text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b"><tr><th class="p-3">Date</th><th id="accountLedgerLedgerHeader" class="p-3">Ledger</th><th class="p-3">Voucher</th><th class="p-3">Particulars</th><th class="p-3 text-right">Debit</th><th class="p-3 text-right">Credit</th><th class="p-3 text-right">Running balance</th></tr></thead>
+                        <tbody id="accountLedgerBody"></tbody>
+                    </table>
+                    <div id="accountLedgerMore" class="hidden no-print p-3 text-center border-t">
+                        <button type="button" onclick="loadMoreAccountLedgerRows()" class="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50">Show more entries</button>
+                    </div>
                 </div>
             </section>
 
@@ -461,6 +624,7 @@ const fixedAssetEntryMeta = entry => entry.isFixedAsset
 //  STATE + HELPERS
 // ====================================================================================
 let entries = [], entryById = {}, feesByVoucher = {};
+let selectedAccountLedgerKey = '';
 let fixedAssets = [], fixedAssetEvents = [], fixedAssetsLoaded = false;
 let BUSINESS_PARTNERS = [];
 let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
@@ -652,7 +816,15 @@ async function initAccounts() {
         billEntries = allE.filter(e => e.kind === 'bill_raised' || e.kind === 'bill_received');
         entries = allE.filter(e => e.kind !== 'bill_raised' && e.kind !== 'bill_received');
         if(!$('gFrom').value) applyPreset();
-        renderAll();
+        const params = new URLSearchParams(location.search);
+        const requestedParty = params.get('party');
+        if(requestedParty) {
+            $('duesSearch').value = requestedParty;
+            selectedAccountLedgerKey = 'party:' + partyKey(requestedParty);
+        }
+        const requestedTab = params.get('tab');
+        if(['overview', 'daybook', 'fees', 'heads', 'wallets', 'ledgers', 'dues', 'assets'].includes(requestedTab)) showTab(requestedTab);
+        else renderAll();
     } catch (e) {
         console.error(e);
         toast('Could not load data. Check your internet connection or API settings.', false);
@@ -873,19 +1045,32 @@ function scopeList() {
 //  TABS + RENDER
 // ====================================================================================
 function showTab(t) {
-    ['overview', 'daybook', 'fees', 'heads', 'wallets', 'dues', 'assets'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    ['overview', 'daybook', 'fees', 'heads', 'wallets', 'ledgers', 'dues', 'assets'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    $('globalWalletFilter').classList.toggle('hidden', t === 'ledgers');
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
     if (t === 'overview') renderOverview();
     else if (t === 'daybook') renderDaybook();
     else if (t === 'fees') renderFeeTab();
     else if (t === 'heads') renderHeads();
     else if (t === 'wallets') renderWallets();
+    else if (t === 'ledgers') renderAccountLedger();
     else if (t === 'dues') renderDues();
     else if (t === 'assets') {
         if (!fixedAssetsLoaded) loadFixedAssets();
         else renderFixedAssets();
     }
-    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable', assets: 'Purchases / Assets' };
+    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', ledgers: 'Account Ledgers', dues: 'Receivable / Payable', assets: 'Purchases / Assets' };
+    const context = {
+        overview: 'A snapshot of collections, operating expenses, available balances and recent account activity.',
+        daybook: 'Your daily cashbook: filter vouchers, see money in and out, and follow the balance after each transaction.',
+        fees: 'Review fee receipts with student, class, period and account details.',
+        heads: 'Compare income and expense categories for the selected period.',
+        wallets: 'Review balances and transfers across cash, bank and online accounts.',
+        ledgers: 'Open a chronological debit-credit ledger for any account, head or Book Store party.',
+        dues: 'See what is receivable, payable or refundable, and settle the party through Accounts.',
+        assets: 'Manage fixed assets and view their purchase, sale and depreciation history.'
+    };
+    $('pageContext').innerText = context[t] || context.overview;
     let r = getRange();
     $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;
 }
@@ -918,7 +1103,7 @@ function renderOverview() {
         { t: 'Closing balance', v: 'PKR ' + fmt(closing), c: closing >= 0 ? 'text-slate-900' : 'text-rose-600', s: r.wallet === 'ALL' ? 'Cash + Bank + Online' : WALLETS[r.wallet].label },
         { t: 'Partner withdrawals', v: 'PKR ' + fmt(list.filter(e => e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).reduce((sum, e) => sum + e.amount, 0)), c: 'text-violet-700', s: 'Not included in expenses / profit' }
     ];
-    $('kpiCards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`).join('');
+    $('kpiCards').innerHTML = cards.map(c => `<div class="metric-card bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`).join('');
 
     // monthly chart
     let from = parseYmd(r.from === '0000-01-01' ? todayStr() : r.from), to = parseYmd(r.to === '9999-12-31' ? todayStr() : r.to);
@@ -1034,7 +1219,7 @@ function renderDaybook() {
         { t: 'Total payments', v: pay, c: 'text-rose-600' },
         { t: 'Closing balance', v: opening + rec - pay, c: 'text-indigo-700' }
     ];
-    $('dbStrip').innerHTML = strip.map(s => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${s.t}</div><div class="text-xl font-extrabold ${s.c} mt-1">PKR ${fmt(s.v)}</div></div>`).join('');
+    $('dbStrip').innerHTML = strip.map(s => `<div class="metric-card bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${s.t}</div><div class="text-xl font-extrabold ${s.c} mt-1">PKR ${fmt(s.v)}</div></div>`).join('');
 
     const rows = daybookRows();
     const eligibleRows = rows.filter(isDaybookEntryDeletable);
@@ -1046,7 +1231,7 @@ function renderDaybook() {
     const ledgerRows = orderedEntries.map(entry => ({ entry, balance: entry._bal }));
     $('dbCount').innerText = `${rows.length} ledger entr${rows.length === 1 ? 'y' : 'ies'} · ${isNewestFirst ? 'newest first' : 'oldest first'}`;
     const shown = ledgerRows.slice(0, dbLimit);
-    const renderBoundaryRow = (label, balance) => `<tr class="bg-slate-50 border-y border-slate-200 font-semibold">
+    const renderBoundaryRow = (label, balance) => `<tr class="ledger-boundary bg-slate-50 border-y border-slate-200 font-semibold">
         <td class="no-print"></td><td colspan="7" class="p-3 text-slate-600">${label}</td>
         <td class="p-3 text-right font-bold text-indigo-900 whitespace-nowrap">PKR ${fmt(balance)}</td>
         <td class="no-print"></td>
@@ -1191,10 +1376,10 @@ function renderWallets() {
     let total = 0;
     let cards = Object.keys(WALLETS).map(w => {
         let b = balanceUpTo(end, w); total += b;
-        return `<button onclick="$('gWallet').value='${w}';showTab('daybook')" class="text-left bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-indigo-300 transition print-card">
+        return `<button onclick="$('gWallet').value='${w}';showTab('daybook')" class="metric-card text-left bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-indigo-300 transition print-card">
             <div class="text-xs text-slate-500">${WALLETS[w].icon} ${WALLETS[w].label}</div><div class="text-xl font-extrabold ${b >= 0 ? 'text-slate-900' : 'text-rose-600'} mt-1">PKR ${fmt(b)}</div><div class="text-[11px] text-slate-400 mt-0.5">as of ${fmtDate(end)}</div></button>`;
     });
-    cards.push(`<div class="bg-indigo-900 text-white rounded-2xl p-4 shadow-sm"><div class="text-xs text-indigo-200">Total balance</div><div class="text-xl font-extrabold mt-1">PKR ${fmt(total)}</div><div class="text-[11px] text-indigo-300 mt-0.5">Cash + Bank + Online</div></div>`);
+    cards.push(`<div class="metric-card bg-indigo-900 text-white rounded-2xl p-4 shadow-sm"><div class="text-xs text-indigo-200">Total balance</div><div class="text-xl font-extrabold mt-1">PKR ${fmt(total)}</div><div class="text-[11px] text-indigo-300 mt-0.5">Cash + Bank + Online</div></div>`);
     $('walletCards').innerHTML = cards.join('');
 
     let inRange = entries.filter(e => e.date >= r.from && e.date <= r.to);
@@ -1224,6 +1409,301 @@ function exportWalletsCsv() {
         return [WALLETS[wallet].label, opening, receipts, payments, transferIn, transferOut, opening + receipts - payments + transferIn - transferOut, balanceUpTo(end, wallet)];
     });
     exportCsv('cash-bank-summary', ['Account', 'Opening', 'Receipts', 'Payments', 'Transfer in', 'Transfer out', 'Closing for period', `Balance as of ${end}`], rows);
+}
+
+// ---------------- ACCOUNT LEDGERS ----------------
+let accountLedgerRows = [], accountLedgerOpening = 0, accountLedgerNormalSide = 'Dr', accountLedgerDisplayLimit = 300;
+function ledgerBalanceText(balance, normalSide = accountLedgerNormalSide) {
+    const side = balance === 0 ? '' : (balance > 0 ? normalSide : (normalSide === 'Dr' ? 'Cr' : 'Dr'));
+    return `PKR ${fmt(Math.abs(balance))}${side ? ' ' + side : ''}`;
+}
+function syncLedgerPicker() {
+    const picker = $('ledgerAccount'), selected = picker.options[picker.selectedIndex];
+    $('ledgerPickerLabel').textContent = selected ? selected.textContent.trim() : 'Choose account or party';
+    renderLedgerPickerOptions();
+}
+function renderLedgerPickerOptions() {
+    const query = $('ledgerPickerSearch').value.trim().toLocaleLowerCase();
+    const options = [...$('ledgerAccount').options].filter(option => option.value);
+    const matching = options.filter(option => {
+        const group = option.parentElement.tagName === 'OPTGROUP' ? option.parentElement.label : 'Ledgers';
+        return `${group} ${option.textContent}`.toLocaleLowerCase().includes(query);
+    });
+    const groups = new Map();
+    matching.forEach(option => {
+        const group = option.parentElement.tagName === 'OPTGROUP' ? option.parentElement.label : 'Ledgers';
+        if(!groups.has(group)) groups.set(group, []);
+        groups.get(group).push(option);
+    });
+    $('ledgerPickerOptions').innerHTML = groups.size
+        ? [...groups].map(([group, items]) =>
+            `<div class="ledger-picker-group">${esc(group)}</div>${items.map(option =>
+                `<button type="button" role="option" aria-selected="${option.value === $('ledgerAccount').value}" data-ledger-key="${esc(option.value)}" class="ledger-picker-option">${esc(option.textContent.trim())}</button>`
+            ).join('')}`
+        ).join('')
+        : '<div class="px-3 py-4 text-center text-sm text-slate-400">No matching ledger.</div>';
+}
+function toggleLedgerPicker() {
+    const menu = $('ledgerPickerMenu'), open = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', !open);
+    $('ledgerPickerButton').setAttribute('aria-expanded', String(open));
+    if(open) {
+        $('ledgerPickerSearch').value = '';
+        renderLedgerPickerOptions();
+        $('ledgerPickerSearch').focus();
+    }
+}
+function closeLedgerPicker() {
+    $('ledgerPickerMenu').classList.add('hidden');
+    $('ledgerPickerButton').setAttribute('aria-expanded', 'false');
+}
+$('ledgerPickerOptions').addEventListener('click', event => {
+    const option = event.target.closest('[data-ledger-key]');
+    if(!option) return;
+    $('ledgerAccount').value = option.dataset.ledgerKey;
+    selectedAccountLedgerKey = option.dataset.ledgerKey;
+    $('accountLedgerSearch').value = '';
+    accountLedgerDisplayLimit = 300;
+    closeLedgerPicker();
+    syncLedgerPicker();
+    renderAccountLedger();
+});
+$('ledgerPickerSearch').addEventListener('keydown', event => {
+    if(event.key === 'Escape') {
+        closeLedgerPicker();
+        $('ledgerPickerButton').focus();
+    } else if(event.key === 'Enter') {
+        event.preventDefault();
+        $('ledgerPickerOptions').querySelector('[data-ledger-key]')?.click();
+    }
+});
+document.addEventListener('click', event => {
+    if(!event.target.closest('#ledgerPicker')) closeLedgerPicker();
+});
+async function renderAccountLedger() {
+    const picker = $('ledgerAccount');
+    accountLedgerDisplayLimit = 300;
+    selectedAccountLedgerKey = picker.value || selectedAccountLedgerKey;
+    const parties = await ensureBookDues();
+    const headMap = new Map();
+    [...INCOME_HEADS, ...EXPENSE_HEADS, ...entries.map(entry => entry.headLabel)]
+        .filter(Boolean)
+        .forEach(head => {
+            const key = partyKey(head);
+            if(key) headMap.set(key, String(head).trim());
+        });
+    const partyList = parties.filter(p =>
+        p.recvE.length || p.payE.length || p.recvS.length || p.payS.length
+    ).sort((a, b) => a.name.localeCompare(b.name));
+    const entriesByWallet = new Map(), entriesByHead = new Map(), partiesByKey = new Map();
+    const addToIndex = (index, key, entry) => {
+        if(!key) return;
+        if(!index.has(key)) index.set(key, []);
+        index.get(key).push(entry);
+    };
+    entries.forEach(entry => {
+        const walletKeys = entry.kind === 'transfer' ? [entry.wallet, entry.wallet2] : [entry.wallet];
+        [...new Set(walletKeys)].forEach(wallet => addToIndex(entriesByWallet, wallet, entry));
+        addToIndex(entriesByHead, partyKey(entry.headLabel), entry);
+    });
+    partyList.forEach(party => partiesByKey.set(party.key, party));
+    const option = (key, label) => `<option value="${esc(key)}">${esc(label)}</option>`;
+    picker.innerHTML = [
+        option('all', 'All ledgers'),
+        '<optgroup label="Cash & bank">',
+        ...Object.keys(WALLETS).map(key => option('wallet:' + key, `${WALLETS[key].icon} ${WALLETS[key].label}`)),
+        '</optgroup><optgroup label="Income & expense heads">',
+        ...[...headMap].sort((a, b) => a[1].localeCompare(b[1])).map(([key, name]) => option('head:' + key, name)),
+        '</optgroup><optgroup label="Book Store parties">',
+        ...partyList.map(p => option('party:' + p.key, p.name)),
+        '</optgroup>'
+    ].join('');
+    if(![...picker.options].some(item => item.value === selectedAccountLedgerKey)) {
+        selectedAccountLedgerKey = 'all';
+    }
+    picker.value = selectedAccountLedgerKey;
+    syncLedgerPicker();
+    const range = getRange(), isAllLedgers = picker.value === 'all';
+    const selections = isAllLedgers
+        ? [...picker.options].filter(item => item.value && item.value !== 'all')
+        : [picker.options[picker.selectedIndex]].filter(Boolean);
+    const entryParticulars = entry => entry.isFee
+        ? [entry.title, entry.fee?.student, entry.fee?.adm ? `Adm# ${entry.fee.adm}` : '',
+            titleCase(entry.fee?.type || 'Tuition Fee'), entry.fee?.period]
+            .filter(Boolean).join(' · ')
+        : entry.title || entry.headLabel;
+    const buildEvents = selection => {
+        const [type, ...parts] = selection.value.split(':');
+        const key = parts.join(':');
+        const events = [];
+        let normalSide = 'Dr';
+        const push = (date, voucher, particulars, debit, credit, side, sequence) => {
+            const eventDate = String(date || '').slice(0, 10);
+            if(!eventDate || eventDate > range.to) return;
+            events.push({
+                date: eventDate, voucher: String(voucher || ''),
+                particulars: String(particulars || ''), debit: Number(debit) || 0,
+                credit: Number(credit) || 0, normalSide: side || 'Dr', sequence
+            });
+        };
+        if(type === 'wallet') {
+            const wallet = key;
+            (entriesByWallet.get(wallet) || []).forEach(entry => {
+                const amount = Number(entry.amount) || 0;
+                if(entry.kind === 'transfer') {
+                    if(entry.wallet === wallet) push(entry.date, entry.ref || entry.id, `${entry.title || 'Account transfer'} · Transfer out`, 0, amount, 'Dr', entry.idx);
+                    if(entry.wallet2 === wallet) push(entry.date, entry.ref || entry.id, `${entry.title || 'Account transfer'} · Transfer in`, amount, 0, 'Dr', entry.idx);
+                } else if(entry.wallet === wallet && (entry.kind === 'receipt' || entry.kind === 'opening')) {
+                    push(entry.date, entry.ref || entry.id, entryParticulars(entry), amount, 0, 'Dr', entry.idx);
+                } else if(entry.wallet === wallet && entry.kind === 'payment') {
+                    push(entry.date, entry.ref || entry.id, entry.title || entry.headLabel, 0, amount, 'Dr', entry.idx);
+                }
+            });
+        } else if(type === 'head') {
+            const head = headMap.get(key) || key;
+            const income = INCOME_HEADS.some(name => partyKey(name) === key)
+                && !EXPENSE_HEADS.some(name => partyKey(name) === key);
+            const receivable = [partyKey('Accounts Receivable'), partyKey(BOOK_SALE_HEAD)].includes(key);
+            const payable = [partyKey('Accounts Payable'), partyKey(BOOK_BUY_HEAD)].includes(key);
+            normalSide = receivable ? 'Dr' : payable ? 'Cr' : income ? 'Cr' : 'Dr';
+            if(receivable || payable) {
+                let sequence = 0;
+                partyList.forEach(party => {
+                    if(receivable) {
+                        party.recvE.forEach(entry => push(entry.date, entry.voucher, `${party.name} · ${entry.title || 'Sale / receivable bill'}`, entry.amt, 0, 'Dr', sequence++));
+                        party.recvS.forEach(entry => push(entry.date, entry.voucher, `${party.name} · ${entry.label || 'Receipt / sale return'}`,
+                            Math.max(0, -Number(entry.amt)), Math.max(0, Number(entry.amt)), 'Dr', 100000 + sequence++));
+                    } else {
+                        party.payE.forEach(entry => push(entry.date, entry.voucher, `${party.name} · ${entry.title || 'Purchase / payable bill'}`, 0, entry.amt, 'Cr', sequence++));
+                        party.payS.forEach(entry => push(entry.date, entry.voucher, `${party.name} · ${entry.label || 'Payment / purchase return'}`,
+                            Math.max(0, Number(entry.amt)), Math.max(0, -Number(entry.amt)), 'Cr', 100000 + sequence++));
+                    }
+                });
+            } else {
+                (entriesByHead.get(key) || []).forEach(entry => {
+                    const amount = Number(entry.amount) || 0;
+                    push(entry.date, entry.ref || entry.id, entryParticulars(entry) || head,
+                        entry.kind === 'payment' ? amount : 0,
+                        entry.kind === 'receipt' ? amount : 0,
+                        normalSide, entry.idx);
+                });
+            }
+        } else if(type === 'party') {
+            const party = partiesByKey.get(key);
+            if(party) {
+                party.recvE.forEach(entry => push(entry.date, entry.voucher, entry.title || 'Sale / receivable bill', entry.amt, 0, 'Dr', 0));
+                party.recvS.forEach((entry, index) => push(entry.date, entry.voucher, entry.label || 'Receipt / sale return',
+                    Math.max(0, -Number(entry.amt)), Math.max(0, Number(entry.amt)), 'Dr', 100000 + index));
+                party.payE.forEach(entry => push(entry.date, entry.voucher, entry.title || 'Purchase / payable bill', 0, entry.amt, 'Dr', 200000));
+                party.payS.forEach((entry, index) => push(entry.date, entry.voucher, entry.label || 'Payment / purchase return',
+                    Math.max(0, Number(entry.amt)), Math.max(0, -Number(entry.amt)), 'Dr', 300000 + index));
+            }
+        }
+        events.sort((a, b) => a.date.localeCompare(b.date) || a.sequence - b.sequence || a.voucher.localeCompare(b.voucher));
+        return { events, normalSide };
+    };
+    const balanceDelta = entry => entry.normalSide === 'Cr' ? entry.credit - entry.debit : entry.debit - entry.credit;
+    const builtLedgers = selections.map(selection => ({ selection, ...buildEvents(selection) }));
+    accountLedgerRows = builtLedgers.flatMap(({ selection, events, normalSide }) => {
+        let balance = 0;
+        const label = selection.textContent.trim();
+        const rows = [];
+        events.forEach(entry => {
+            if(entry.date < range.from) {
+                balance += balanceDelta(entry);
+                return;
+            }
+            balance += balanceDelta(entry);
+            rows.push({ ...entry, balance, normalSide, ledgerLabel: label, ledgerKey: selection.value });
+        });
+        return rows;
+    });
+    accountLedgerRows.sort((a, b) => a.date.localeCompare(b.date)
+        || a.ledgerLabel.localeCompare(b.ledgerLabel)
+        || a.sequence - b.sequence
+        || a.voucher.localeCompare(b.voucher));
+    const selectedLedger = !isAllLedgers && builtLedgers.length === 1 ? builtLedgers[0] : null;
+    accountLedgerNormalSide = selectedLedger ? selectedLedger.normalSide : 'Dr';
+    accountLedgerOpening = selectedLedger
+        ? selectedLedger.events.filter(entry => entry.date && entry.date < range.from).reduce((sum, entry) => sum + balanceDelta(entry), 0)
+        : 0;
+    const periodDebit = accountLedgerRows.reduce((sum, entry) => sum + entry.debit, 0);
+    const periodCredit = accountLedgerRows.reduce((sum, entry) => sum + entry.credit, 0);
+    const selectedLabel = picker.options[picker.selectedIndex]?.textContent || 'Account ledger';
+    const summary = isAllLedgers
+        ? [
+            ['Ledgers included', fmt(selections.length)],
+            ['Period activity', `Dr ${fmt(periodDebit)} · Cr ${fmt(periodCredit)}`],
+            ['Transactions', fmt(accountLedgerRows.length)]
+        ]
+        : [
+            ['Opening balance', ledgerBalanceText(accountLedgerOpening)],
+            ['Period activity', `Dr ${fmt(periodDebit)} · Cr ${fmt(periodCredit)}`],
+            ['Closing balance', ledgerBalanceText(accountLedgerRows.length ? accountLedgerRows[accountLedgerRows.length - 1].balance : accountLedgerOpening)]
+        ];
+    $('accountLedgerSummary').innerHTML = summary
+        .map(([label, amount]) => `<div class="metric-card bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${esc(label)}</div><div class="text-lg font-extrabold text-indigo-950 mt-1">${esc(amount)}</div><div class="text-[11px] text-slate-400 mt-1">${esc(selectedLabel)}</div></div>`).join('');
+    renderAccountLedgerRows();
+}
+function getVisibleAccountLedgerRows() {
+    const query = ($('accountLedgerSearch')?.value || '').trim().toLocaleLowerCase();
+    if(!query) return accountLedgerRows;
+    const rows = accountLedgerRows.filter(entry => [
+        entry.ledgerLabel, entry.date, fmtDate(entry.date), entry.voucher, entry.particulars,
+        entry.debit, fmt(entry.debit), entry.credit, fmt(entry.credit),
+        entry.balance, fmt(Math.abs(entry.balance)), ledgerBalanceText(entry.balance, entry.normalSide)
+    ].join(' ').toLocaleLowerCase().includes(query));
+    return rows.sort((a, b) => {
+        const aScore = [a.ledgerLabel, a.particulars, a.voucher].filter(text => String(text || '').toLowerCase().includes(query)).length;
+        const bScore = [b.ledgerLabel, b.particulars, b.voucher].filter(text => String(text || '').toLowerCase().includes(query)).length;
+        if(aScore !== bScore) return bScore - aScore;
+        return a.date.localeCompare(b.date) || a.sequence - b.sequence;
+    });
+}
+function renderAccountLedgerRows() {
+    const visibleRows = getVisibleAccountLedgerRows();
+    const isAllLedgers = $('ledgerAccount').value === 'all';
+    const rows = visibleRows.slice(0, isAllLedgers ? accountLedgerDisplayLimit : visibleRows.length);
+    const more = $('accountLedgerMore');
+    const moreButton = more.querySelector('button');
+    $('accountLedgerLedgerHeader').classList.toggle('hidden', !isAllLedgers);
+    more.classList.toggle('hidden', !isAllLedgers || visibleRows.length <= rows.length);
+    if(isAllLedgers && visibleRows.length > rows.length) {
+        moreButton.textContent = `Show ${fmt(Math.min(300, visibleRows.length - rows.length))} more entries (${fmt(visibleRows.length - rows.length)} remaining)`;
+    }
+    $('accountLedgerBody').innerHTML = rows.length
+        ? rows.map(entry => `<tr class="border-b hover:bg-indigo-50/40 align-top"><td class="p-3 whitespace-nowrap text-slate-600">${fmtDate(entry.date)}</td>${isAllLedgers ? `<td class="p-3 font-semibold text-indigo-700">${esc(entry.ledgerLabel)}</td>` : ''}<td class="p-3 font-mono text-indigo-900">${esc(entry.voucher || '-')}</td><td class="p-3">${esc(entry.particulars || '-')}</td><td class="p-3 text-right text-slate-700">${entry.debit ? 'PKR ' + fmt(entry.debit) : '-'}</td><td class="p-3 text-right text-slate-700">${entry.credit ? 'PKR ' + fmt(entry.credit) : '-'}</td><td class="p-3 text-right font-bold text-indigo-900">${ledgerBalanceText(entry.balance, entry.normalSide)}</td></tr>`).join('')
+        : `<tr><td colspan="${isAllLedgers ? 7 : 6}" class="p-8 text-center text-slate-400">${accountLedgerRows.length ? 'No matching ledger entries.' : isAllLedgers ? 'No ledger activity in this date range.' : `No ledger activity for ${esc($('ledgerAccount').options[$('ledgerAccount').selectedIndex]?.textContent || 'this account')} in this date range. Opening balance: ${esc(ledgerBalanceText(accountLedgerOpening))}.`}</td></tr>`;
+}
+function loadMoreAccountLedgerRows() {
+    accountLedgerDisplayLimit += 300;
+    renderAccountLedgerRows();
+}
+let accountLedgerPrintLimit = null;
+window.addEventListener('beforeprint', () => {
+    if($('ledgerAccount').value !== 'all') return;
+    accountLedgerPrintLimit = accountLedgerDisplayLimit;
+    accountLedgerDisplayLimit = getVisibleAccountLedgerRows().length;
+    renderAccountLedgerRows();
+});
+window.addEventListener('afterprint', () => {
+    if(accountLedgerPrintLimit === null) return;
+    accountLedgerDisplayLimit = accountLedgerPrintLimit;
+    accountLedgerPrintLimit = null;
+    renderAccountLedgerRows();
+});
+function exportAccountLedgerCsv() {
+    if(!$('ledgerAccount').value) { toast('Choose an account or party first.', false); return; }
+    const label = $('ledgerAccount').options[$('ledgerAccount').selectedIndex]?.textContent || 'Account ledger';
+    const isAllLedgers = $('ledgerAccount').value === 'all';
+    const rows = isAllLedgers ? getVisibleAccountLedgerRows().map(entry =>
+        [entry.date, entry.ledgerLabel, entry.voucher, entry.particulars, entry.debit, entry.credit, ledgerBalanceText(entry.balance, entry.normalSide)]
+    ) : [
+        ['', label, '', 'Opening balance', accountLedgerNormalSide === 'Dr' ? accountLedgerOpening : '', accountLedgerNormalSide === 'Cr' ? accountLedgerOpening : '', ledgerBalanceText(accountLedgerOpening)],
+        ...getVisibleAccountLedgerRows().map(entry => [entry.date, label, entry.voucher, entry.particulars, entry.debit, entry.credit, ledgerBalanceText(entry.balance, entry.normalSide)]),
+        ['', label, '', 'Closing balance', '', '', ledgerBalanceText(accountLedgerRows.length ? accountLedgerRows[accountLedgerRows.length - 1].balance : accountLedgerOpening)]
+    ];
+    exportCsv('account-ledger', ['Date', 'Account', 'Voucher', 'Particulars', 'Debit', 'Credit', 'Balance'], rows);
 }
 
 // ====================================================================================
@@ -1256,7 +1736,8 @@ function setEntryKind(kind) {
     $('emTitleWrap').classList.toggle('hidden', isO);
     $('emWalletLabel').innerText = isT ? 'From account' : (kind === 'payment' ? 'Paid from account' : (kind === 'receipt' ? 'Received in account' : 'Account'));
     $('emHeadLabel').innerText = kind === 'payment' ? 'Expense head (category)' : 'Income head (source)';
-    $('headList').innerHTML = (kind === 'payment' ? EXPENSE_HEADS : INCOME_HEADS).map(h => `<option value="${esc(h)}">`).join('');
+    const heads = kind === 'payment' ? [...EXPENSE_HEADS, 'Accounts Receivable'] : [...INCOME_HEADS, 'Accounts Payable'];
+    $('headList').innerHTML = [...new Map(heads.map(head => [partyKey(head), head])).values()].map(h => `<option value="${esc(h)}">`).join('');
     const batchMode = !editingId && (kind === 'receipt' || kind === 'payment');
     $('entryModal').classList.toggle('em-batch-mode', batchMode);
     $('emBatchWrap').classList.toggle('hidden', !batchMode);
@@ -1284,6 +1765,7 @@ let duesLedgerSide = null;
 let duesLedgerOrder = 'oldest';
 let selectedVendorLedgerKey = '';
 let duesPaymentMode = 'bills';
+let duesRefundSide = null;
 async function ensureBookDues() {
     if(_bd) return _bd;
     const accRaw = Object.values(entryById).map(e => e.raw);
@@ -1298,27 +1780,46 @@ const isPayHead = h => [partyKey('Accounts Payable'), partyKey(BOOK_BUY_HEAD)].i
 let duesSide = null;     // 'recv' | 'pay' while the pending-bills picker is active
 async function updateDuesPicker() {
     const wrap = $('emPartyWrap'), bw = $('emBillsWrap'); if(!wrap) return;
-    const isR = entryKind === 'receipt' && isRecvHead($('emHead').value), isP = entryKind === 'payment' && isPayHead($('emHead').value);
-    duesSide = (!editingId && (isR || isP)) ? (isR ? 'recv' : 'pay') : null;
+    const head = partyKey($('emHead').value);
+    duesRefundSide = !editingId && entryKind === 'payment' && head === partyKey('Accounts Receivable')
+        ? 'recv'
+        : !editingId && entryKind === 'receipt' && head === partyKey('Accounts Payable') ? 'pay' : null;
+    const isR = entryKind === 'receipt' && isRecvHead($('emHead').value) && head !== partyKey('Accounts Payable');
+    const isP = entryKind === 'payment' && isPayHead($('emHead').value) && head !== partyKey('Accounts Receivable');
+    duesSide = !editingId && (duesRefundSide || isR || isP) ? (duesRefundSide || (isR ? 'recv' : 'pay')) : null;
+    if(duesRefundSide) {
+        const label = duesRefundSide === 'recv' ? 'Customer refund (receivable)' : 'Vendor refund (payable)';
+        $('emHeadLabel').innerText = label;
+        $('emBatchHeadLabel').innerText = label;
+    } else {
+        $('emHeadLabel').innerText = entryKind === 'payment' ? 'Expense head (category)' : 'Income head (source)';
+        $('emBatchHeadLabel').innerText = entryKind === 'payment' ? 'Expense head' : 'Income head';
+    }
     wrap.classList.toggle('hidden', !duesSide);
-    $('emPaymentModeWrap').classList.toggle('hidden', duesSide !== 'pay');
+    $('emPaymentModeWrap').classList.toggle('hidden', duesSide !== 'pay' || !!duesRefundSide);
     bw.classList.add('hidden'); $('emBills').innerHTML = '';
     if(!duesSide) return;
-    $('emPartyLabel').innerText = duesSide === 'recv'
+    $('emPartyLabel').innerText = duesRefundSide
+        ? duesRefundSide === 'recv' ? 'Customer due a refund' : 'Vendor due a refund'
+        : duesSide === 'recv'
         ? 'Student / customer with pending bills'
         : duesPaymentMode === 'standalone' ? 'Vendor / party (including settled and advance balances)' : 'Vendor / party with pending bills';
     const selectedParty = $('emParty').value;
     $('emParty').innerHTML = '<option value="">Loading...</option>';
     const pend = p => p[duesSide].pending;
     const list = (await ensureBookDues())
-        .filter(p => duesSide === 'pay' && duesPaymentMode === 'standalone'
+        .filter(p => duesRefundSide
+            ? pend(p) < -0.005
+            : duesSide === 'pay' && duesPaymentMode === 'standalone'
             ? p.payE.length > 0 || p.payS.some(entry => entry.label === 'Payment')
             : pend(p) > 0.005)
-        .sort((a, b) => pend(b) - pend(a) || a.name.localeCompare(b.name));
+        .sort((a, b) => duesRefundSide
+            ? pend(a) - pend(b) || a.name.localeCompare(b.name)
+            : pend(b) - pend(a) || a.name.localeCompare(b.name));
     const partyBalanceLabel = p => pend(p) > 0.005
         ? `pending PKR ${fmt(pend(p))}`
-        : pend(p) < -0.005 ? `advance PKR ${fmt(-pend(p))}` : 'settled';
-    $('emParty').innerHTML = list.length ? '<option value="">- choose -</option>' + list.map(p => `<option value="${esc(p.key)}">${esc(p.name)} - ${partyBalanceLabel(p)}</option>`).join('') : '<option value="">No pending bills</option>';
+        : pend(p) < -0.005 ? `${duesRefundSide ? 'refund due' : 'advance'} PKR ${fmt(-pend(p))}` : 'settled';
+    $('emParty').innerHTML = list.length ? '<option value="">- choose -</option>' + list.map(p => `<option value="${esc(p.key)}">${esc(p.name)} - ${partyBalanceLabel(p)}</option>`).join('') : `<option value="">${duesRefundSide ? 'No refunds due' : 'No pending bills'}</option>`;
     if(list.some(p => p.key === selectedParty)) $('emParty').value = selectedParty;
 }
 function dueBills() { const d = (_bd || []).find(x => x.key === $('emParty').value); return d ? (duesSide === 'recv' ? d.recvE : d.payE).filter(e => e.rem > 0.005) : []; }
@@ -1333,8 +1834,10 @@ function setDuesPaymentMode(mode) {
 }
 function pickDuesParty(preserveAmount = false) {
     const bills = dueBills();
-    const showBills = duesSide === 'recv' || duesPaymentMode === 'bills';
-    $('emBillsLabel').innerText = duesSide === 'recv'
+    const showBills = !duesRefundSide && (duesSide === 'recv' || duesPaymentMode === 'bills');
+    $('emBillsLabel').innerText = duesRefundSide
+        ? 'Enter the refund amount. It cannot exceed this party’s refund due.'
+        : duesSide === 'recv'
         ? 'Pending bills (tick bills to settle; the amount is applied oldest-first).'
         : 'Pending bills (selected bills are prioritized oldest-first; extra applies to other due bills, then remains as advance).';
     $('emBillsWrap').classList.toggle('hidden', !showBills || !bills.length);
@@ -1428,6 +1931,39 @@ async function saveStandaloneVendorPayment(date, amount, w, notes) {
         toast('Could not connect to the database.', false);
     }
 }
+async function savePartyRefund(side, date, amount, w, notes) {
+    const party = (_bd || []).find(item => item.key === $('emParty').value);
+    if(!party) { toast('Please choose the party first.', false); return; }
+    const refundDue = Math.max(0, -party[side].pending);
+    if(refundDue <= 0.005) { toast('This party has no refund due.', false); return; }
+    if(amount > refundDue + 0.005) {
+        toast(`Refund cannot exceed the amount due (PKR ${fmt(refundDue)}).`, false);
+        return;
+    }
+    if(!WALLETS[w]) { toast('Select a valid account.', false); return; }
+    const kind = side === 'recv' ? 'payment' : 'receipt';
+    const id = genVoucherNo(kind);
+    const payload = side === 'recv'
+        ? { voucher_id: id, from_account: w, to_account: 'Accounts Receivable', description: party.name, amount_in: 0, amount_out: amount, date, remarks: notes || 'Customer refund' }
+        : { voucher_id: id, from_account: 'Accounts Payable', to_account: w, description: party.name, amount_in: amount, amount_out: 0, date, remarks: notes || 'Vendor refund' };
+    showLoading('Saving refund...');
+    try {
+        const c = getSupabaseConfig();
+        const res = await fetch(`${c.url}/rest/v1/accounts`, {
+            method: 'POST',
+            headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
+            body: JSON.stringify(payload)
+        });
+        if(!res.ok) { hideLoading(); toast('Could not save refund: ' + await res.text(), false); return; }
+        closeEntry();
+        toast(`${side === 'recv' ? 'Customer refund paid' : 'Vendor refund received'}: PKR ${fmt(amount)} for ${party.name}.`);
+        await initAccounts();
+    } catch(err) {
+        hideLoading();
+        console.error(err);
+        toast('Could not connect to the database.', false);
+    }
+}
 async function startSettle(kind, key) {
     openEntry(kind);
     $('emHead').value = kind === 'receipt' ? 'Accounts Receivable' : 'Accounts Payable';
@@ -1439,6 +1975,16 @@ async function startSettle(kind, key) {
     }
     await updateDuesPicker();
     $('emParty').value = key; pickDuesParty();
+}
+async function startPartyRefund(key, side) {
+    const kind = side === 'recv' ? 'payment' : 'receipt';
+    openEntry(kind);
+    const head = side === 'recv' ? 'Accounts Receivable' : 'Accounts Payable';
+    $('emHead').value = head;
+    $('emBatchRows').querySelector('[data-field="head"]').value = head;
+    await updateDuesPicker();
+    $('emParty').value = key;
+    pickDuesParty(true);
 }
 function renderStaffSecurityPayable() {
     const notice = $('staffSecurityNotice');
@@ -1469,7 +2015,7 @@ async function renderDues() {
     const vendorPayable = list.reduce((sum, party) => sum + party.pay.pending, 0);
     const card = (type, label, amount, color, subtitle) => `<button type="button" onclick="toggleDuesLedger('${type}')" aria-expanded="${duesLedgerSide === type}" class="text-left bg-white rounded-2xl border ${duesLedgerSide === type ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200'} p-4 shadow-sm hover:border-indigo-300 transition print-card"><div class="text-xs text-slate-500">${label}</div><div class="text-xl font-extrabold ${color} mt-1">${amount}</div><div class="text-[11px] ${color} mt-0.5">${subtitle}</div><div class="text-[11px] text-indigo-500 mt-1">${duesLedgerSide === type ? 'Click to close ledger' : 'Click to view ledger'} ${duesLedgerSide === type ? '↑' : '↓'}</div></button>`;
     $('duesCards').innerHTML = [
-        card('concept', 'Vendor payables', 'PKR ' + fmt(vendorPayable), vendorPayable > 0.005 ? 'text-rose-600' : 'text-emerald-700', vendorPayable > 0.005 ? 'Outstanding vendor balance' : vendorPayable < -0.005 ? 'Net vendor advance' : 'No outstanding vendor balance'),
+        card('concept', 'Vendor payables', 'PKR ' + fmt(vendorPayable), vendorPayable > 0.005 ? 'text-rose-600' : 'text-emerald-700', vendorPayable > 0.005 ? 'Outstanding vendor balance' : vendorPayable < -0.005 ? 'Net advance / refund receivable' : 'No outstanding vendor balance'),
         card('security', 'Staff security payable', staffSecurityReady ? 'PKR ' + fmt(securityTotal) : 'Unavailable', !staffSecurityReady ? 'text-amber-700' : securityTotal > 0.005 ? 'text-rose-600' : 'text-emerald-700', !staffSecurityReady ? 'Ledger data unavailable' : securityTotal > 0.005 ? 'Outstanding liability' : 'No outstanding liability')
     ].join('');
     renderDuesLedger(q, list);
@@ -1478,10 +2024,17 @@ async function renderDues() {
     $('duesBody').innerHTML = rows.length ? rows.map(p => {
         const oldest = [...p.recvE, ...p.payE].filter(e => e.rem > 0.005).map(e => e.date).sort()[0];
         return `<tr class="border-b hover:bg-slate-50 align-top"><td class="p-2.5 font-semibold text-slate-800">${esc(p.name)}<div class="mt-1 font-normal">${chips(p)}</div></td>
-        <td class="p-2.5 text-right font-bold ${p.recv.pending > 0.005 ? 'text-emerald-700' : 'text-slate-300'}">${p.recv.pending > 0.005 ? 'PKR ' + fmt(p.recv.pending) : '-'}</td>
-        <td class="p-2.5 text-right font-bold ${p.pay.pending > 0.005 ? 'text-rose-600' : p.pay.pending < -0.005 ? 'text-emerald-700' : 'text-slate-400'}">${p.pay.pending > 0.005 ? 'PKR ' + fmt(p.pay.pending) : p.pay.pending < -0.005 ? 'Advance PKR ' + fmt(-p.pay.pending) : 'Settled'}</td>
+        <td class="p-2.5 text-right font-bold ${p.recv.pending > 0.005 ? 'text-emerald-700' : p.recv.pending < -0.005 ? 'text-amber-700' : 'text-slate-300'}">${p.recv.pending > 0.005 ? 'PKR ' + fmt(p.recv.pending) : p.recv.pending < -0.005 ? 'Refund due PKR ' + fmt(-p.recv.pending) : '-'}</td>
+        <td class="p-2.5 text-right font-bold ${p.pay.pending > 0.005 ? 'text-rose-600' : p.pay.pending < -0.005 ? 'text-amber-700' : 'text-slate-400'}">${p.pay.pending > 0.005 ? 'PKR ' + fmt(p.pay.pending) : p.pay.pending < -0.005 ? 'Refund due PKR ' + fmt(-p.pay.pending) : 'Settled'}</td>
         <td class="p-2.5 text-slate-500 whitespace-nowrap">${fmtDate(oldest)}</td>
-        <td class="p-2.5 no-print" data-k="${esc(p.key)}">${p.recv.pending > 0.005 ? `<button onclick="startSettle('receipt', this.parentNode.dataset.k)" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold mr-1">Receive</button>` : ''}${p.payE.length || p.payS.some(entry => entry.label === 'Payment') ? `<button onclick="startSettle('payment', this.parentNode.dataset.k)" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded font-semibold">${p.pay.pending > 0.005 ? 'Pay' : 'Pay advance'}</button>` : ''}</td></tr>`;
+        <td class="p-2.5 no-print whitespace-nowrap" data-k="${esc(p.key)}">${p.recv.pending > 0.005
+            ? `<button onclick="startSettle('receipt', this.parentNode.dataset.k)" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold mr-1">Receive</button>`
+            : p.recv.pending < -0.005 ? `<button onclick="startPartyRefund(this.parentNode.dataset.k, 'recv')" class="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-800 px-2 py-1 rounded font-semibold mr-1">Pay refund</button>` : ''}
+        ${p.pay.pending < -0.005
+            ? `<button onclick="startPartyRefund(this.parentNode.dataset.k, 'pay')" class="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-800 px-2 py-1 rounded font-semibold mr-1">Receive refund</button>`
+            : p.payE.length || p.payS.some(entry => entry.label === 'Payment')
+                ? `<button onclick="startSettle('payment', this.parentNode.dataset.k)" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded font-semibold mr-1">${p.pay.pending > 0.005 ? 'Pay' : 'Pay advance'}</button>` : ''}
+        <button onclick="openAccountLedgerForParty(this.parentNode.dataset.k)" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">Ledger</button></td></tr>`;
     }).join('') : '<tr><td colspan="5" class="p-8 text-center text-slate-400">No pending bills.</td></tr>';
     const remOf = {}; list.forEach(p => [...p.recvE, ...p.payE].forEach(e => { remOf[String(e.voucher).toUpperCase()] = e.rem; }));
     const bl = [...billEntries].sort((a, b) => b.date.localeCompare(a.date));
@@ -1515,21 +2068,27 @@ async function exportDuesCsv() {
             const transactions = [
                 ...vendor.payE.map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Purchase', purchase: Number(entry.amt) || 0, payment: 0 })),
                 ...vendor.payS.filter(entry => entry.label === 'Payment').map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Payment', purchase: 0, payment: Number(entry.amt) || 0, account: entry.account || '' })),
-                ...vendor.payS.filter(entry => entry.label === 'Purchase return').map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Purchase return', purchase: -(Number(entry.amt) || 0), payment: 0 }))
+                ...vendor.payS.filter(entry => entry.label === 'Purchase return').map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Purchase return', purchase: -(Number(entry.amt) || 0), payment: 0 })),
+                ...vendor.payS.filter(entry => entry.label === 'Vendor refund').map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Vendor refund received', purchase: 0, payment: 0, refund: Math.max(0, -(Number(entry.amt) || 0)), account: entry.account || '' }))
             ].sort((a, b) => a.date.localeCompare(b.date) || a.voucher.localeCompare(b.voucher));
             let balance = 0;
             const groups = new Map();
             transactions.forEach(entry => {
                 const key = entry.date || 'unknown';
-                if(!groups.has(key)) groups.set(key, { date: entry.date, opening: balance, purchase: 0, payment: 0, balance: 0, accounts: new Map() });
+                if(!groups.has(key)) groups.set(key, { date: entry.date, opening: balance, purchase: 0, payment: 0, refund: 0, balance: 0, accounts: new Map(), refundAccounts: new Map() });
                 const group = groups.get(key);
                 group.purchase += entry.purchase;
                 group.payment += entry.payment;
-                balance += entry.purchase - entry.payment;
+                group.refund += entry.refund || 0;
+                balance += entry.purchase - entry.payment + (entry.refund || 0);
                 group.balance = balance;
                 if(entry.payment) {
                     const account = entry.account || 'Account not recorded';
                     group.accounts.set(account, (group.accounts.get(account) || 0) + entry.payment);
+                }
+                if(entry.refund) {
+                    const account = entry.account || 'Account not recorded';
+                    group.refundAccounts.set(account, (group.refundAccounts.get(account) || 0) + entry.refund);
                 }
             });
             let ledgerGroups = [...groups.values()];
@@ -1538,7 +2097,11 @@ async function exportDuesCsv() {
                 if(group.purchase) rows.push(['Vendor ledger', group.date, vendor.name, '', group.purchase < 0 ? 'Purchase return' : 'Purchase', Math.abs(group.purchase), '', group.opening + group.purchase, '']);
                 if(group.payment) {
                     const accountDetails = [...group.accounts].map(([account, amount]) => `${account}: ${fmt(amount)}`).join('; ');
-                    rows.push(['Vendor ledger', group.date, vendor.name, '', 'Payment', '', group.payment, group.balance, accountDetails]);
+                    rows.push(['Vendor ledger', group.date, vendor.name, '', 'Payment', '', group.payment, group.opening + group.purchase - group.payment, accountDetails]);
+                }
+                if(group.refund) {
+                    const accountDetails = [...group.refundAccounts].map(([account, amount]) => `${account}: ${fmt(amount)}`).join('; ');
+                    rows.push(['Vendor ledger', group.date, vendor.name, '', 'Vendor refund received', '', group.refund, group.balance, accountDetails]);
                 }
             });
         }
@@ -1560,6 +2123,10 @@ function selectVendorLedger(key) {
     selectedVendorLedgerKey = key;
     renderDues();
 }
+function openAccountLedgerForParty(key) {
+    selectedAccountLedgerKey = 'party:' + key;
+    showTab('ledgers');
+}
 function renderDuesLedger(query, parties) {
     const container = $('duesLedger');
     if (!duesLedgerSide) {
@@ -1570,7 +2137,7 @@ function renderDuesLedger(query, parties) {
 
     const isSecurity = duesLedgerSide === 'security';
     const vendorParties = (parties || [])
-        .filter(p => p.payE.length || p.payS.some(entry => entry.label === 'Payment'))
+        .filter(p => p.payE.length || p.payS.some(entry => entry.label === 'Payment' || entry.label === 'Vendor refund'))
         .sort((a, b) => a.name.localeCompare(b.name));
     const selectedVendor = vendorParties.find(p => p.key === selectedVendorLedgerKey) || null;
     const title = isSecurity ? 'Staff security ledger' : selectedVendor ? `${selectedVendor.name} ledger` : 'Vendor party ledger';
@@ -1616,7 +2183,17 @@ function renderDuesLedger(query, parties) {
                 party: selectedVendor.name,
                 description: 'Purchase return',
                 purchase: -(Number(entry.amt) || 0),
-                payment: 0
+                payment: 0,
+                refund: 0
+            }));
+            selectedVendor.payS.filter(entry => entry.label === 'Vendor refund').forEach(entry => addEntry(entry.date, {
+                voucher: entry.voucher || '',
+                party: selectedVendor.name,
+                description: 'Vendor refund received',
+                purchase: 0,
+                payment: 0,
+                refund: Math.max(0, -(Number(entry.amt) || 0)),
+                account: entry.account || ''
             }));
         }
     }
@@ -1625,7 +2202,7 @@ function renderDuesLedger(query, parties) {
     let runningBalance = 0;
     transactions.forEach(entry => {
         if (isSecurity) runningBalance += entry.inAmount - entry.outAmount;
-        else runningBalance += entry.purchase - entry.payment;
+        else runningBalance += entry.purchase - entry.payment + (entry.refund || 0);
         entry.balance = Math.round(runningBalance * 100) / 100;
     });
     const boundaryRow = (label, balance) => `<tr class="bg-slate-50 border-y border-slate-200 font-semibold"><td colspan="${isSecurity ? 5 : 4}" class="p-2.5 text-slate-600">${label}</td><td class="p-2.5 text-right font-bold text-indigo-900 whitespace-nowrap">PKR ${fmt(balance)}</td></tr>`;
@@ -1650,11 +2227,12 @@ function renderDuesLedger(query, parties) {
         const groups = new Map();
         transactions.forEach(entry => {
             const key = entry.date || 'unknown';
-            if(!groups.has(key)) groups.set(key, { key, date: entry.date, entries: [], purchase: 0, payment: 0, paymentAccounts: new Map(), hasPurchase: false, hasPayment: false, opening: 0, balance: 0 });
+            if(!groups.has(key)) groups.set(key, { key, date: entry.date, entries: [], purchase: 0, payment: 0, refund: 0, paymentAccounts: new Map(), refundAccounts: new Map(), hasPurchase: false, hasPayment: false, hasRefund: false, opening: 0, balance: 0 });
             const group = groups.get(key);
             group.entries.push(entry);
             group.purchase += entry.purchase;
             group.payment += entry.payment;
+            group.refund += entry.refund || 0;
             if(entry.payment) {
                 const paymentVoucher = entryById[String(entry.voucher || '')];
                 const sourceAccount = entry.account
@@ -1667,8 +2245,13 @@ function renderDuesLedger(query, parties) {
                     : sourceAccount || 'Account not recorded';
                 group.paymentAccounts.set(accountLabel, (group.paymentAccounts.get(accountLabel) || 0) + entry.payment);
             }
+            if(entry.refund) {
+                const accountLabel = entry.account ? (WALLETS[normWallet(entry.account)]?.label || entry.account) : 'Account not recorded';
+                group.refundAccounts.set(accountLabel, (group.refundAccounts.get(accountLabel) || 0) + entry.refund);
+            }
             if(entry.purchase) group.hasPurchase = true;
             if(entry.payment) group.hasPayment = true;
+            if(entry.refund) group.hasRefund = true;
             group.balance = entry.balance;
         });
         let visibleGroups = [...groups.values()];
@@ -1681,6 +2264,7 @@ function renderDuesLedger(query, parties) {
         rows = visibleGroups.map(group => {
             const dateLabel = group.date ? fmtDate(group.date) : 'Date not recorded';
             const purchaseBalance = Math.round((group.opening + group.purchase) * 100) / 100;
+            const paymentBalance = Math.round((purchaseBalance - group.payment) * 100) / 100;
             const renderDailyRow = (description, purchase, payment, balance, rowClass) => {
                 const balanceClass = balance < 0 ? 'text-rose-700' : 'text-indigo-900';
                 return `<tr class="${rowClass} border-b align-top">
@@ -1698,13 +2282,19 @@ function renderDuesLedger(query, parties) {
                 ? `<div class="mt-1 space-y-0.5 text-[11px] font-normal text-slate-500">${[...group.paymentAccounts].map(([account, amount]) => `<div>PKR ${fmt(amount)} from ${esc(account)}</div>`).join('')}</div>`
                 : ''}`;
             const paymentRow = group.hasPayment
-                ? renderDailyRow(paymentDescription, 0, group.payment, group.balance, 'bg-white hover:bg-indigo-50/40')
+                ? renderDailyRow(paymentDescription, 0, group.payment, paymentBalance, 'bg-white hover:bg-indigo-50/40')
                 : '';
-            return purchaseRow + paymentRow;
+            const refundDescription = `Vendor refund received${group.refundAccounts.size
+                ? `<div class="mt-1 space-y-0.5 text-[11px] font-normal text-slate-500">${[...group.refundAccounts].map(([account, amount]) => `<div>PKR ${fmt(amount)} in ${esc(account)}</div>`).join('')}</div>`
+                : ''}`;
+            const refundRow = group.hasRefund
+                ? renderDailyRow(refundDescription, 0, group.refund, group.balance, 'bg-amber-50/60 hover:bg-amber-50')
+                : '';
+            return purchaseRow + paymentRow + refundRow;
         }).join('');
     }
     const openingBalance = transactions.length
-        ? transactions[0].balance - (transactions[0].purchase || transactions[0].inAmount || 0) + (transactions[0].payment || transactions[0].outAmount || 0)
+        ? transactions[0].balance - (transactions[0].purchase || transactions[0].inAmount || 0) + (transactions[0].payment || transactions[0].outAmount || 0) - (transactions[0].refund || 0)
         : 0;
     const closingBalance = transactions.length ? transactions[transactions.length - 1].balance : 0;
     const firstBoundary = duesLedgerOrder === 'oldest'
@@ -1719,19 +2309,20 @@ function renderDuesLedger(query, parties) {
             ? `<tr><td colspan="6" class="p-6 text-center text-slate-400">Select a vendor to view that party's purchases, payments, and running balance.</td></tr>`
             : transactions.length
                 ? `${query && isSecurity ? '' : firstBoundary}${rows}${query && isSecurity ? '' : lastBoundary}`
-                : `<tr><td colspan="6" class="p-6 text-center text-slate-400">${isSecurity ? 'No staff security entries found.' : 'No purchase or payment transactions found for this vendor.'}</td></tr>`;
+                : `<tr><td colspan="6" class="p-6 text-center text-slate-400">${isSecurity ? 'No staff security entries found.' : 'No purchase, payment, return, or refund transactions found for this vendor.'}</td></tr>`;
     container.classList.remove('hidden');
     const orderButton = (order, label) => `<button type="button" onclick="setDuesLedgerOrder('${order}')" aria-pressed="${duesLedgerOrder === order}" class="px-3 py-1.5 rounded-lg border text-xs font-semibold ${duesLedgerOrder === order ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">${label}</button>`;
     const partyPicker = !isSecurity ? `<label class="flex items-center gap-2 text-xs font-medium text-slate-600"><span>Vendor</span><select onchange="selectVendorLedger(this.value)" class="border rounded-lg px-3 py-2 text-sm bg-white min-w-[220px]"><option value="">Select vendor</option>${vendorParties.map(p => `<option value="${esc(p.key)}" ${p.key === selectedVendorLedgerKey ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : '';
     const inLabel = isSecurity ? 'IN' : 'Purchase';
-    const outLabel = isSecurity ? 'OUT' : 'Payment';
+    const outLabel = isSecurity ? 'OUT' : 'Payment / refund';
     const balanceLabel = isSecurity ? 'Balance' : 'Balance payable';
-    container.innerHTML = `<div class="p-4 border-b flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-bold text-sm text-indigo-900">${esc(title)}</h3><p class="text-[11px] text-slate-500 mt-1">${isSecurity ? 'Staff security transactions with running balance.' : 'Daily totals are shown on separate Purchase and Payment rows, with the balance after each row.'}</p></div><div class="flex flex-wrap items-center gap-2">${partyPicker}<div class="flex gap-2" role="group" aria-label="Ledger date order">${orderButton('oldest', 'Oldest first')}${orderButton('newest', 'Newest first')}</div></div></div><div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th>${isSecurity ? '<th class="p-2.5">Voucher</th><th class="p-2.5">Particulars</th>' : '<th class="p-2.5">Activity</th>'}<th class="p-2.5 text-right">${inLabel}</th><th class="p-2.5 text-right">${outLabel}</th><th class="p-2.5 text-right">${balanceLabel}</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    container.innerHTML = `<div class="p-4 border-b flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-bold text-sm text-indigo-900">${esc(title)}</h3><p class="text-[11px] text-slate-500 mt-1">${isSecurity ? 'Staff security transactions with running balance.' : 'Daily totals are shown on separate Purchase, Payment and refund rows, with the balance after each row.'}</p></div><div class="flex flex-wrap items-center gap-2">${partyPicker}<div class="flex gap-2" role="group" aria-label="Ledger date order">${orderButton('oldest', 'Oldest first')}${orderButton('newest', 'Newest first')}</div></div></div><div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th>${isSecurity ? '<th class="p-2.5">Voucher</th><th class="p-2.5">Particulars</th>' : '<th class="p-2.5">Activity</th>'}<th class="p-2.5 text-right">${inLabel}</th><th class="p-2.5 text-right">${outLabel}</th><th class="p-2.5 text-right">${balanceLabel}</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function openEntry(kind) {
     editingId = null;
     duesPaymentMode = 'bills';
+    duesRefundSide = null;
     const billModeRadio = document.querySelector('input[name="duesPaymentMode"][value="bills"]');
     if(billModeRadio) billModeRadio.checked = true;
     $('emBatchRows').innerHTML = '';
@@ -1881,6 +2472,7 @@ async function saveQuickEdit() {
 function closeEntry() {
     $('entryModal').classList.add('hidden');
     editingId = null;
+    duesRefundSide = null;
     $('emBatchRows').innerHTML = '';
     updateBatchSaveLabel();
 }
@@ -1910,6 +2502,12 @@ async function saveEntry() {
     if(!date) { toast('Please enter a date.', false); return; }
     if(batchMode && !batchItems.length) { toast('Add at least one entry.', false); return; }
     if(amount <= 0) { toast('Amount must be greater than 0.', false); return; }
+ if(duesRefundSide && !editingId) {
+     if(batchItems.length > 1) { toast('Refunds must be recorded one voucher at a time.', false); return; }
+     if(!batchItems[0]?.head || partyKey(batchItems[0].head) !== partyKey(head)) { toast('Select the refund category in the entry row.', false); return; }
+     await savePartyRefund(duesRefundSide, date, amount, w, notes);
+     return;
+ }
  if(duesSide && !editingId && kind === 'payment' && duesPaymentMode === 'standalone') {
      if(batchItems.length > 1) { toast('Vendor payments must be recorded one voucher at a time.', false); return; }
      await saveStandaloneVendorPayment(date, amount, w, notes); return;
