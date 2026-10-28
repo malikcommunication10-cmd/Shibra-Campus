@@ -609,22 +609,24 @@ async function getSchoolYear() {
 // ============================================================================
 const BOOK_SALE_HEAD = 'Book Store Sale', BOOK_BUY_HEAD = 'Books Purchase';
 const partyKey = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+function normalizeBookParty(value) {
+    const party = String(value || '').trim().replace(/\s+/g, ' ');
+    if(!/^purchase\s*:/i.test(party)) return party;
+    const detail = party.replace(/^purchase\s*:\s*/i, '').trim();
+    const vendors = (typeof _settingLists !== 'undefined' && _settingLists && _settingLists['Book Vendor']) || [];
+    const configuredVendor = vendors.slice().sort((a, b) => String(b).length - String(a).length)
+        .find(vendor => detail.toLowerCase().endsWith(` - ${String(vendor).trim().toLowerCase()}`));
+    const separator = detail.lastIndexOf(' - ');
+    return configuredVendor || (separator >= 0 ? detail.slice(separator + 3).trim() : detail);
+}
 function normBookRow(row) {
     const t = String(row.type ?? row.tx_type ?? '').trim().toLowerCase();
     const kind = t.includes('return') ? (t.includes('sale') ? 'sale_return' : 'purchase_return') : (t.includes('sale') ? 'sale' : 'purchase');
-    let party = String(row.party_name ?? row.party ?? '').trim().replace(/\s+/g, ' ');
-    if((kind === 'purchase' || kind === 'purchase_return') && /^purchase\s*:/i.test(party)) {
-        const alternateParty = String(row.party || '').trim().replace(/\s+/g, ' ');
-        if(alternateParty && !/^purchase\s*:/i.test(alternateParty)) party = alternateParty;
-        else {
-            const detail = party.replace(/^purchase\s*:\s*/i, '').trim();
-            const vendors = (typeof _settingLists !== 'undefined' && _settingLists && _settingLists['Book Vendor']) || [];
-            const configuredVendor = vendors.slice().sort((a, b) => b.length - a.length)
-                .find(vendor => detail.toLowerCase().endsWith(` - ${String(vendor).trim().toLowerCase()}`));
-            const separator = detail.lastIndexOf(' - ');
-            party = configuredVendor || (separator >= 0 ? detail.slice(separator + 3).trim() : detail);
-        }
-    }
+    const rawParty = row.party_name ?? row.party ?? row.vendor ?? '';
+    const alternateParty = String(row.party ?? row.vendor ?? '').trim();
+    const party = normalizeBookParty(/^purchase\s*:/i.test(String(rawParty)) && alternateParty && !/^purchase\s*:/i.test(alternateParty)
+        ? alternateParty
+        : rawParty);
     return { kind, party, net: parseFloat(row.net_amount ?? row.amount) || 0, voucher: String(row.voucher_no ?? '').trim(),
         notes: String(row.notes ?? '').trim(), date: String(row.date ?? '').slice(0, 10), title: String(row.book ?? row.book_title ?? row.title ?? '').trim(), qty: parseFloat(row.qty) || 0 };
 }
@@ -648,7 +650,7 @@ function computeDues(txs, accRows, opts) {
         if (!m || !r.description) return;
         const recv = m[1] === 'AR', amt = parseFloat(recv ? r.amount_in : r.amount_out) || 0;
         if (amt <= 0) return;
-        const p = get(r.description), e = { date: String(r.date || '').slice(0, 10), amt, voucher: v, title: String(r.remarks || '').trim(), qty: 0, src: 'acct', paid: 0, pk: p.key, side: recv ? 'recv' : 'pay' };
+        const p = get(normalizeBookParty(r.description)), e = { date: String(r.date || '').slice(0, 10), amt, voucher: v, title: String(r.remarks || '').trim(), qty: 0, src: 'acct', paid: 0, pk: p.key, side: recv ? 'recv' : 'pay' };
         (recv ? p.recvE : p.payE).push(e); bills[v] = e;
     });
     rows.forEach(r => {                                          // settlements: they carry the bill voucher (BK-123456-xxxx)
@@ -662,9 +664,9 @@ function computeDues(txs, accRows, opts) {
             return;
         }
         if (up.startsWith('RV-') && partyKey(r.from_account) === partyKey(BOOK_SALE_HEAD) && inA > 0) {
-            get(r.description).recvS.push({ date: d, amt: inA, voucher: vid, label: 'Receipt', pool: true });
+            get(normalizeBookParty(r.description)).recvS.push({ date: d, amt: inA, voucher: vid, label: 'Receipt', pool: true });
         } else if (up.startsWith('PV-') && partyKey(r.to_account) === partyKey(BOOK_BUY_HEAD) && outA > 0) {
-            get(r.description).payS.push({ date: d, amt: outA, voucher: vid, account: r.from_account, label: 'Payment', pool: true });
+            get(normalizeBookParty(r.description)).payS.push({ date: d, amt: outA, voucher: vid, account: r.from_account, label: 'Payment', pool: true });
         }
     });
     const byDate = (a, b) => (a.date || '').localeCompare(b.date || '') || String(a.voucher).localeCompare(String(b.voucher));

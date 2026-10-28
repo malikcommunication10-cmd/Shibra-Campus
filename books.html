@@ -482,7 +482,7 @@ function normTx(row, idx) {
     const uid = row.id !== undefined && row.id !== null ? 'id' + row.id : 'i' + idx;
     return {
         uid, id: row.id, idx, kind, qty, unit, net, gross: qty * unit, discount: Math.max(0, qty * unit - net),
-        title, key: norm(title), party: String(row.party_name || row.party || '').trim(),
+        title, key: norm(title), party: normalizeBookParty(row.party_name || row.party || row.vendor || ''),
         date: String(row.date || row.created_at || '').slice(0, 10),
         voucher: String(row.voucher_no || '').trim(), invoiceNo: String(row.invoice_no || '').trim(), mode: String(row.payment_mode || '').trim(), notes: String(row.notes || '').trim(), itemClass: String(row.item_class || '').trim(), category: String(row.category || '').trim(), salePrice: parseFloat(row.sale_price) || 0, raw: row
     };
