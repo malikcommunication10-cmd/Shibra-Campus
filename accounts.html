@@ -114,6 +114,7 @@
 
             <!-- OVERVIEW -->
             <section id="tab-overview" class="space-y-4">
+                <div class="flex justify-end no-print"><button onclick="exportOverviewCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button></div>
                 <div id="kpiCards" class="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3"></div>
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 xl:col-span-2 print-card">
@@ -221,7 +222,7 @@
                         <div id="expenseHeads" class="space-y-3"></div>
                     </div>
                 </div>
-                <div class="mt-3 no-print"><button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button></div>
+                <div class="mt-3 no-print flex gap-2"><button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button><button onclick="exportHeadsCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button></div>
             </section>
 
             <!-- RECEIVABLE / PAYABLE -->
@@ -233,6 +234,7 @@
                 <button onclick="openEntry('bill_raised')" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">🧾 Bill Raised (to receive)</button>
                 <button onclick="openEntry('bill_received')" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">📥 Bill Received (to pay)</button>
                 <input id="duesSearch" oninput="renderDues()" type="text" placeholder="Search party..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[160px]">
+                <button onclick="exportDuesCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
             </div>
             <details class="bg-white rounded-2xl border border-slate-200 shadow-sm print-card">
                 <summary class="p-3 font-bold text-sm text-indigo-900 cursor-pointer">Manage bill records and pending party balances</summary>
@@ -254,6 +256,7 @@
                 <div class="flex flex-wrap gap-2 no-print">
                     <button onclick="openEntry('transfer')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">🔁 Transfer between Cash / Bank / Online</button>
                     <button onclick="openEntry('opening')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">🏁 Add opening balance</button>
+                    <button onclick="exportWalletsCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
                     <table class="w-full text-left border-collapse text-xs">
@@ -289,7 +292,7 @@
                     <table class="w-full text-left border-collapse text-xs min-w-[760px]"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Asset</th><th class="p-2.5">Category</th><th class="p-2.5 text-right">Available</th><th class="p-2.5 text-right">Cost</th><th class="p-2.5 text-right">Depreciation</th><th class="p-2.5 text-right">Book value</th><th class="p-2.5">Actions</th></tr></thead><tbody id="assetBody"></tbody></table>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card">
-                    <div class="p-4 border-b"><h3 class="font-bold text-sm text-indigo-900">Asset activity</h3><p id="assetEventCount" class="text-xs text-slate-500 mt-1"></p></div>
+                    <div class="p-4 border-b flex items-center justify-between gap-2"><div><h3 class="font-bold text-sm text-indigo-900">Asset activity</h3><p id="assetEventCount" class="text-xs text-slate-500 mt-1"></p></div><button onclick="exportFixedAssetEventsCsv()" class="no-print bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-semibold">⬇️ Export</button></div>
                     <table class="w-full text-left border-collapse text-xs min-w-[780px]"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th><th class="p-2.5">Asset</th><th class="p-2.5">Type</th><th class="p-2.5 text-right">Quantity</th><th class="p-2.5 text-right">Amount</th><th class="p-2.5">Cash / Bank</th><th class="p-2.5">Voucher</th><th class="p-2.5">Notes</th></tr></thead><tbody id="assetEventBody"></tbody></table>
                 </div>
             </section>
@@ -809,11 +812,24 @@ async function saveAssetEvent() {
     }
 }
 function exportFixedAssetsCsv() {
-    if(!fixedAssets.length) { toast('There are no assets to export.', false); return; }
+    const query = $('assetSearch').value.trim().toLowerCase();
+    const assets = fixedAssets.filter(asset => !query || [asset.asset_code, asset.name, asset.category, asset.description].join(' ').toLowerCase().includes(query));
+    if(!assets.length) { toast('There are no matching assets to export.', false); return; }
     exportCsv('fixed-assets', ['Asset code', 'Asset', 'Category', 'Quantity', 'Cost', 'Depreciation', 'Book value'],
-        fixedAssets.map(asset => {
+        assets.map(asset => {
             const balance = assetBalances(asset);
             return [asset.asset_code, asset.name, asset.category, balance.quantity, balance.cost, balance.depreciation, balance.bookValue];
+        }));
+}
+function exportFixedAssetEventsCsv() {
+    if(!fixedAssetEvents.length) { toast('There is no asset activity to export.', false); return; }
+    const assetById = new Map(fixedAssets.map(asset => [String(asset.id), asset]));
+    exportCsv('fixed-asset-activity', ['Date', 'Asset code', 'Asset', 'Type', 'Quantity', 'Amount', 'Account', 'Party', 'Voucher', 'Notes'],
+        fixedAssetEvents.map(event => {
+            const asset = assetById.get(String(event.asset_id));
+            const account = event.account_name || (event.event_type === 'opening' ? 'Opening balance' : 'Non-cash');
+            return [event.event_date, asset ? asset.asset_code : '', asset ? asset.name : 'Asset', ASSET_EVENT_LABELS[event.event_type] || event.event_type,
+                event.event_type === 'depreciation' ? '' : Math.abs(Number(event.quantity_change) || 0), event.amount, account, event.party, event.voucher_id, event.remarks];
         }));
 }
 
@@ -1086,6 +1102,18 @@ function exportDaybookCsv() {
     exportCsv('daybook', ['Date', 'Voucher', 'Type', 'Account', 'Details', 'Receipt', 'Payment', 'Balance', 'Notes'],
         rows.map(e => [e.date, e.id, fixedAssetEntryMeta(e).label, e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label, entryLabel(e), e._d > 0 ? e._d : '', e._d < 0 ? -e._d : '', e._bal, e.notes]));
 }
+function exportOverviewCsv() {
+    const rows = scopeList();
+    if(!rows.length) { toast('No entries in this overview period to export.', false); return; }
+    exportCsv('accounts-overview', ['Date', 'Voucher', 'Type', 'Account', 'Category', 'Details', 'Money in', 'Money out', 'Notes'],
+        rows.map(e => [
+            e.date, e.id, fixedAssetEntryMeta(e).label,
+            e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label,
+            e.headLabel || e.head, entryLabel(e),
+            e.kind === 'receipt' || e.kind === 'opening' ? e.amount : '',
+            e.kind === 'payment' ? e.amount : '', e.notes
+        ]));
+}
 
 // ---------------- FEE COLLECTION ----------------
 function feeList() {
@@ -1140,6 +1168,21 @@ function renderHeads() {
     build('receipt', 'bg-emerald-500', 'incomeHeads');
     build('payment', 'bg-rose-500', 'expenseHeads');
 }
+function exportHeadsCsv() {
+    const r = getRange(), list = scopeList(), rows = [];
+    ['receipt', 'payment'].forEach(kind => {
+        const totals = new Map();
+        list.filter(e => e.kind === kind && !e.isFixedAsset
+            && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal))
+            && (r.wallet === 'ALL' || e.wallet === r.wallet))
+            .forEach(e => totals.set(e.headLabel, (totals.get(e.headLabel) || 0) + e.amount));
+        [...totals].sort((a, b) => b[1] - a[1])
+            .forEach(([head, amount]) => rows.push([kind === 'receipt' ? 'Income' : 'Expense', head, amount]));
+        if(totals.size) rows.push([kind === 'receipt' ? 'Income total' : 'Expense total', '', [...totals.values()].reduce((sum, amount) => sum + amount, 0)]);
+    });
+    if(!rows.length) { toast('No head summary in this period to export.', false); return; }
+    exportCsv('heads-summary', ['Type', 'Head', 'Amount'], rows);
+}
 
 // ---------------- WALLETS ----------------
 function renderWallets() {
@@ -1163,6 +1206,23 @@ function renderWallets() {
         });
         return `<tr class="border-b"><td class="p-2.5 font-semibold">${WALLETS[w].icon} ${WALLETS[w].label}</td><td class="p-2.5 text-right">${fmt(opening)}</td><td class="p-2.5 text-right text-emerald-600">${fmt(rec)}</td><td class="p-2.5 text-right text-rose-600">${fmt(pay)}</td><td class="p-2.5 text-right">${fmt(tin)}</td><td class="p-2.5 text-right">${fmt(tout)}</td><td class="p-2.5 text-right font-bold">${fmt(opening + rec - pay + tin - tout)}</td></tr>`;
     }).join('');
+}
+function exportWalletsCsv() {
+    const r = getRange(), end = r.to === '9999-12-31' ? todayStr() : r.to;
+    const inRange = entries.filter(e => e.date >= r.from && e.date <= r.to);
+    const rows = Object.keys(WALLETS).map(wallet => {
+        let opening = balanceBefore(r.from, wallet), receipts = 0, payments = 0, transferIn = 0, transferOut = 0;
+        inRange.forEach(e => {
+            if(e.wallet === wallet && (e.kind === 'receipt' || e.kind === 'opening')) receipts += e.amount;
+            if(e.wallet === wallet && e.kind === 'payment') payments += e.amount;
+            if(e.kind === 'transfer') {
+                if(e.wallet === wallet) transferOut += e.amount;
+                if(e.wallet2 === wallet) transferIn += e.amount;
+            }
+        });
+        return [WALLETS[wallet].label, opening, receipts, payments, transferIn, transferOut, opening + receipts - payments + transferIn - transferOut, balanceUpTo(end, wallet)];
+    });
+    exportCsv('cash-bank-summary', ['Account', 'Opening', 'Receipts', 'Payments', 'Transfer in', 'Transfer out', 'Closing for period', `Balance as of ${end}`], rows);
 }
 
 // ====================================================================================
@@ -1417,6 +1477,65 @@ async function renderDues() {
     const bl = [...billEntries].sort((a, b) => b.date.localeCompare(a.date));
     $('billsBody').innerHTML = bl.length ? bl.map(e => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-mono text-indigo-900">${esc(e.id)}</td><td class="p-2.5 whitespace-nowrap">${fmtDate(e.date)}</td><td class="p-2.5"><span class="px-2 py-0.5 rounded-md border ${KIND_META[e.kind].cls}">${KIND_META[e.kind].label}</span></td><td class="p-2.5">${esc(e.title)}${e.notes ? `<div class="text-[11px] text-slate-400">${esc(e.notes)}</div>` : ''}</td><td class="p-2.5 text-right font-bold">PKR ${fmt(e.amount)}</td><td class="p-2.5 text-right font-bold ${remOf[e.id.toUpperCase()] > 0.005 ? 'text-rose-600' : 'text-emerald-600'}">${remOf[e.id.toUpperCase()] > 0.005 ? 'PKR ' + fmt(remOf[e.id.toUpperCase()]) : 'Cleared'}</td><td class="p-2.5 no-print whitespace-nowrap"><button onclick="editEntry('${esc(e.id)}')" class="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-semibold mr-1">Edit</button><button onclick="deleteEntry('${esc(e.id)}')" class="text-[11px] bg-rose-50 text-rose-700 px-2 py-1 rounded font-semibold">Delete</button></td></tr>`).join('')
         : '<tr><td colspan="7" class="p-6 text-center text-slate-400">No bills created here yet. Use "Bill Raised" or "Bill Received".</td></tr>';
+}
+async function exportDuesCsv() {
+    const list = await ensureBookDues(), query = ($('duesSearch').value || '').trim().toLowerCase();
+    const parties = list.filter(p => !query || p.name.toLowerCase().includes(query));
+    const rows = [];
+    parties.forEach(p => {
+        rows.push(['Party balance', '', p.name, '', '', p.recv.pending, p.pay.pending, '', '']);
+        [...p.recvE.map(entry => ({ entry, side: 'Receivable' })), ...p.payE.map(entry => ({ entry, side: 'Payable' }))]
+            .forEach(({ entry, side }) => rows.push(['Bill', entry.date, p.name, entry.voucher, side, entry.amt, entry.rem, entry.title || '', '']));
+    });
+
+    if(duesLedgerSide === 'security') {
+        const securityEntries = staffSecurityLedger.filter(entry =>
+            !query || `${entry.staff_name || ''} ${entry.staff_id || ''} ${entry.voucher_id || ''}`.toLowerCase().includes(query)
+        ).slice().sort((a, b) => String(a.transaction_date || '').localeCompare(String(b.transaction_date || '')));
+        let balance = 0;
+        securityEntries.forEach(entry => {
+            const amount = Number(entry.amount) || 0, incoming = entry.entry_type !== 'refund';
+            balance += incoming ? amount : -amount;
+            rows.push(['Staff security', entry.transaction_date, entry.staff_name || entry.staff_id || 'Staff', entry.voucher_id || '',
+                entry.entry_type, incoming ? amount : '', incoming ? '' : amount, balance, entry.notes || '']);
+        });
+    } else if(duesLedgerSide === 'concept' && selectedVendorLedgerKey) {
+        const vendor = list.find(p => p.key === selectedVendorLedgerKey);
+        if(vendor) {
+            const transactions = [
+                ...vendor.payE.map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Purchase', purchase: Number(entry.amt) || 0, payment: 0 })),
+                ...vendor.payS.filter(entry => entry.label === 'Payment').map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Payment', purchase: 0, payment: Number(entry.amt) || 0, account: entry.account || '' })),
+                ...vendor.payS.filter(entry => entry.label === 'Purchase return').map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Purchase return', purchase: -(Number(entry.amt) || 0), payment: 0 }))
+            ].sort((a, b) => a.date.localeCompare(b.date) || a.voucher.localeCompare(b.voucher));
+            let balance = 0;
+            const groups = new Map();
+            transactions.forEach(entry => {
+                const key = entry.date || 'unknown';
+                if(!groups.has(key)) groups.set(key, { date: entry.date, opening: balance, purchase: 0, payment: 0, balance: 0, accounts: new Map() });
+                const group = groups.get(key);
+                group.purchase += entry.purchase;
+                group.payment += entry.payment;
+                balance += entry.purchase - entry.payment;
+                group.balance = balance;
+                if(entry.payment) {
+                    const account = entry.account || 'Account not recorded';
+                    group.accounts.set(account, (group.accounts.get(account) || 0) + entry.payment);
+                }
+            });
+            let ledgerGroups = [...groups.values()];
+            if(duesLedgerOrder === 'newest') ledgerGroups.reverse();
+            ledgerGroups.forEach(group => {
+                if(group.purchase) rows.push(['Vendor ledger', group.date, vendor.name, '', group.purchase < 0 ? 'Purchase return' : 'Purchase', Math.abs(group.purchase), '', group.opening + group.purchase, '']);
+                if(group.payment) {
+                    const accountDetails = [...group.accounts].map(([account, amount]) => `${account}: ${fmt(amount)}`).join('; ');
+                    rows.push(['Vendor ledger', group.date, vendor.name, '', 'Payment', '', group.payment, group.balance, accountDetails]);
+                }
+            });
+        }
+    }
+
+    if(!rows.length) { toast('No receivable/payable data to export.', false); return; }
+    exportCsv('receivable-payable', ['Record type', 'Date', 'Party', 'Voucher', 'Activity', 'Purchase / Receivable', 'Payment / Payable', 'Balance / Remaining', 'Details / Account'], rows);
 }
 
 function toggleDuesLedger(side) {
