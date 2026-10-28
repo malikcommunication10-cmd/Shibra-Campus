@@ -97,8 +97,8 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
       <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Active student vouchers</div><div id="stCount" class="text-lg font-extrabold text-slate-900">0</div><div id="stCountInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
       <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Net payable after discount</div><div id="stPayable" class="text-lg font-extrabold text-slate-900">0</div><div id="stPayableInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Collected</div><div id="stPaid" class="text-lg font-extrabold text-emerald-600">0</div><div id="stPaidInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Pending (net)</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div><div id="stBalInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div id="stPaidLabel" class="text-[11px] text-slate-500 font-semibold">Collected</div><div id="stPaid" class="text-lg font-extrabold text-emerald-600">0</div><div id="stPaidInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div id="stBalLabel" class="text-[11px] text-slate-500 font-semibold">Pending (net)</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div><div id="stBalInactive" class="mt-0.5 text-[10px] text-slate-400"></div></div>
     </div>
 
     <div id="afBanner" class="hidden no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3"></div>
@@ -155,6 +155,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
             <button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
             <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
             <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
+            <button id="summaryReceiptModeBtn" onclick="toggleSummaryReceiptMode()" class="btn b-gh" aria-pressed="false">💸 Actual received by month</button>
             <button onclick="downloadArrearsReconciliation()" class="btn b-gh">🧾 2025 arrears check</button>
             <button onclick="downloadVouchersCsv()" class="btn b-gh">⬇️ CSV</button>
             <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
@@ -185,10 +186,7 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
         </table>
       </div>
       <div id="summaryView" class="hidden overflow-x-auto md:max-h-[70vh]">
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50 p-2 no-print">
-          <p id="summaryReceiptModeNote" class="text-xs text-slate-500">Paid amounts follow FIFO voucher allocations.</p>
-          <button id="summaryReceiptModeBtn" onclick="toggleSummaryReceiptMode()" class="btn b-gh" aria-pressed="false">💸 Show actual received by month</button>
-        </div>
+        <p id="summaryReceiptModeNote" class="border-b bg-slate-50 p-2 text-xs text-slate-500"></p>
         <table class="rt w-full border-collapse"><thead id="sumHead" class="bg-slate-50 sticky top-0"></thead><tbody id="sumBody"></tbody></table>
       </div>
       <div id="feesTableFooter" class="no-print border-t bg-slate-50 p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"></div>
@@ -443,6 +441,8 @@ function toggleView(){
 }
 function toggleSummaryReceiptMode(){
   summaryReceiptMode=summaryReceiptMode==='fifo'?'received':'fifo';
+  if(summaryReceiptMode==='received'&&viewMode!=='summary')toggleView();
+  renderFeeStats(currentGroups);
   renderStudentSummary();
 }
 function renderStudentSummary(){
@@ -485,7 +485,7 @@ if(!actual){
   }
   let list=Object.values(by).filter(o=>!q||(o.name||'').toLowerCase().includes(q)||String(o.adm||'').toLowerCase().includes(q)).sort((a,b)=>b.bal-a.bal);
   const T={prev:0,pay:0,paid:0,bal:0};
-  $('summaryReceiptModeBtn').innerText=actual?'📊 Show FIFO allocation':'💸 Show actual received by month';
+  $('summaryReceiptModeBtn').innerText=actual?'📊 FIFO allocation view':'💸 Actual received by month';
   $('summaryReceiptModeBtn').setAttribute('aria-pressed',String(actual));
   $('summaryReceiptModeNote').innerText=actual
     ?`Actual cash received during ${lbl} is shown; balances use receipts by their received month. Voucher balances remain FIFO-based.`
@@ -612,19 +612,55 @@ function feeStudentIsActive(group){
   return !!student&&(status===''||status==='active');
 }
 function statBalance(value){return value<0?`Advance ${fmt(-value)}`:fmt(value)}
+function paymentMonthIndex(transaction,fallback){
+  const date=String(transaction.date||'').slice(0,10),match=date.match(/^(\d{4})-(\d{2})/);
+  return match?Number(match[1])*12+Number(match[2])-1:fallback;
+}
+function renderFeeStats(groups){
+  const actual=summaryReceiptMode==='received';
+  const month=+$('toMonth').value||12,monthName=($('toMonth').selectedOptions[0]||{}).text||'Month';
+  const selectedIndex=SCHOOL_YEAR*12+month-1;
+  const totals={active:{count:0,payable:0,paid:0,balance:0},inactive:{count:0,payable:0,paid:0,balance:0}};
+  groups.forEach(group=>{
+    group.isActive=feeStudentIsActive(group);
+    if(group._out)return;
+    const total=totals[group.isActive?'active':'inactive'];
+    total.count++;total.payable+=group.net;total.paid+=group.paid;total.balance+=group.balance;
+    if(!actual)return;
+    let receivedThisMonth=0,receivedThroughMonth=0,chargesThroughMonth=0;
+    group.rows.forEach(row=>{
+      const periodIndex=feePeriodIndex(row.period);
+      if(periodIndex!==null&&periodIndex<=selectedIndex)chargesThroughMonth+=row.net??(parseFloat(row.payable)||0);
+    });
+    const fallbackPeriod=group.rows.length?feePeriodIndex(group.rows[0].period):null;
+    ((accountsDataMap[group.vid]||{}).transactions||[]).forEach(transaction=>{
+      const amount=parseFloat(transaction.amount_in)||0;
+      if(amount<=0)return;
+      const receivedIndex=paymentMonthIndex(transaction,fallbackPeriod);
+      if(receivedIndex===null||receivedIndex===undefined||receivedIndex>selectedIndex)return;
+      receivedThroughMonth+=amount;
+      if(receivedIndex===selectedIndex)receivedThisMonth+=amount;
+    });
+    total.paid+=receivedThisMonth-group.paid;
+    total.balance+=chargesThroughMonth-receivedThroughMonth-group.balance;
+  });
+  $('stCount').innerText=fmt(totals.active.count);$('stCountInactive').innerText=`Inactive vouchers: ${fmt(totals.inactive.count)}`;
+  $('stPayable').innerText=fmt(totals.active.payable);$('stPayableInactive').innerText=`Inactive net payable: ${fmt(totals.inactive.payable)}`;
+  $('stPaidLabel').innerText=actual?`Received in ${monthName}`:'Collected';
+  $('stPaid').innerText=fmt(totals.active.paid);$('stPaidInactive').innerText=actual?`Inactive received: ${fmt(totals.inactive.paid)}`:`Inactive collected: ${fmt(totals.inactive.paid)}`;
+  $('stBalLabel').innerText=actual?`Balance after ${monthName}`:'Pending (net)';
+  $('stBal').innerText=statBalance(totals.active.balance);$('stBalInactive').innerText=actual?`Inactive balance: ${statBalance(totals.inactive.balance)}`:`Inactive pending: ${statBalance(totals.inactive.balance)}`;
+}
 function renderFeesTable(rowsIn){
   const groups=buildGroups(rowsIn);currentGroups=groups;
   const tb=$('feesTableBody'),tf=$('feesTableFooter');$('selectAllCheckbox').checked=false;
   if(!groups.length){tb.innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
-   ['stCount','stPayable','stPaid','stBal','stCountInactive','stPayableInactive','stPaidInactive','stBalInactive'].forEach(i=>$(i).innerText='0');return}
-  const totals={active:{count:0,payable:0,paid:0,balance:0},inactive:{count:0,payable:0,paid:0,balance:0}};
+   renderFeeStats(groups);return}
   let sp=0,sd=0,sb=0,html='';
   groups.forEach((g,i)=>{
     g.isActive=feeStudentIsActive(g);
     if(!g._out){
       sp+=g.net;sd+=g.paid;sb+=g.balance;
-      const total=totals[g.isActive?'active':'inactive'];
-      total.count++;total.payable+=g.net;total.paid+=g.paid;total.balance+=g.balance;
     }
     const lock=isLocked(g.vid);
     const badge=g.status==='Paid'?'bg-emerald-50 text-emerald-700':g.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
@@ -647,13 +683,10 @@ function renderFeesTable(rowsIn){
  <td data-l="Class">${esc(g.cls)||'-'}</td>
  <td data-l="Status"><span class="badge ${badge}">${g.status}</span></td>
  <td data-l="Date(s)" class="font-mono text-indigo-700">${esc(g.dates)}</td>
- <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok flex-1" style="padding:.35rem .5rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem" title="Add another fee to this voucher">➕ Item</button></div></td></tr>`;
+ <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok flex-1" style="padding:.35rem .5rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem" title="Add another fee to this voucher">➕ Item</button></div> </td></tr>`;
   });
   tb.innerHTML=html;
-  $('stCount').innerText=fmt(totals.active.count);$('stCountInactive').innerText=`Inactive vouchers: ${fmt(totals.inactive.count)}`;
-  $('stPayable').innerText=fmt(totals.active.payable);$('stPayableInactive').innerText=`Inactive net payable: ${fmt(totals.inactive.payable)}`;
-  $('stPaid').innerText=fmt(totals.active.paid);$('stPaidInactive').innerText=`Inactive collected: ${fmt(totals.inactive.paid)}`;
-  $('stBal').innerText=statBalance(totals.active.balance);$('stBalInactive').innerText=`Inactive pending: ${statBalance(totals.inactive.balance)}`;
+  renderFeeStats(groups);
   tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}${groups.some(g=>g._out)?' <span class="font-normal text-slate-400">(grey rows are outside the selected months, not counted)</span>':''}</div>
  <div class="flex gap-2"><button onclick="openBulkPayModal()" class="btn b-pri flex-1 md:flex-none">⚡ Bulk pay</button>
  <button onclick="sendWhatsAppReminders()" class="btn b-ok flex-1 md:flex-none">WhatsApp reminders</button></div>`;
