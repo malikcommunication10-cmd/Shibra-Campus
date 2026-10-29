@@ -308,13 +308,15 @@
                     <p id="ledgerInfo" class="text-xs text-slate-500 mt-0.5"></p>
                 </div>
                 <div class="flex gap-2 no-print">
+                    <button id="ledgerViewToggle" onclick="toggleFollowupLedgerView()" aria-pressed="false" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold">Monthly view</button>
                     <button onclick="printLedger()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">🖨️ Print</button>
                     <button onclick="closeLedger()" class="bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">✕</button>
                 </div>
             </div>
+            <p id="ledgerViewNote" class="hidden mb-2 text-[11px] text-slate-500">Payments are shown in the month they were received, not distributed across earlier fee months.</p>
             <div class="overflow-x-auto mb-3">
-                <table class="w-full text-left text-xs border-collapse">
-                    <thead class="bg-slate-100 text-slate-600">
+                <table id="followupLedgerTable" class="w-full text-left text-xs border-collapse">
+                    <thead id="ledgerHead" class="bg-slate-100 text-slate-600">
                         <tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr>
                     </thead>
                     <tbody id="ledgerBody"></tbody>
@@ -508,34 +510,86 @@ async function loadLogs(rerender = true) {
 // ====================================================================================
 //  STUDENT LEDGER (opens when a student name is clicked)
 // ====================================================================================
+let followupLedgerView = 'detailed', followupLedgerData = null;
 function periodStart(p) { const a = String(p || '').trim().toLowerCase().split(/\s+/), m = MONTHS.indexOf(a[0]); return `${parseInt(a[1]) || SCHOOL_YEAR}-${String((m < 0 ? 0 : m) + 1).padStart(2, '0')}-01`; }
+function followupLedgerMonthIndex(date, fallback) {
+    const match = String(date || '').match(/^(\d{4})-(\d{2})/);
+    return match ? Number(match[1]) * 12 + Number(match[2]) - 1 : fallback;
+}
+function toggleFollowupLedgerView() {
+    if(!followupLedgerData) return;
+    followupLedgerView = followupLedgerView === 'detailed' ? 'monthly' : 'detailed';
+    renderFollowupLedger();
+}
+function renderFollowupLedger() {
+    if(!followupLedgerData) return;
+    const monthly = followupLedgerView === 'monthly';
+    const events = monthly ? followupLedgerData.monthly : followupLedgerData.events;
+    $('followupLedgerTable').classList.toggle('monthly-ledger', monthly);
+    $('ledgerHead').innerHTML = monthly
+        ? '<tr><th class="p-2">Month</th><th class="p-2">Fee items</th><th class="p-2">Charge</th><th class="p-2">Received</th><th class="p-2">Balance</th></tr>'
+        : '<tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr>';
+    $('ledgerViewToggle').innerText = monthly ? 'Detailed view' : 'Monthly view';
+    $('ledgerViewToggle').setAttribute('aria-pressed', String(monthly));
+    $('ledgerViewNote').classList.toggle('hidden', !monthly);
+    let running = 0, charges = 0, paid = 0, html = '';
+    events.forEach(event => {
+        running = Math.round((running + event.debit - event.credit) * 100) / 100;
+        charges += event.debit;
+        paid += event.credit;
+        const balance = running < 0 ? `Adv ${fmt(-running)}` : `PKR ${fmt(running)}`;
+        if(monthly) {
+            html += `<tr class="border-b ${event.debit ? 'bg-slate-50/70' : ''}"><td class="p-2 font-semibold whitespace-nowrap">${esc(event.label)}</td><td class="p-2 text-slate-600 whitespace-nowrap">${esc(event.description) || '-'}</td><td class="p-2 font-bold whitespace-nowrap">${event.debit ? 'PKR ' + fmt(event.debit) : '0'}</td><td class="p-2 font-bold text-emerald-600 whitespace-nowrap">${event.credit ? 'PKR ' + fmt(event.credit) : '0'}</td><td class="p-2 font-bold whitespace-nowrap ${running > 0 ? 'text-rose-600' : running < 0 ? 'text-indigo-600' : 'text-slate-500'}">${balance}</td></tr>`;
+        } else {
+            html += `<tr class="border-b ${event.ord ? '' : 'bg-slate-50/70'}"><td class="p-2 font-mono ${event.ord ? '' : 'text-slate-400'}">${event.ord ? event.date : event.date.slice(0, 7)}</td><td class="p-2 font-mono text-indigo-900">${esc(event.vid) || '-'}</td><td class="p-2 text-indigo-600">${esc(event.period) || '-'}</td><td class="p-2 text-slate-600">${event.desc}</td><td class="p-2 font-bold">${event.debit ? 'PKR ' + fmt(event.debit) : ''}</td><td class="p-2 font-bold text-emerald-600">${event.credit ? 'PKR ' + fmt(event.credit) : ''}</td><td class="p-2 font-bold ${running > 0 ? 'text-rose-600' : running < 0 ? 'text-indigo-600' : 'text-slate-500'}">${balance}</td></tr>`;
+        }
+    });
+    $('ledgerBody').innerHTML = html || `<tr><td colspan="${monthly ? 5 : 7}" class="p-4 text-center text-slate-400">No vouchers found for this student.</td></tr>`;
+    $('ledTP').innerText = 'PKR ' + fmt(charges);
+    $('ledTD').innerText = 'PKR ' + fmt(paid);
+    $('ledTB').innerText = running < 0 ? 'Adv ' + fmt(-running) : 'PKR ' + fmt(running);
+}
 function openLedger(key) {
-    // a real ledger: vouchers are CHARGES, payments are CREDITS on the day they were received, and the balance runs on
     const rows = allFees.filter(f => childKey(f.admis_no, f.student_name) === key && (!isFutureV(f) || f._paid > 0));
     const st = allStudents.find(s => childKey(s.admis_no, s.student_name) === key) || rows[0] || {};
     const tcase = t => String(t || '').replace(/\b\w/g, c => c.toUpperCase());
     const byV = new Map(); rows.forEach(r => { const k = String(r.voucher_id || '').trim(); (byV.get(k) || byV.set(k, []).get(k)).push(r); });
-    const ev = [];
+    const ev = [], monthlyRows = new Map();
+    const getMonth = index => {
+        if(!monthlyRows.has(index)) monthlyRows.set(index, { label: `${MONTHS[((index % 12) + 12) % 12]} ${Math.floor(index / 12)}`, items: new Set(), debit: 0, credit: 0 });
+        return monthlyRows.get(index);
+    };
     byV.forEach((R, vid) => {
         const f0 = R[0], net = R.reduce((s, r) => s + r._payable, 0), disc = R.reduce((s, r) => s + r._discount, 0);
         const items = R.map(r => (isArrearsType(r.type) ? 'Arrears' : tcase(r.type || 'tuition fee')) + (R.length > 1 ? ' ' + fmt(r._payable) : '')).join(' + ');
         ev.push({ date: periodStart(f0.period), ord: 0, vid, period: f0.period, desc: esc(items) + (disc > 0 ? ` <span class="text-indigo-600 font-semibold">(Discount PKR ${fmt(disc)})</span>` : ''), debit: net, credit: 0 });
-        (txMap[vid.split('-').slice(0, 2).join('-')] || []).forEach(t => ev.push({ date: String(t.date || '').slice(0, 10) || periodStart(f0.period), ord: 1, vid, period: f0.period, desc: esc(t.description || t.remarks || 'Payment received'), debit: 0, credit: parseFloat(t.amount_in) || 0 }));
+        const periodIndex = periodRank(f0.period);
+        const chargeIndex = periodIndex >= 0 && periodIndex !== 9999999 ? periodIndex : followupLedgerMonthIndex(periodStart(f0.period), SCHOOL_YEAR * 12);
+        const monthCharge = getMonth(chargeIndex);
+        monthCharge.debit += net;
+        R.forEach(r => monthCharge.items.add(isArrearsType(r.type) ? 'Arrears' : tcase(r.type || 'tuition fee')));
+        (txMap[vid.split('-').slice(0, 2).join('-')] || []).forEach(t => {
+            const amount = parseFloat(t.amount_in) || 0;
+            if(amount <= 0) return;
+            const date = String(t.date || '').slice(0, 10) || periodStart(f0.period);
+            ev.push({ date, ord: 1, vid, period: f0.period, desc: esc(t.description || t.remarks || 'Payment received'), debit: 0, credit: amount });
+            const receivedIndex = followupLedgerMonthIndex(date, chargeIndex);
+            getMonth(receivedIndex).credit += amount;
+        });
     });
     ev.sort((a, b) => a.date.localeCompare(b.date) || a.ord - b.ord || String(a.vid).localeCompare(String(b.vid)));
-    let run = 0, tc = 0, tp = 0, html = '';
-    ev.forEach(e => {
-        run = Math.round((run + e.debit - e.credit) * 100) / 100; tc += e.debit; tp += e.credit;
-        html += `<tr class="border-b ${e.ord ? '' : 'bg-slate-50/70'}"><td class="p-2 font-mono ${e.ord ? '' : 'text-slate-400'}">${e.ord ? e.date : e.date.slice(0, 7)}</td><td class="p-2 font-mono text-indigo-900">${esc(e.vid) || '-'}</td><td class="p-2 text-indigo-600">${esc(e.period) || '-'}</td><td class="p-2 text-slate-600">${e.desc}</td><td class="p-2 font-bold">${e.debit ? 'PKR ' + fmt(e.debit) : ''}</td><td class="p-2 font-bold text-emerald-600">${e.credit ? 'PKR ' + fmt(e.credit) : ''}</td><td class="p-2 font-bold ${run > 0 ? 'text-rose-600' : run < 0 ? 'text-indigo-600' : 'text-slate-500'}">${run < 0 ? 'Adv ' + fmt(-run) : 'PKR ' + fmt(run)}</td></tr>`;
-    });
-    $('ledgerBody').innerHTML = html || '<tr><td colspan="7" class="p-4 text-center text-slate-400">No vouchers found for this student.</td></tr>';
+    const monthIndexes = [...monthlyRows.keys()].sort((a, b) => a - b), monthly = [];
+    if(monthIndexes.length) for(let index = monthIndexes[0]; index <= monthIndexes[monthIndexes.length - 1]; index++) {
+        const month = getMonth(index);
+        monthly.push({ label: month.label, description: [...month.items].join(', ') || '—', debit: month.debit, credit: month.credit });
+    }
+    followupLedgerData = { events: ev, monthly };
+    followupLedgerView = 'detailed';
     $('ledgerInfo').innerText = `Student: ${st.student_name || '-'} | Class: ${st.class || '-'} | Admis No: ${st.admis_no || '-'}${st[SIBLINGS_COL] ? ' | Siblings: ' + st[SIBLINGS_COL] : ''}`;
-    $('ledTP').innerText = 'PKR ' + fmt(tc);
-    $('ledTD').innerText = 'PKR ' + fmt(tp);
-    $('ledTB').innerText = run < 0 ? 'Adv ' + fmt(-run) : 'PKR ' + fmt(run);
+    renderFollowupLedger();
     $('ledgerModal').classList.remove('hidden');
 }
-function closeLedger() { $('ledgerModal').classList.add('hidden'); }
+function closeLedger() { $('ledgerModal').classList.add('hidden'); followupLedgerData = null; }
 function printLedger() { document.body.classList.add('print-ledger'); window.print(); }
 window.addEventListener('afterprint', () => document.body.classList.remove('print-ledger'));
 
