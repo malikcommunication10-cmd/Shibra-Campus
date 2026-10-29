@@ -12,6 +12,7 @@
     <script src="nav.js?v=20261028-1"></script>
 <style>
 body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+html,body{max-width:100%;overflow-x:hidden}
 .inp{width:100%;border:1px solid #cbd5e1;border-radius:.6rem;padding:.6rem .75rem;font-size:.85rem;background:#fff;outline:none}
 .inp:focus{border-color:#4f46e5;box-shadow:0 0 0 3px #e0e7ff}
 .inp[readonly]{background:#f1f5f9}
@@ -29,6 +30,43 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-se
 .nav a:hover{background:rgba(255,255,255,.08)}.nav a.on{background:#4338ca;color:#fff;font-weight:600}
 table.rt th{padding:.65rem .6rem;font-size:.7rem;font-weight:700;color:#475569;text-align:left;white-space:nowrap}
 table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
+#voucherView,#summaryView{width:100%;min-width:0;overflow-x:hidden}
+#feesVoucherTable,#studentSummaryTable{width:100%;table-layout:fixed}
+#feesVoucherTable th,#feesVoucherTable td,#studentSummaryTable th,#studentSummaryTable td{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#feesVoucherTable td{padding:.4rem .3rem;font-size:.72rem}
+#feesVoucherTable th{padding:.4rem .3rem;font-size:.64rem;white-space:normal}
+#feesVoucherTable .fee-item-chip{max-width:100%;margin:0 .15rem .15rem 0;padding:.1rem .35rem;font-size:.62rem;white-space:normal}
+#feesVoucherTable .fee-actions{flex-wrap:wrap;gap:.2rem}
+#feesVoucherTable .fee-actions .btn{min-width:0;padding:.25rem .3rem!important;font-size:.65rem}
+@media(max-width:1999px){
+ #feesVoucherTable th:nth-child(2),#feesVoucherTable td:nth-child(2),
+ #feesVoucherTable th:nth-child(6),#feesVoucherTable td:nth-child(6),
+ #feesVoucherTable th:nth-child(12),#feesVoucherTable td:nth-child(12),
+ #feesVoucherTable th:nth-child(13),#feesVoucherTable td:nth-child(13),
+ #feesVoucherTable th:nth-child(14),#feesVoucherTable td:nth-child(14){display:none}
+ #feesVoucherTable th:nth-child(1),#feesVoucherTable td:nth-child(1){width:3%}
+ #feesVoucherTable th:nth-child(3),#feesVoucherTable td:nth-child(3){width:9%}
+ #feesVoucherTable th:nth-child(4),#feesVoucherTable td:nth-child(4){width:7%}
+ #feesVoucherTable th:nth-child(5),#feesVoucherTable td:nth-child(5){width:14%}
+ #feesVoucherTable th:nth-child(7),#feesVoucherTable td:nth-child(7){width:17%}
+ #feesVoucherTable th:nth-child(8),#feesVoucherTable td:nth-child(8){width:8%}
+ #feesVoucherTable th:nth-child(9),#feesVoucherTable td:nth-child(9){width:11%}
+ #feesVoucherTable th:nth-child(10),#feesVoucherTable td:nth-child(10){width:9%}
+ #feesVoucherTable th:nth-child(11),#feesVoucherTable td:nth-child(11){width:10%}
+ #feesVoucherTable th:nth-child(15),#feesVoucherTable td:nth-child(15){width:12%}
+}
+@media(max-width:1099px){
+ #feesVoucherTable th:nth-child(4),#feesVoucherTable td:nth-child(4),
+ #feesVoucherTable th:nth-child(8),#feesVoucherTable td:nth-child(8){display:none}
+ #feesVoucherTable th:nth-child(1),#feesVoucherTable td:nth-child(1){width:4%}
+ #feesVoucherTable th:nth-child(3),#feesVoucherTable td:nth-child(3){width:12%}
+ #feesVoucherTable th:nth-child(5),#feesVoucherTable td:nth-child(5){width:19%}
+ #feesVoucherTable th:nth-child(7),#feesVoucherTable td:nth-child(7){width:21%}
+ #feesVoucherTable th:nth-child(9),#feesVoucherTable td:nth-child(9){width:12%}
+ #feesVoucherTable th:nth-child(10),#feesVoucherTable td:nth-child(10){width:10%}
+ #feesVoucherTable th:nth-child(11),#feesVoucherTable td:nth-child(11){width:11%}
+ #feesVoucherTable th:nth-child(15),#feesVoucherTable td:nth-child(15){width:11%}
+}
 @media(max-width:767px){
  table.rt thead{display:none}
  table.rt,table.rt tbody{display:block}
@@ -176,8 +214,8 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
         </div>
         <label class="md:hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" onchange="toggleSelectAll(this)"> Select all</label>
       </div>
-      <div id="voucherView" class="overflow-x-auto md:max-h-[70vh]">
-        <table class="rt w-full border-collapse">
+      <div id="voucherView" class="md:max-h-[70vh]">
+        <table id="feesVoucherTable" class="rt w-full border-collapse">
           <thead class="bg-slate-50 sticky top-0"><tr>
             <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
             <th>Sr</th><th>Voucher ID</th><th>Admis No</th><th>Student</th><th>Siblings</th><th>Items</th><th>Period</th>
@@ -185,9 +223,9 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
           <tbody id="feesTableBody"><tr><td colspan="15" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
         </table>
       </div>
-      <div id="summaryView" class="hidden overflow-x-auto md:max-h-[70vh]">
+      <div id="summaryView" class="hidden md:max-h-[70vh]">
         <p id="summaryReceiptModeNote" class="border-b bg-slate-50 p-2 text-xs text-slate-500"></p>
-        <table class="rt w-full border-collapse"><thead id="sumHead" class="bg-slate-50 sticky top-0"></thead><tbody id="sumBody"></tbody></table>
+        <table id="studentSummaryTable" class="rt w-full border-collapse"><thead id="sumHead" class="bg-slate-50 sticky top-0"></thead><tbody id="sumBody"></tbody></table>
       </div>
       <div id="feesTableFooter" class="no-print border-t bg-slate-50 p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"></div>
     </section>
@@ -667,7 +705,7 @@ function renderFeesTable(rowsIn){
     const bc=g.balance<0?'text-indigo-600 font-extrabold':g.balance>0?'text-rose-600 font-bold':'text-slate-500';
     const bt=g.balance<0?`Adv ${fmt(-g.balance)}`:`PKR ${fmt(g.balance)}`;
     const onlyArr=g.rows.every(isArr);
-    const chips=g.rows.map(r=>`<span class="inline-block mr-1 mb-1 px-2 py-0.5 rounded-md border text-[11px] ${isArr(r)?'bg-rose-50 border-rose-200 text-rose-700':(/annual/i.test(r.type||'')?'bg-amber-50 border-amber-300 text-amber-800':'bg-slate-50 border-slate-200 text-slate-700')}">${esc(itemName(r))} <b>${fmt(r.net??r.payable)}</b></span>`).join('');
+    const chips=g.rows.map(r=>`<span class="fee-item-chip inline-block rounded-md border ${isArr(r)?'bg-rose-50 border-rose-200 text-rose-700':(/annual/i.test(r.type||'')?'bg-amber-50 border-amber-300 text-amber-800':'bg-slate-50 border-slate-200 text-slate-700')}">${esc(itemName(r))} <b>${fmt(r.net??r.payable)}</b></span>`).join('');
     html+=`<tr class="${onlyArr?'bg-rose-50/60':'hover:bg-slate-50'} ${g._out?'opacity-50':''}">
  <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(g.vid)}"></td>
  <td data-l="Sr">${i+1}</td>
@@ -683,7 +721,7 @@ function renderFeesTable(rowsIn){
  <td data-l="Class">${esc(g.cls)||'-'}</td>
  <td data-l="Status"><span class="badge ${badge}">${g.status}</span></td>
  <td data-l="Date(s)" class="font-mono text-indigo-700">${esc(g.dates)}</td>
- <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok flex-1" style="padding:.35rem .5rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem" title="Add another fee to this voucher">➕ Item</button></div> </td></tr>`;
+ <td class="nl"><div class="fee-actions flex w-full"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok flex-1">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh flex-1">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh flex-1" title="Add another fee to this voucher">➕ Item</button></div></td></tr>`;
   });
   tb.innerHTML=html;
   renderFeeStats(groups);
