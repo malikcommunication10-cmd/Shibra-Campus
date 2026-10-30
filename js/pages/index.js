@@ -1,0 +1,218 @@
+document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (Number(n) || 0).toLocaleString('en-US');
+const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+function rank(p) { const a = String(p || '').trim().toLowerCase().split(/\s+/), m = MONTHS.indexOf(a[0]); return m < 0 ? null : (parseInt(a[1]) || 0) * 12 + m; }
+function dashboardWalletName(option) { return String(option.label || option.value).replace(/^\S+\s*/, '') || option.value; }
+function dashboardBreakdown(label, rows) {
+    return `<div><div class="mb-0.5 font-semibold text-slate-500">${esc(label)}</div>${rows.length ? rows.map(([name, value]) => `<div class="flex justify-between gap-2"><span class="truncate">${esc(name)}</span><span class="shrink-0">PKR ${fmt(value)}</span></div>`).join('') : '<div>No entries</div>'}</div>`;
+}
+
+let dashboardLoadToken = 0, dashboardRefreshTimer = 0;
+async function initDashboard(backgroundRefresh = false) {
+    const loadToken = ++dashboardLoadToken;
+    const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth(), today = now.toLocaleDateString('en-CA'), ym = today.slice(0, 7);
+    const monthStart = `${ym}-01`;
+    $('dateLine').innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    if (!backgroundRefresh) $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 p-6">Loading...</div>';
+    try {
+        const [sR, fR, aR, bR, pR, settingLists] = await Promise.all([
+            ERP.db.request('students', 'select=admis_no,student_name,status,class'),
+            ERP.db.request('fees', 'select=admis_no,student_name,class,voucher_id,period,type,payable,discount'),
+            ERP.db.request('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date,remarks'),
+            ERP.db.request('books', 'select=*'),
+            ERP.db.request('settings', 'select=*&setting_key=eq.Book%20Promise'),
+            loadSettingLists()
+        ]);
+        if (loadToken !== dashboardLoadToken) return;
+        const students = await sR.json(), fees = await fR.json(), acc = await aR.json();
+        const bookRows = bR.ok ? await bR.json() : [], promRows = pR.ok ? await pR.json() : [];
+        if (![students, fees, acc].every(Array.isArray)) throw new Error('load');
+
+        const active = students.filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).length;
+        const walletOptions = payAccountList(settingLists['Payment Account']);
+        const walletLabel = new Map(walletOptions.map(option => [String(option.value).toLowerCase(), dashboardWalletName(option)]));
+        const walletKey = raw => {
+            const name = String(raw || '').trim();
+            if (!name) return 'cash';
+            const match = walletOptions.find(option => String(option.value).toLowerCase() === name.toLowerCase()
+                || String(option.label).replace(/^\S+\s*/, '').toLowerCase() === name.toLowerCase());
+            return match ? String(match.value).toLowerCase() : (payBaseKey(name) || name).toLowerCase();
+        };
+        const walletValues = () => new Map(walletOptions.map(option => [String(option.value).toLowerCase(), 0]));
+        const openingByWallet = walletValues(), closingByWallet = walletValues();
+        const incomeByWallet = walletValues(), expenseByWallet = walletValues();
+        const incomeByHead = new Map(), expenseByHead = new Map();
+        let openingBalance = 0, closingBalance = 0, monthIncome = 0, monthExpense = 0;
+        const addWallet = (totals, key, amount) => totals.set(key, (totals.get(key) || 0) + amount);
+        const accountRows = acc.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+        accountRows.forEach(row => {
+            const id = String(row.voucher_id || '').trim().toUpperCase();
+            const from = String(row.from_account || '').trim(), to = String(row.to_account || '').trim();
+            const amountIn = Number(row.amount_in) || 0, amountOut = Number(row.amount_out) || 0;
+            const date = String(row.date || '').slice(0, 10);
+            const isBill = /^(AR|AP)-\d+$/.test(id);
+            if (isBill || !date || date > today) return;
+
+            let kind, wallet, otherWallet = '', amount, head = '', isFixedAsset = false;
+            if (id.startsWith('TV-')) {
+                kind = 'transfer'; wallet = walletKey(from); otherWallet = walletKey(to); amount = amountIn || amountOut;
+            } else if (id.startsWith('OB-')) {
+                kind = 'opening'; wallet = walletKey(to); amount = amountIn || amountOut;
+            } else if (id.startsWith('FA-P-')) {
+                kind = 'payment'; wallet = walletKey(from); amount = amountOut; head = 'Fixed Asset Purchase'; isFixedAsset = true;
+            } else if (id.startsWith('FA-S-')) {
+                kind = 'receipt'; wallet = walletKey(to); amount = amountIn; head = 'Fixed Asset Sale'; isFixedAsset = true;
+            } else if (id.startsWith('PV-')) {
+                kind = 'payment'; wallet = walletKey(from); amount = amountOut || amountIn; head = to || 'Misc Expense';
+            } else if (id.startsWith('RV-')) {
+                kind = 'receipt'; wallet = walletKey(to); amount = amountIn || amountOut; head = from || 'Other Income';
+            } else if (/^(cash receipt|cash payment|salary payment)$/i.test(from)) {
+                wallet = walletKey(row.remarks); amount = amountIn || amountOut;
+                kind = amountIn > 0 && amountOut === 0 ? 'receipt' : 'payment';
+                head = kind === 'receipt' ? 'Other Income' : (/salary/i.test(from) ? 'Salaries' : 'Misc Expense');
+            } else if (amountOut > 0 && amountIn === 0) {
+                kind = 'payment'; wallet = walletKey(from); amount = amountOut; head = to || String(row.description || '').trim() || 'Misc Expense';
+            } else {
+                kind = 'receipt'; wallet = walletKey(to); amount = amountIn; head = from || 'Other Income';
+                if (/^V-\d+/i.test(id)) head = 'Fee Collection';
+            }
+            if (!amount) return;
+            const inMonth = date >= monthStart && date <= today;
+            if (kind === 'transfer') {
+                if (date < monthStart) {
+                    if (wallet !== otherWallet) {
+                        addWallet(openingByWallet, wallet, -amount);
+                        addWallet(openingByWallet, otherWallet, amount);
+                    }
+                }
+                if (wallet !== otherWallet) {
+                    addWallet(closingByWallet, wallet, -amount);
+                    addWallet(closingByWallet, otherWallet, amount);
+                }
+                return;
+            }
+            const isIncome = kind === 'receipt' && !isFixedAsset;
+            const isExpense = kind === 'payment' && !isFixedAsset;
+            const delta = kind === 'payment' ? -amount : amount;
+            if (date < monthStart || (kind === 'opening' && date === monthStart)) {
+                openingBalance += delta;
+                addWallet(openingByWallet, wallet, delta);
+            }
+            closingBalance += delta;
+            addWallet(closingByWallet, wallet, delta);
+            if (!inMonth) return;
+            if (isIncome) {
+                monthIncome += amount;
+                addWallet(incomeByWallet, wallet, amount);
+                incomeByHead.set(head, (incomeByHead.get(head) || 0) + amount);
+            } else if (isExpense) {
+                const isSecurityLiability = head.toLowerCase() === 'staff security payable';
+                if (isSecurityLiability) return;
+                monthExpense += amount;
+                addWallet(expenseByWallet, wallet, amount);
+                expenseByHead.set(head, (expenseByHead.get(head) || 0) + amount);
+            }
+        });
+        const paidBy = {}, known = new Set(fees.map(f => String(f.voucher_id || '').trim()));
+        let today$ = 0, month$ = 0;
+        acc.forEach(a => {
+            const v = String(a.voucher_id || '').trim().split('-').slice(0, 2).join('-'), amt = parseFloat(a.amount_in) || 0;
+            if (!known.has(v)) return;                      // only fee receipts
+            paidBy[v] = (paidBy[v] || 0) + amt;
+            const d = String(a.date || '').slice(0, 10);
+            if (d === today) today$ += amt;
+            if (d.slice(0, 7) === ym) month$ += amt;
+        });
+        const statusByAdm = new Map(), statusByName = new Map();
+        const normalizeStudentName = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        students.forEach(student => {
+            const status = String(student.status || '').trim().toLowerCase();
+            const isActive = !status || status === 'active';
+            const adm = String(student.admis_no || '').trim().toLowerCase();
+            const name = normalizeStudentName(student.student_name);
+            if (adm) statusByAdm.set(adm, isActive);
+            if (name) statusByName.set(name, isActive);
+        });
+        let pending = 0, unpaid = 0, activePending = 0;
+        const pendingByStatus = { active: 0, inactive: 0, unmatched: 0 };
+        const unpaidByStatus = { active: 0, inactive: 0, unmatched: 0 };
+        const activeByClass = {};
+        const agg = {};          // per student: all charges up to this month minus ALL payments (any voucher)
+        fees.forEach(f => {
+            const k = String(f.admis_no || f.student_name || '').trim().toLowerCase(), v = String(f.voucher_id || '').trim();
+            const x = agg[k] || (agg[k] = { charge: 0, paid: 0, seen: new Set(), cls: String(f.class || '-').trim() || '-', adm: String(f.admis_no || '').trim().toLowerCase(), name: normalizeStudentName(f.student_name) });
+            if (!x.seen.has(v)) { x.seen.add(v); x.paid += paidBy[v] || 0; }
+            const r = rank(f.period); if (r !== null && r > cur) return;      // later months are not dues yet
+            x.charge += (parseFloat(f.payable) || 0) - (parseFloat(f.discount) || 0);
+        });
+        Object.values(agg).forEach(x => {
+            const bal = x.charge - x.paid;
+            if (bal <= 0.004) return;
+            pending += bal;
+            unpaid++;
+            const isActive = (x.adm && statusByAdm.has(x.adm)) ? statusByAdm.get(x.adm)
+                : (x.name && statusByName.has(x.name)) ? statusByName.get(x.name) : null;
+            const group = isActive === null ? 'unmatched' : isActive ? 'active' : 'inactive';
+            pendingByStatus[group] += bal;
+            unpaidByStatus[group]++;
+            if (isActive === true) {
+                activePending += bal;
+                activeByClass[x.cls] = (activeByClass[x.cls] || 0) + bal;
+            }
+        });
+        const moneyBreakdown = map => {
+            const rows = [...map.entries()].filter(([, value]) => Math.abs(value) > 0.004)
+                .map(([key, value]) => [walletLabel.get(key) || key, value]);
+            return rows.length ? rows : [[walletLabel.get('cash') || 'Cash in Hand', 0]];
+        };
+        const headBreakdown = map => [...map.entries()].sort((a, b) => b[1] - a[1]);
+        const cards = [
+            ['Active students', fmt(active), 'text-indigo-900', `${students.length - active} left / inactive`],
+            ['Pending dues', 'PKR ' + fmt(pending), 'text-rose-600', `${fmt(unpaid)} students with dues`,
+                `<div class="flex justify-between gap-2"><span>Active students (${fmt(unpaidByStatus.active)})</span><span class="shrink-0">PKR ${fmt(pendingByStatus.active)}</span></div>
+                <div class="flex justify-between gap-2"><span>Left / inactive (${fmt(unpaidByStatus.inactive)})</span><span class="shrink-0">PKR ${fmt(pendingByStatus.inactive)}</span></div>
+                ${unpaidByStatus.unmatched ? `<div class="flex justify-between gap-2"><span>No matching student (${fmt(unpaidByStatus.unmatched)})</span><span class="shrink-0">PKR ${fmt(pendingByStatus.unmatched)}</span></div>` : ''}`],
+            ['Fee collection today', 'PKR ' + fmt(today$), 'text-emerald-600', 'fee receipts'],
+            ['Fee collection this month', 'PKR ' + fmt(month$), 'text-emerald-700', 'fee receipts']
+        ];
+        cards.push(['Opening balance', 'PKR ' + fmt(openingBalance), openingBalance >= 0 ? 'text-indigo-900' : 'text-rose-600', 'At start of this month',
+            dashboardBreakdown('By account', moneyBreakdown(openingByWallet))]);
+        cards.push(['Collection this month', 'PKR ' + fmt(monthIncome), 'text-emerald-700', 'All receipts this month',
+            dashboardBreakdown('By account', moneyBreakdown(incomeByWallet)) + dashboardBreakdown('By head', headBreakdown(incomeByHead))]);
+        cards.push(['Expenses this month', 'PKR ' + fmt(monthExpense), 'text-rose-600', 'Expenses this month',
+            dashboardBreakdown('By account', moneyBreakdown(expenseByWallet)) + dashboardBreakdown('By head', headBreakdown(expenseByHead))]);
+        cards.push(['Closing balance', 'PKR ' + fmt(closingBalance), closingBalance >= 0 ? 'text-slate-900' : 'text-rose-600', 'As of today',
+            dashboardBreakdown('By account', moneyBreakdown(closingByWallet))]);
+        const nbr = (Array.isArray(bookRows) ? bookRows : []).map(normBookRow), dues = computeDues(nbr, acc), bdues = computeBookDues(nbr, acc), prom = parsePromises(Array.isArray(promRows) ? promRows : []);
+        const recv = dues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), pay = dues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
+        const overdue = dues.filter(p => (p.recv.pending > 0.005 || p.pay.pending > 0.005) && prom[p.key] && prom[p.key].d < today).length;
+        const brecv = bdues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), bpay = bdues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
+        cards.push(['Receivable (to receive)', 'PKR ' + fmt(recv), 'text-emerald-700', `${dues.filter(p => p.recv.pending > 0.005).length} parties · Book Store PKR ${fmt(brecv)}` + (overdue ? ` · ${overdue} promise(s) overdue` : '')]);
+        cards.push(['Payable (to pay)', 'PKR ' + fmt(pay), 'text-rose-600', `${dues.filter(p => p.pay.pending > 0.005).length} parties · Book Store PKR ${fmt(bpay)}`]);
+        $('cards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"><div class="text-xs text-slate-500 font-semibold">${c[0]}</div><div class="text-lg md:text-2xl font-extrabold ${c[2]} mt-1">${c[1]}</div><div class="text-[11px] text-slate-400 mt-0.5 ${c[0] === 'Active students' ? 'text-slate-400/70' : ''}">${c[3]}</div>${c[4] ? `<div class="mt-2 space-y-2 border-t border-slate-100 pt-2 text-[10px] leading-4 text-slate-400">${c[4]}</div>` : ''}</div>`).join('');
+        const rows = Object.entries(activeByClass).sort((a, b) => b[1] - a[1]), max = rows.length ? rows[0][1] : 1;
+        $('classRows').innerHTML = rows.length ? rows.map(([c, v]) => `<div><div class="flex justify-between text-xs mb-0.5"><span class="font-semibold">${esc(c)}</span><span class="text-rose-600 font-bold">PKR ${fmt(v)}</span></div><div class="h-2 bg-slate-100 rounded"><div class="h-2 bg-rose-400 rounded" style="width:${Math.max(3, v / max * 100)}%"></div></div></div>`).join('') : '<p class="text-sm text-emerald-600">No pending dues. 🎉</p>';
+        $('classRows').dataset.activePending = String(activePending);
+    } catch (e) {
+        if (loadToken !== dashboardLoadToken) return;
+        console.error(e);
+        $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-rose-500 p-6">Could not load dashboard data. Check your internet connection.</div>';
+    }
+}
+window.addEventListener('sb:data-cache-updated', event => {
+    if (!['students', 'fees', 'accounts', 'books', 'settings'].includes(event.detail && event.detail.table) || document.visibilityState === 'hidden') return;
+    clearTimeout(dashboardRefreshTimer);
+    dashboardRefreshTimer = setTimeout(() => initDashboard(true), 600);
+});
+
+// Quick actions: only show pages this user may open
+function applyQuickActionAccess() {
+    document.querySelectorAll('#quickActions a').forEach(a => {
+        const key = typeof PAGE_FILE !== 'undefined' ? PAGE_FILE[a.getAttribute('href')] : null;
+        a.hidden = !!(key && typeof ME !== 'undefined' && ME && ME.perms && !can(key, 'v'));
+    });
+}
+document.addEventListener('shibra:me-ready', applyQuickActionAccess);
+applyQuickActionAccess();

@@ -1,0 +1,1931 @@
+// ====================================================================================
+//  CONFIG
+// ====================================================================================
+const WALLETS = {
+    cash:   { label: 'Cash in Hand',      icon: '💵' },
+    bank:   { label: 'Bank',              icon: '🏦' },
+    online: { label: 'Online / JazzCash', icon: '📱' }
+};
+// 'type' column values stay exactly as the old page saved them
+const KINDS = {
+    sale:            { label: 'Sale',            stored: 'Sale',            cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', stock: -1, money: 'in',  head: 'Book Store Sale' },
+    purchase:        { label: 'Purchase',        stored: 'Purchase',        cls: 'bg-indigo-50 text-indigo-700 border-indigo-200',    stock: +1, money: 'out', head: 'Books Purchase' },
+    sale_return:     { label: 'Sale Return',     stored: 'Sale Return',     cls: 'bg-amber-50 text-amber-700 border-amber-200',       stock: +1, money: 'out', head: 'Book Sale Return' },
+    purchase_return: { label: 'Purchase Return', stored: 'Purchase Return', cls: 'bg-rose-50 text-rose-700 border-rose-200',          stock: -1, money: 'in',  head: 'Books Purchase Return' }
+};
+const SETUP_SQL = `alter table public.books
+  add column if not exists date date,
+  add column if not exists voucher_no text,
+  add column if not exists invoice_no text,
+  add column if not exists payment_mode text,
+  add column if not exists notes text,
+ add column if not exists item_class text,
+ add column if not exists category text,
+ add column if not exists sale_price numeric,
+ add column if not exists unit_price numeric;`;
+
+// ====================================================================================
+//  STATE + HELPERS
+// ====================================================================================
+let txs = [], txByUid = {}, items = {}, hasExt = false, hasItemCols = false, hasInvoiceCol = false, hasId = true;
+let txLimit = 200, txKind = 'sale', lastSaved = null, editingTxUid = null, editingAccountRow = null, invoiceNumberManual = false;
+let selectedTxUids = new Set();
+let purchaseInvoiceLines = [], editingPurchaseInvoiceVouchers = [];
+let inventorySort = { key: 'title', direction: 'asc' };
+let transactionSort = { key: 'date', direction: 'desc' };
+
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-US');
+const ymd = d => d.toLocaleDateString('en-CA');
+const todayStr = () => ymd(new Date());
+const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+function parseYmd(s) { let [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); }
+function fmtDate(s) { return s ? parseYmd(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; }
+function showLoading(t) { $('loadingText').innerText = t || 'Loading...'; $('loadingOverlay').classList.remove('hidden'); }
+function hideLoading() { $('loadingOverlay').classList.add('hidden'); }
+function toast(msg, ok) { UI.toast(msg, ok !== false); }
+function advanceEntryOnEnter(event) {
+    if(event.key !== 'Enter' || event.isComposing || event.defaultPrevented) return;
+    const current = event.target;
+    if(!(current instanceof HTMLElement) || !current.matches('input, select, textarea')) return;
+    if(current.matches('input[type="hidden"], input[type="checkbox"], input[type="radio"], input[type="file"], input[type="button"], input[type="submit"], input[type="reset"]') || current.disabled || current.readOnly) return;
+    const scope = current.closest('[data-enter-nav]');
+    if(!scope) return;
+    const fields = [...scope.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]), select, textarea')]
+        .filter(field => !field.disabled && !field.readOnly && !field.closest('.hidden') && field.getClientRects().length);
+    const index = fields.indexOf(current);
+    if(index < 0) return;
+    event.preventDefault();
+    setTimeout(() => {
+        const refreshed = [...scope.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]), select, textarea')]
+            .filter(field => !field.disabled && !field.readOnly && !field.closest('.hidden') && field.getClientRects().length);
+        const next = refreshed[index + 1];
+        if(next) next.focus();
+        else {
+            const submit = $(scope.dataset.enterSubmit);
+            if(submit && !submit.disabled && !submit.classList.contains('hidden')) submit.focus();
+        }
+    }, 0);
+}
+function confirmBox(message, okLabel, onOk) { UI.confirm(message, { ok: okLabel || undefined }).then(v => { if (v) onOk(); }); }
+
+function sbHeaders(extra = {}) { let c = getSupabaseConfig(); return { "apikey": c.key, "Authorization": `Bearer ${c.key}`, ...extra }; }
+function numToWords(n) {
+    n = Math.floor(Math.abs(n)); if(n === 0) return 'Zero';
+    const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const two = x => x < 20 ? ones[x] : tens[Math.floor(x / 10)] + (x % 10 ? ' ' + ones[x % 10] : '');
+    const three = x => (x >= 100 ? ones[Math.floor(x / 100)] + ' Hundred' + (x % 100 ? ' ' : '') : '') + (x % 100 ? two(x % 100) : '');
+    let out = [], cr = Math.floor(n / 1e7); n %= 1e7; let lk = Math.floor(n / 1e5); n %= 1e5; let th = Math.floor(n / 1e3); n %= 1e3;
+    if(cr) out.push(three(cr) + ' Crore'); if(lk) out.push(two(lk) + ' Lakh'); if(th) out.push(two(th) + ' Thousand'); if(n) out.push(three(n));
+    return out.join(' ');
+}
+const getLow = () => { let v = parseInt(localStorage.getItem('books_low_stock')); return isNaN(v) ? 5 : v; };
+
+// ====================================================================================
+//  LOAD + NORMALIZE
+// ====================================================================================
+function normTx(row, idx) {
+    if(BC) Object.keys(BC).forEach(k => { if(BC[k] && BC[k] !== k && row[BC[k]] != null && row[BC[k]] !== '') row[k] = row[BC[k]]; });
+    const t = String(row.type || row.tx_type || 'Purchase').trim().toLowerCase();
+    const kind = t.includes('return') ? (t.includes('sale') ? 'sale_return' : 'purchase_return') : (t.includes('sale') ? 'sale' : 'purchase');
+    const qty = parseFloat(row.qty) || 0;
+    const net = parseFloat(row.net_amount ?? row.amount) || 0;
+    let unit = parseFloat(row.unit_price) || 0;
+    if(!unit && qty && parseFloat(row.amount) && BC && BC.net_amount !== 'amount') unit = parseFloat(row.amount) / qty;
+ if(!unit && qty) unit = net / qty;
+    const title = String(row.book_title || row.title || '').trim().replace(/\s+/g, ' ');
+    const uid = row.id !== undefined && row.id !== null ? 'id' + row.id : 'i' + idx;
+    return {
+        uid, id: row.id, idx, kind, qty, unit, net, gross: qty * unit, discount: Math.max(0, qty * unit - net),
+        title, key: norm(title), party: bookPartyFromRow(row),
+        date: String(row.date || row.created_at || '').slice(0, 10),
+        voucher: String(row.voucher_no || '').trim(), invoiceNo: String(row.invoice_no || '').trim(), mode: String(row.payment_mode || '').trim(), notes: String(row.notes || '').trim(), itemClass: String(row.item_class || '').trim(), category: String(row.category || '').trim(), salePrice: parseFloat(row.sale_price) || 0, raw: row
+    };
+}
+
+async function initBooks() {
+    showLoading('Loading book store...');
+    let c = getSupabaseConfig();
+    try {
+        let [, [res, probe, probe2, invoiceProbe]] = await Promise.all([
+            Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]),
+            Promise.all([
+                ERP.db.request('books', 'select=*'),
+                fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() }),
+                fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() }),
+                fetch(`${c.url}/rest/v1/books?select=invoice_no&limit=1`, { headers: sbHeaders() })
+            ])
+        ]);
+        try { await fillPaySelects(['mWallet', 'ssWallet', 'sdWallet', 'impWallet', 'piWallet']); } catch (e) {}
+        let rows = await res.json();
+        if(!Array.isArray(rows)) throw new Error('books failed to load');
+        hasExt = probe.ok; hasItemCols = probe2.ok; hasInvoiceCol = invoiceProbe.ok;
+        hasId = rows.length === 0 || rows.some(r => r.id !== undefined);
+        txs = rows.map(normTx);
+        txs.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (typeof b.id === 'number' && typeof a.id === 'number' ? b.id - a.id : b.idx - a.idx));
+        txByUid = {}; txs.forEach(t => txByUid[t.uid] = t);
+        buildItems();
+        updateBanner();
+        $('lowThreshold').value = getLow();
+        if(!$('gFrom').value) applyPreset();
+        fillDatalists();
+        renderAll();
+    } catch (e) {
+        console.error(e);
+        toast('Could not load data. Check your internet connection or API settings.', false);
+    }
+    hideLoading();
+}
+
+function updateBanner() {
+    $('setupSql').innerText = SETUP_SQL;
+    $('setupBanner').classList.toggle('hidden', hasExt && hasItemCols && hasInvoiceCol);
+}
+function dismissBanner() { localStorage.setItem('books_banner_hidden', '1'); $('setupBanner').classList.add('hidden'); }
+function copySetupSql() { navigator.clipboard.writeText(SETUP_SQL).then(() => toast('SQL copied. Paste it in the Supabase SQL Editor and run it.')); }
+
+// ====================================================================================
+//  INVENTORY MODEL
+// ====================================================================================
+function buildItems() {
+    items = {};
+    let asc = [...txs].sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.idx - b.idx);
+    asc.forEach(t => {
+        if(!t.key) return;
+        let it = items[t.key] || (items[t.key] = { key: t.key, title: t.title, p: 0, pr: 0, s: 0, sr: 0, pAmt: 0, prAmt: 0, lastSale: 0, lastBuy: 0, lastDate: '' });
+        it.title = t.title;
+ if(t.kind === 'purchase') { if(t.itemClass) it.cls = t.itemClass; if(t.category) it.cat = t.category; if(t.salePrice) it.sp = t.salePrice; }
+        if(t.kind === 'purchase') { it.p += t.qty; it.pAmt += t.net; it.lastBuy = t.unit; }
+        else if(t.kind === 'purchase_return') { it.pr += t.qty; it.prAmt += t.net; }
+        else if(t.kind === 'sale') { it.s += t.qty; it.lastSale = t.unit; }
+        else if(t.kind === 'sale_return') { it.sr += t.qty; }
+        if(t.date && t.date > it.lastDate) it.lastDate = t.date;
+    });
+    let low = getLow();
+    Object.values(items).forEach(it => {
+        it.stock = it.p - it.pr - it.s + it.sr;
+        let netQty = it.p - it.pr;
+        it.avgCost = netQty > 0 ? Math.max(0, (it.pAmt - it.prAmt) / netQty) : (it.lastBuy || 0);
+        it.value = Math.max(it.stock, 0) * it.avgCost;
+        it.status = it.stock <= 0 ? 'out' : (it.stock <= low ? 'low' : 'ok');
+    });
+    mergeMaster();
+}
+let BC = null, BOOK_ALLCOLS = [];
+async function detectBookCols() {
+    try { const c = JSON.parse(sessionStorage.getItem('books_cols_v5') || 'null'); if(c && c.map && c.map.book_title) { BC = c.map; BOOK_ALLCOLS = c.all || []; return; } } catch (e) {}
+    const cfg = getSupabaseConfig(), H = sbHeaders();
+    let cols = [];
+    try { const j = await (await fetch(`${cfg.url}/rest/v1/`, { headers: H })).json(); const pr = (j.definitions && j.definitions.books && j.definitions.books.properties) || (j.components && j.components.schemas && j.components.schemas.books && j.components.schemas.books.properties); if(pr) cols = Object.keys(pr); } catch (e) {}
+    if(!cols.length) { try { const r = await (await fetch(`${cfg.url}/rest/v1/books?select=*&limit=1`, { headers: H })).json(); if(Array.isArray(r) && r[0]) cols = Object.keys(r[0]); } catch (e) {} }
+    const cand = { type: ['type', 'tx_type', 'transaction_type', 'kind'], party_name: ['party', 'party_name', 'vendor', 'customer', 'student_name'], book_title: ['book', 'book_title', 'title', 'item_title', 'item_name', 'book_name', 'item', 'name', 'product', 'product_name', 'particulars', 'description'], qty: ['qty', 'quantity'], unit_price: ['unit_price', 'price', 'rate'], net_amount: ['net_amount', 'amount', 'total'], invoice_no: ['invoice_no'] };
+    const out = {};
+    if(cols.length) {
+        const low = cols.map(c => c.toLowerCase());
+        Object.entries(cand).forEach(([k, arr]) => { const hit = arr.find(a => low.includes(a)); out[k] = hit ? cols[low.indexOf(hit)] : null; });
+        if(!out.book_title) { const f = cols.find(c => /title|name|book|item|product|particular/i.test(c) && !/party|vendor|student|customer|supplier/i.test(c)); if(f) out.book_title = f; }
+    } else {
+        await Promise.all(Object.entries(cand).map(async ([k, arr]) => {
+            out[k] = null;
+            for(const col of arr) { try { const r = await fetch(`${cfg.url}/rest/v1/books?select=${col}&limit=1`, { headers: H }); if(r.ok) { out[k] = col; break; } } catch (e) {} }
+        }));
+    }
+    BC = out; BOOK_ALLCOLS = cols;
+    if(out.book_title) { try { sessionStorage.setItem('books_cols_v5', JSON.stringify({ map: out, all: cols })); } catch (e) {} }
+}
+// rename our standard keys to the real column names of the books table
+function mapRow(p) {
+    const o = {};
+    Object.keys(p).forEach(k => { if(BC && k in BC) { if(BC[k]) o[BC[k]] = p[k]; } else o[k] = p[k]; });
+    if(BC && BC.qty && o[BC.qty] != null) o[BC.qty] = Math.round(parseFloat(o[BC.qty]) || 0);
+    if(BC && !BC.unit_price && p.unit_price !== undefined) {
+        const gross = Math.round((parseFloat(p.qty) || 0) * (parseFloat(p.unit_price) || 0) * 100) / 100, net = parseFloat(p.net_amount) || 0;
+        if(BOOK_ALLCOLS.includes('amount') && BC.net_amount !== 'amount') o.amount = gross;
+        if(BOOK_ALLCOLS.includes('discount_pct')) o.discount_pct = gross > 0 ? Math.round((gross - net) / gross * 10000) / 100 : 0;
+    }
+    return o;
+}
+function colsOk() {
+    const TYPES = { book_title: 'text', qty: 'integer', net_amount: 'numeric' };
+    const missing = BC ? Object.keys(TYPES).filter(k => !BC[k]) : [];
+    if(BC && !BC.unit_price && !BOOK_ALLCOLS.includes('amount')) missing.push('unit_price');
+    if(missing.length) {
+        const sql = missing.map(k => `alter table public.books add column if not exists ${k} ${TYPES[k] || 'numeric'};`).join(' ');
+        toast('The books table is missing: ' + missing.join(', ') + (BOOK_ALLCOLS.length ? ' (columns found: ' + BOOK_ALLCOLS.join(', ') + ')' : '') + '. Run in the Supabase SQL Editor, then refresh: ' + sql, false);
+        return false;
+    }
+    return true;
+}
+function errMsg(t) {
+    t = String(t || '');
+    if(/23502/.test(t) && /"id"/.test(t)) return 'The books table id has no automatic number. Run the id SQL from the chat in the Supabase SQL Editor, then try again.';
+    return t;
+}
+function fillPartyList(kind) {
+    const isV = kind === 'purchase' || kind === 'purchase_return', L = (typeof _settingLists !== 'undefined' && _settingLists) || {};
+    const fromTx = txs.filter(t => isV ? (t.kind === 'purchase' || t.kind === 'purchase_return') : (t.kind === 'sale' || t.kind === 'sale_return')).map(t => t.party);
+    const studs = isV ? [] : (ssStudents || []).filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).map(s => `${s.student_name} (${s.admis_no})`);
+    const list = [...new Set([...(isV ? (L['Book Vendor'] || []) : studs), ...fromTx].map(x => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    $('partyList').innerHTML = list.map(p => `<option value="${esc(p)}">`).join('');
+    $('mPartyLabel').innerText = (isV ? 'Vendor / Supplier name' : 'Student / Customer name') + ` (${list.length} saved, click the field to choose)`;
+}
+function fillDatalists() {
+    $('bookList').innerHTML = Object.values(items).sort((a, b) => a.title.localeCompare(b.title)).map(i => `<option value="${esc(i.title)}">`).join('');
+    fillPartyList(typeof txKind !== 'undefined' ? txKind : 'sale');
+    $('mTitleIn').placeholder = Object.keys(items).length ? 'Book title' : 'No items yet: type a new title in Purchase, or use Import items';
+}
+const STATUS = {
+    out: { label: 'Out of stock', cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+    low: { label: 'Low stock',    cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    ok:  { label: 'In stock',     cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+};
+function onThresholdChange() { localStorage.setItem('books_low_stock', String(Math.max(0, parseInt($('lowThreshold').value) || 0))); buildItems(); renderAll(); }
+
+// ====================================================================================
+//  PERIOD
+// ====================================================================================
+function applyPreset() {
+    let p = $('gPeriod').value, now = new Date(), from = '', to = '';
+    if(p === 'today') from = to = todayStr();
+    else if(p === 'yesterday') { let d = new Date(); d.setDate(d.getDate() - 1); from = to = ymd(d); }
+    else if(p === 'last7') { let d = new Date(); d.setDate(d.getDate() - 6); from = ymd(d); to = todayStr(); }
+    else if(p === 'month') { from = ymd(new Date(now.getFullYear(), now.getMonth(), 1)); to = ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0)); }
+    else if(p === 'lastmonth') { from = ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)); to = ymd(new Date(now.getFullYear(), now.getMonth(), 0)); }
+    else if(p === 'year') { from = `${now.getFullYear()}-01-01`; to = `${now.getFullYear()}-12-31`; }
+    else if(p === 'all') { from = ''; to = ''; }
+    if(p !== 'custom') { $('gFrom').value = from; $('gTo').value = to; }
+}
+function onPeriodChange() { applyPreset(); renderAll(); }
+function onCustomDate() { $('gPeriod').value = 'custom'; renderAll(); }
+function inRange(t) {
+    let from = $('gFrom').value, to = $('gTo').value;
+    if(!from && !to) return true;
+    if(!t.date) return false;
+    return (!from || t.date >= from) && (!to || t.date <= to);
+}
+const periodTxs = () => txs.filter(inRange);
+
+// ====================================================================================
+//  TABS + RENDER
+// ====================================================================================
+function showTab(t) {
+    ['overview', 'inventory', 'transactions', 'parties'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
+    if(t === 'overview') renderOverview();
+    else if(t === 'inventory') renderInventory();
+    else if(t === 'transactions') renderTransactions();
+    else if(t === 'parties') renderParties();
+    const names = { overview: 'Overview', inventory: 'Inventory', transactions: 'Transactions', parties: 'Students & Vendors' };
+    let f = $('gFrom').value, to = $('gTo').value;
+    $('printTitle').innerText = `Book Store — ${names[t]}${t === 'inventory' ? ' (current stock)' : ` — ${f || to ? fmtDate(f) + ' to ' + fmtDate(to) : 'All time'}`}`;
+    window.scrollTo({ top: 0 });
+}
+function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
+function renderAll() { showTab(currentTab()); }
+
+function kindBadge(k) { return `<span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${KINDS[k].cls}">${KINDS[k].label}</span>`; }
+function card(c) { return `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c || 'text-slate-900'} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`; }
+function barRow(label, value, max, suffix, color) {
+    let w = max > 0 ? Math.max(3, Math.round(value / max * 100)) : 0;
+    return `<div><div class="flex justify-between text-xs mb-1"><span class="font-medium text-slate-700 truncate pr-2">${esc(label)}</span><span class="text-slate-600 whitespace-nowrap">${suffix}</span></div><div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-2 rounded-full ${color}" style="width:${w}%"></div></div></div>`;
+}
+
+function periodStats(list) {
+    let st = { sales: 0, salesRet: 0, purch: 0, purchRet: 0, discount: 0, soldQty: 0, cogs: 0 };
+    list.forEach(t => {
+        let it = items[t.key], cost = it ? it.avgCost : 0;
+        if(t.kind === 'sale') { st.sales += t.net; st.discount += t.discount; st.soldQty += t.qty; st.cogs += t.qty * cost; }
+        else if(t.kind === 'sale_return') { st.salesRet += t.net; st.soldQty -= t.qty; st.cogs -= t.qty * cost; }
+        else if(t.kind === 'purchase') st.purch += t.net;
+        else if(t.kind === 'purchase_return') st.purchRet += t.net;
+    });
+    st.netSales = st.sales - st.salesRet; st.netPurch = st.purch - st.purchRet; st.profit = st.netSales - st.cogs;
+    return st;
+}
+
+// ---------------- OVERVIEW ----------------
+function renderOverview() {
+    recomputeDues();
+    let list = periodTxs(), st = periodStats(list), all = Object.values(items);
+    let stockValue = all.reduce((s, i) => s + i.value, 0), attn = all.filter(i => i.status !== 'ok').length;
+    $('kpiCards').innerHTML = [
+        { t: 'Net Sales', v: 'PKR ' + fmt(st.netSales), c: 'text-emerald-600', s: `${fmt(st.soldQty)} units sold` },
+        { t: 'Net Purchases', v: 'PKR ' + fmt(st.netPurch), c: 'text-indigo-700' },
+        { t: 'Est. Profit', v: 'PKR ' + fmt(st.profit), c: st.profit >= 0 ? 'text-emerald-700' : 'text-rose-600', s: 'Sales − cost of goods sold' },
+        { t: 'Discounts Given', v: 'PKR ' + fmt(st.discount), c: 'text-amber-600' },
+        { t: 'Stock Value (now)', v: 'PKR ' + fmt(stockValue), c: 'text-slate-900', s: `${all.length} titles` },
+        { t: 'To Receive (students)', v: 'PKR ' + fmt(bookDues.reduce((s, p) => s + Math.max(p.recv.pending, 0), 0)), c: 'text-emerald-700', s: `${bookDues.filter(p => p.recv.pending > 0.005).length} pending` },
+        { t: 'To Pay (vendors)', v: 'PKR ' + fmt(bookDues.reduce((s, p) => s + Math.max(p.pay.pending, 0), 0)), c: 'text-rose-600', s: `${bookDues.filter(p => p.pay.pending > 0.005).length} pending` },
+        { t: 'Stock Alerts', v: attn, c: attn ? 'text-rose-600' : 'text-emerald-600', s: 'Low + out of stock' }
+    ].map(card).join('');
+
+    // monthly chart
+    let dated = list.filter(t => t.date);
+    if(!dated.length) {
+        $('monthChart').innerHTML = `<p class="text-xs text-slate-400 py-10 text-center">No dated transactions in this period${hasExt ? '.' : ' — run the optional SQL upgrade to record dates for new transactions.'}</p>`;
+    } else {
+        let minD = dated.reduce((m, t) => t.date < m ? t.date : m, '9999-12-31'), maxD = dated.reduce((m, t) => t.date > m ? t.date : m, '0000-01-01');
+        let from = parseYmd(minD), to = parseYmd(maxD), months = [], cur = new Date(from.getFullYear(), from.getMonth(), 1);
+        while(cur <= to) { months.push({ key: ymd(cur).slice(0, 7), label: cur.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), a: 0, b: 0 }); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1); }
+        if(months.length > 12) months = months.slice(-12);
+        let mm = {}; months.forEach(m => mm[m.key] = m);
+        dated.forEach(t => { let m = mm[t.date.slice(0, 7)]; if(!m) return; if(t.kind === 'sale') m.a += t.net; if(t.kind === 'sale_return') m.a -= t.net; if(t.kind === 'purchase') m.b += t.net; if(t.kind === 'purchase_return') m.b -= t.net; });
+        let max = Math.max(1, ...months.map(m => Math.max(m.a, m.b)));
+        let W = Math.max(480, months.length * 70), H = 230, padL = 8, padB = 28, padT = 20, ch = H - padB - padT, gw = (W - padL) / months.length, bw = Math.min(22, gw / 3);
+        const short = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : (v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + 'k' : String(Math.round(v)));
+        let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:${W}px" role="img" aria-label="Monthly sales and purchases">`;
+        for(let i = 0; i <= 4; i++) { let y = padT + ch - ch * i / 4; svg += `<line x1="${padL}" x2="${W}" y1="${y}" y2="${y}" stroke="#e2e8f0"/>`; }
+        months.forEach((m, i) => {
+            let cx = padL + gw * i + gw / 2, hA = ch * Math.max(m.a, 0) / max, hB = ch * Math.max(m.b, 0) / max;
+            svg += `<rect x="${cx - bw - 1}" y="${padT + ch - hA}" width="${bw}" height="${hA}" rx="3" fill="#10b981"/><rect x="${cx + 1}" y="${padT + ch - hB}" width="${bw}" height="${hB}" rx="3" fill="#6366f1"/>`;
+            if(m.a > 0) svg += `<text x="${cx - bw / 2 - 1}" y="${padT + ch - hA - 4}" font-size="9" fill="#047857" text-anchor="middle">${short(m.a)}</text>`;
+            if(m.b > 0) svg += `<text x="${cx + bw / 2 + 1}" y="${padT + ch - hB - 4}" font-size="9" fill="#4338ca" text-anchor="middle">${short(m.b)}</text>`;
+            svg += `<text x="${cx}" y="${H - 8}" font-size="10" fill="#64748b" text-anchor="middle">${m.label}</text>`;
+        });
+        $('monthChart').innerHTML = svg + '</svg>';
+    }
+
+    // top sellers
+    let sold = {};
+    list.forEach(t => { if(t.kind === 'sale') sold[t.key] = (sold[t.key] || 0) + t.qty; else if(t.kind === 'sale_return') sold[t.key] = (sold[t.key] || 0) - t.qty; });
+    let top = Object.entries(sold).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    $('topSellers').innerHTML = top.length ? top.map(([k, q]) => barRow(items[k] ? items[k].title : k, q, top[0][1], `${fmt(q)} pcs`, 'bg-emerald-500')).join('') : '<p class="text-xs text-slate-400">No sales in this period.</p>';
+
+    // stock alerts
+    let alerts = all.filter(i => i.status !== 'ok').sort((a, b) => a.stock - b.stock).slice(0, 8);
+    $('stockAlerts').innerHTML = alerts.length ? alerts.map(i => `<div class="flex items-center justify-between gap-2 border border-slate-100 rounded-xl px-3 py-2">
+        <div class="min-w-0"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(i.key))})" class="text-sm font-semibold text-left text-indigo-700 hover:underline truncate">${esc(i.title)}</button><div class="text-[11px] text-slate-500">In stock: <b class="${i.stock <= 0 ? 'text-rose-600' : 'text-amber-600'}">${fmt(i.stock)}</b></div></div>
+        <div class="flex items-center gap-2"><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold ${STATUS[i.status].cls}">${STATUS[i.status].label}</span>
+        <button onclick="openTx('purchase', ${esc(JSON.stringify(i.key))})" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1.5 rounded-lg font-semibold no-print">Restock</button></div></div>`).join('')
+        : '<p class="text-xs text-emerald-600">All titles are sufficiently stocked. 👍</p>';
+
+    // recent
+    let recent = list.slice(0, 7);
+    $('recentList').innerHTML = recent.length ? recent.map(t => `<div class="py-2 flex items-center justify-between gap-2"><div class="min-w-0"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="text-sm font-semibold text-left text-indigo-700 hover:underline truncate">${esc(t.title || '-')}</button><div class="text-[11px] text-slate-500">${kindBadge(t.kind)} <span class="ml-1">${esc(t.party || '-')} · ${fmtDate(t.date)}</span></div></div><div class="text-sm font-bold text-slate-700 whitespace-nowrap">PKR ${fmt(t.net)}</div></div>`).join('') : '<p class="text-xs text-slate-400 py-3">No transactions in this period.</p>';
+}
+
+// ---------------- INVENTORY ----------------
+function openItemLedger(key) {
+    const item = items[key];
+    if(!item) { toast('This book or item could not be found.', false); return; }
+    const movements = txs.filter(t => t.key === key).sort((a, b) =>
+        (a.date || '').localeCompare(b.date || '') ||
+        (typeof a.id === 'number' && typeof b.id === 'number' ? a.id - b.id : a.idx - b.idx)
+    );
+    let balance = 0, totalIn = 0, totalOut = 0;
+    const ledger = movements.map(t => {
+        const isIn = t.kind === 'purchase' || t.kind === 'sale_return';
+        const isOut = t.kind === 'sale' || t.kind === 'purchase_return';
+        const qtyIn = isIn ? t.qty : 0, qtyOut = isOut ? t.qty : 0;
+        balance += qtyIn - qtyOut;
+        totalIn += qtyIn; totalOut += qtyOut;
+        const isVendor = t.kind === 'purchase' || t.kind === 'purchase_return';
+        return { ...t, qtyIn, qtyOut, balance, partyType: isVendor ? 'Vendor / From' : 'Student / To' };
+    });
+    $('itemLedgerTitle').innerText = item.title;
+    $('itemLedgerSummary').innerHTML = [
+        { label: 'Total In', value: fmt(totalIn), cls: 'text-emerald-700' },
+        { label: 'Total Out', value: fmt(totalOut), cls: 'text-rose-600' },
+        { label: 'Current balance', value: fmt(balance), cls: balance < 0 ? 'text-rose-600' : 'text-indigo-700' }
+    ].map(x => `<div class="rounded-xl border bg-slate-50 p-3"><div class="text-[11px] text-slate-500">${x.label}</div><div class="text-lg font-extrabold ${x.cls}">${x.value} units</div></div>`).join('');
+    $('itemLedgerBody').innerHTML = ledger.length ? ledger.map(t => `<tr class="border-b hover:bg-slate-50">
+        <td class="p-2.5 whitespace-nowrap text-slate-600">${fmtDate(t.date)}</td>
+        <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</td>
+        <td class="p-2.5">${kindBadge(t.kind)}</td>
+        <td class="p-2.5"><span class="text-[10px] text-slate-400">${t.partyType}</span><div class="font-medium text-slate-700">${esc(t.party || 'Not specified')}</div></td>
+        <td class="p-2.5 text-right font-semibold text-emerald-700">${t.qtyIn ? '+' + fmt(t.qtyIn) : '-'}</td>
+        <td class="p-2.5 text-right font-semibold text-rose-600">${t.qtyOut ? '-' + fmt(t.qtyOut) : '-'}</td>
+        <td class="p-2.5 text-right font-extrabold ${t.balance < 0 ? 'text-rose-600' : 'text-slate-800'}">${fmt(t.balance)}</td>
+        <td class="p-2.5 text-right whitespace-nowrap">PKR ${fmt(t.net)}</td>
+    </tr>`).join('') : '<tr><td colspan="8" class="p-8 text-center text-slate-400">No stock movements are recorded for this item.</td></tr>';
+    $('itemLedgerModal').classList.remove('hidden');
+}
+function closeItemLedger() { $('itemLedgerModal').classList.add('hidden'); }
+function inventoryList() {
+    let q = norm($('invSearch').value), s = $('invStatus').value;
+    const sortValues = {
+        title: item => item.title,
+        purchased: item => item.p,
+        sold: item => item.s,
+        returns: item => item.pr + item.sr,
+        stock: item => item.stock,
+        avgCost: item => item.avgCost,
+        salePrice: item => item.lastSale,
+        value: item => item.value,
+        status: item => ({ out: 0, low: 1, ok: 2 }[item.status] ?? 3)
+    };
+    return Object.values(items).filter(i => {
+        if(q && !i.key.includes(q)) return false;
+        if(s === 'attn' && i.status === 'ok') return false;
+        if(['low', 'out', 'ok'].includes(s) && i.status !== s) return false;
+        return true;
+    }).sort((a, b) => {
+        const value = sortValues[inventorySort.key];
+        const left = value(a), right = value(b);
+        const comparison = typeof left === 'string' ? left.localeCompare(right) : left - right;
+        return (comparison || a.title.localeCompare(b.title)) * (inventorySort.direction === 'asc' ? 1 : -1);
+    });
+}
+function sortInventory(key) {
+    if(inventorySort.key === key) inventorySort.direction = inventorySort.direction === 'asc' ? 'desc' : 'asc';
+    else inventorySort = { key, direction: key === 'title' ? 'asc' : 'desc' };
+    renderInventory();
+}
+function renderInventoryHead() {
+    const columns = [
+        ['title', 'Book / Item', ''],
+        ['purchased', 'Purchased', 'text-right'],
+        ['sold', 'Sold', 'text-right'],
+        ['returns', 'Returns (P/S)', 'text-right'],
+        ['stock', 'In stock', 'text-right'],
+        ['avgCost', 'Avg cost', 'text-right'],
+        ['salePrice', 'Sale price', 'text-right'],
+        ['value', 'Stock value', 'text-right'],
+        ['status', 'Status', '']
+    ];
+    $('invHead').innerHTML = columns.map(([key, label, align]) => {
+        const active = inventorySort.key === key;
+        const indicator = active ? (inventorySort.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+        return `<th class="p-2.5 ${align}" aria-sort="${active ? (inventorySort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}"><button type="button" onclick="sortInventory('${key}')" class="font-semibold hover:text-indigo-700 whitespace-nowrap" aria-label="Sort by ${label}">${label}<span class="${active ? 'text-indigo-600' : 'text-slate-400'}">${indicator}</span></button></th>`;
+    }).join('') + '<th class="p-2.5 no-print"></th>';
+}
+function renderInventory() {
+    let list = inventoryList(), all = Object.values(items);
+    renderInventoryHead();
+    $('invCards').innerHTML = [
+        { t: 'Titles', v: all.length },
+        { t: 'Units in stock', v: fmt(all.reduce((s, i) => s + Math.max(i.stock, 0), 0)) },
+        { t: 'Stock value (at cost)', v: 'PKR ' + fmt(all.reduce((s, i) => s + i.value, 0)), c: 'text-indigo-700' },
+        { t: 'Need attention', v: all.filter(i => i.status !== 'ok').length, c: 'text-rose-600', s: `Low at ≤ ${getLow()} units` }
+    ].map(card).join('');
+    $('invCount').innerText = `${list.length} of ${all.length} titles`;
+    const stockCls = i => i.stock <= 0 ? 'text-rose-600' : (i.status === 'low' ? 'text-amber-600' : 'text-slate-900');
+    $('invBody').innerHTML = list.length ? list.map(i => `<tr class="border-b hover:bg-slate-50">
+        <td class="p-2.5 font-semibold text-slate-800"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(i.key))})" class="text-left text-indigo-700 hover:underline">${esc(i.title)}</button><div class="text-[11px] font-normal text-slate-500">${[i.cls, i.cat, i.sp ? 'Sale ' + fmt(i.sp) : ''].filter(Boolean).map(esc).join(' · ')}</div></td>
+        <td class="p-2.5 text-right">${fmt(i.p)}</td><td class="p-2.5 text-right">${fmt(i.s)}</td>
+        <td class="p-2.5 text-right text-slate-500">${fmt(i.pr)} / ${fmt(i.sr)}</td>
+        <td class="p-2.5 text-right font-extrabold ${stockCls(i)}">${fmt(i.stock)}</td>
+        <td class="p-2.5 text-right">${fmt(i.avgCost)}</td><td class="p-2.5 text-right">${i.lastSale ? fmt(i.lastSale) : '-'}</td>
+        <td class="p-2.5 text-right font-semibold">${fmt(i.value)}</td>
+        <td class="p-2.5"><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold ${STATUS[i.status].cls}">${STATUS[i.status].label}</span></td>
+        <td class="p-2.5 whitespace-nowrap no-print"><button onclick="openTx('sale', ${esc(JSON.stringify(i.key))})" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold">Sell</button> <button onclick="openTx('purchase', ${esc(JSON.stringify(i.key))})" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">Buy</button></td></tr>`).join('')
+        : `<tr><td colspan="10" class="p-8 text-center text-slate-400">No books found.</td></tr>`;
+    $('invFoot').innerHTML = list.length ? `<tr><td class="p-3 text-right" colspan="4">Totals:</td><td class="p-3 text-right">${fmt(list.reduce((s, i) => s + Math.max(i.stock, 0), 0))}</td><td colspan="2"></td><td class="p-3 text-right">PKR ${fmt(list.reduce((s, i) => s + i.value, 0))}</td><td colspan="2" class="no-print"></td></tr>` : '';
+    $('invCards2').innerHTML = list.length ? list.map(i => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <div class="flex justify-between items-start gap-2"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(i.key))})" class="font-bold text-indigo-700 text-sm text-left hover:underline">${esc(i.title)}</button><span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${STATUS[i.status].cls}">${STATUS[i.status].label}</span></div>
+        <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+            <div><div class="text-[11px] text-slate-400">In stock</div><div class="text-lg font-extrabold ${stockCls(i)}">${fmt(i.stock)}</div></div>
+            <div><div class="text-[11px] text-slate-400">Avg cost</div><div class="text-sm font-semibold">${fmt(i.avgCost)}</div></div>
+            <div><div class="text-[11px] text-slate-400">Sale price</div><div class="text-sm font-semibold">${i.lastSale ? fmt(i.lastSale) : '-'}</div></div>
+        </div>
+        <div class="flex items-center justify-between mt-3"><div class="text-xs text-slate-500">Value: <b>PKR ${fmt(i.value)}</b> · Bought ${fmt(i.p)} · Sold ${fmt(i.s)}</div>
+        <div class="flex gap-2"><button onclick="openTx('sale', ${esc(JSON.stringify(i.key))})" class="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg font-semibold">Sell</button><button onclick="openTx('purchase', ${esc(JSON.stringify(i.key))})" class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg font-semibold">Buy</button></div></div></div>`).join('')
+        : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No books found.</div>';
+}
+
+// ---------------- TRANSACTIONS ----------------
+function txList() {
+    let q = norm($('txSearch').value), type = $('txType').value;
+    return periodTxs().filter(t => (type === 'ALL' || t.kind === type) && (!q || norm(t.title + ' ' + t.party + ' ' + t.voucher + ' ' + t.invoiceNo).includes(q)));
+}
+function sortedTxList() {
+    const values = {
+        date: t => t.date || '',
+        invoice: t => t.invoiceNo || '',
+        voucher: t => t.voucher || (t.id !== undefined ? '#' + t.id : ''),
+        type: t => KINDS[t.kind]?.label || t.kind,
+        party: t => t.party || '',
+        item: t => t.title || '',
+        qty: t => t.qty || 0,
+        unit: t => t.unit || 0,
+        discount: t => t.discount || 0,
+        net: t => t.net || 0,
+        account: t => WALLETS[t.mode]?.label || t.mode || ''
+    };
+    const get = values[transactionSort.key] || values.date;
+    return txList().slice().sort((a, b) => {
+        const left = get(a), right = get(b);
+        const comparison = typeof left === 'number' ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+        const tie = (a.date || '').localeCompare(b.date || '') || a.idx - b.idx;
+        return (comparison || tie) * (transactionSort.direction === 'asc' ? 1 : -1);
+    });
+}
+function setTxDateOrder(direction) {
+    transactionSort = { key: 'date', direction };
+    window.renderTransactions();
+}
+function sortTransactions(key) {
+    if(transactionSort.key === key) transactionSort.direction = transactionSort.direction === 'asc' ? 'desc' : 'asc';
+    else transactionSort = { key, direction: key === 'date' ? 'desc' : 'asc' };
+    window.renderTransactions();
+}
+document.getElementById('txNewestBtn').addEventListener('click', () => setTxDateOrder('desc'));
+document.getElementById('txOldestBtn').addEventListener('click', () => setTxDateOrder('asc'));
+function renderTransactionHead() {
+    const columns = [
+        ['date', 'Date', '7%'],
+        ['invoice', 'Invoice', '5%'],
+        ['voucher', 'Voucher', '7%'],
+        ['type', 'Type', '6%'],
+        ['party', 'Student / Vendor', '12%'],
+        ['item', 'Book / Item', '17%'],
+        ['qty', 'Qty', '4%'],
+        ['unit', 'Unit price', '6%'],
+        ['discount', 'Discount', '6%'],
+        ['net', 'Net amount', '9%'],
+        ['account', 'Account', '8%']
+    ];
+    $('txHead').innerHTML = '<th class="no-print" style="width:3%"></th>' + columns.map(([key, label, width]) => {
+        const active = transactionSort.key === key;
+        const indicator = active ? (transactionSort.direction === 'asc' ? '▲' : '▼') : '↕';
+        const align = ['qty', 'unit', 'discount', 'net'].includes(key) ? 'text-right' : 'text-left';
+        return `<th style="width:${width}" class="${align}" aria-sort="${active ? (transactionSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}"><button type="button" onclick="sortTransactions('${key}')" class="font-semibold hover:text-indigo-700" title="Sort by ${label}">${label} <span class="${active ? 'text-indigo-600' : 'text-slate-400'}">${indicator}</span></button></th>`;
+    }).join('') + '<th class="no-print" style="width:10%"></th>';
+    $('txNewestBtn').className = `px-2.5 py-1.5 rounded-md text-xs font-semibold ${transactionSort.key === 'date' && transactionSort.direction === 'desc' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:bg-white'}`;
+    $('txOldestBtn').className = `px-2.5 py-1.5 rounded-md text-xs font-semibold ${transactionSort.key === 'date' && transactionSort.direction === 'asc' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:bg-white'}`;
+    $('txNewestBtn').setAttribute('aria-pressed', String(transactionSort.key === 'date' && transactionSort.direction === 'desc'));
+    $('txOldestBtn').setAttribute('aria-pressed', String(transactionSort.key === 'date' && transactionSort.direction === 'asc'));
+}
+function renderTransactions() {
+    let filteredList = txList(), st = periodStats(filteredList);
+    let list = sortedTxList();
+    renderTransactionHead();
+    $('txCards').innerHTML = [
+        { t: 'Sales', v: 'PKR ' + fmt(st.sales), c: 'text-emerald-600' },
+        { t: 'Purchases', v: 'PKR ' + fmt(st.purch), c: 'text-indigo-700' },
+        { t: 'Sale returns', v: 'PKR ' + fmt(st.salesRet), c: 'text-amber-600' },
+        { t: 'Purchase returns', v: 'PKR ' + fmt(st.purchRet), c: 'text-rose-600' }
+    ].map(card).join('');
+    let shown = list.slice(0, txLimit);
+    selectedTxUids = new Set([...selectedTxUids].filter(uid => txByUid[uid] && txByUid[uid].id !== undefined && txByUid[uid].id !== null));
+    const selectedVisible = shown.filter(t => selectedTxUids.has(t.uid)).length;
+    const allVisibleSelected = shown.length > 0 && selectedVisible === shown.length;
+    $('txCount').innerText = `${list.length} transaction${list.length === 1 ? '' : 's'}${shown.length < list.length ? ` · showing ${shown.length}` : ''}`;
+    $('txSelectionBar').classList.toggle('hidden', !shown.length);
+    $('txSelectAll').checked = allVisibleSelected;
+    $('txSelectAll').indeterminate = selectedVisible > 0 && !allVisibleSelected;
+    $('txSelectedCount').innerText = `${selectedTxUids.size} selected`;
+    $('txDeleteSelected').disabled = selectedTxUids.size === 0;
+    const checkbox = t => t.id !== undefined && t.id !== null
+        ? `<input type="checkbox" aria-label="Select ${esc(KINDS[t.kind].label)} ${esc(t.title)}" ${selectedTxUids.has(t.uid) ? 'checked' : ''} onchange="toggleTxSelection(${esc(JSON.stringify(t.uid))},this.checked)" class="w-4 h-4 rounded">`
+        : '';
+    const acts = t => `${['sale', 'purchase'].includes(t.kind) ? `<button onclick="editTx(${esc(JSON.stringify(t.uid))})" title="Edit" class="px-1.5 hover:bg-indigo-50 rounded">✏️</button>` : ''}<button onclick="printSlip(${esc(JSON.stringify(t.uid))})" title="Print slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button><button onclick="deleteTx(${esc(JSON.stringify(t.uid))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`;
+    const invoiceEditButton = t => t.kind === 'purchase' && t.invoiceNo
+        ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-left text-indigo-700 hover:underline" title="Edit invoice date and number">${esc(t.invoiceNo)}</button>`
+        : '<span class="text-slate-400">-</span>';
+    const dateCell = t => t.kind === 'purchase' && t.invoiceNo
+        ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-indigo-700 hover:underline" title="Edit invoice date">${fmtDate(t.date)}</button>`
+        : fmtDate(t.date);
+    $('txBody').innerHTML = shown.length ? shown.map(t => `<tr class="border-b hover:bg-slate-50">
+        <td class="no-print">${checkbox(t)}</td>
+        <td class="text-slate-600 whitespace-nowrap">${dateCell(t)}</td>
+        <td>${invoiceEditButton(t)}</td>
+        <td class="font-mono text-indigo-900"><span class="tx-cell-truncate" title="${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</span></td>
+        <td>${kindBadge(t.kind)}</td>
+        <td><span class="tx-cell-truncate" title="${esc(t.party || '-')}">${esc(t.party || '-')}</span></td>
+        <td class="font-semibold text-slate-800"><button type="button" title="${esc(t.title || '-')} ${esc(t.notes || '')}" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="tx-cell-truncate text-left text-indigo-700 hover:underline">${esc(t.title || '-')}</button></td>
+        <td class="text-right">${fmt(t.qty)}</td><td class="text-right">${fmt(t.unit)}</td>
+        <td class="text-right text-amber-600">${t.discount ? fmt(t.discount) : '-'}</td>
+        <td class="text-right font-bold text-slate-800">PKR ${fmt(t.net)}</td>
+        <td><span class="tx-cell-truncate" title="${esc(t.mode && WALLETS[t.mode] ? WALLETS[t.mode].label : '-')}">${t.mode && WALLETS[t.mode] ? WALLETS[t.mode].icon + ' ' + esc(WALLETS[t.mode].label) : '-'}</span></td>
+        <td class="whitespace-nowrap no-print">${acts(t)}</td></tr>`).join('')
+        : `<tr><td colspan="13" class="p-8 text-center text-slate-400">No transactions found in this period.</td></tr>`;
+    $('txCards2').innerHTML = shown.length ? shown.map(t => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <div class="flex justify-between items-center gap-2"><span class="no-print">${checkbox(t)}</span>${kindBadge(t.kind)}${t.kind === 'purchase' && t.invoiceNo ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-xs text-indigo-700 hover:underline">${fmtDate(t.date)}</button>` : `<span class="text-xs text-slate-500">${fmtDate(t.date)}</span>`}</div>
+        <button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="font-bold text-indigo-700 text-sm text-left mt-2 hover:underline">${esc(t.title || '-')}</button>
+        <div class="text-xs text-slate-500">${esc(t.party || '-')}${t.voucher ? ' · ' + esc(t.voucher) : ''}</div>
+        ${t.kind === 'purchase' && t.invoiceNo ? `<button type="button" onclick="openEditPurchaseInvoice(${esc(JSON.stringify(t.invoiceNo))})" class="text-xs text-indigo-700 hover:underline mt-1">${esc(t.invoiceNo)} · edit invoice</button>` : ''}
+        <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${fmt(t.qty)} × ${fmt(t.unit)}${t.discount ? ` · disc ${fmt(t.discount)}` : ''}</div><div class="text-lg font-extrabold text-slate-800">PKR ${fmt(t.net)}</div></div>
+        <div class="flex justify-end gap-1 mt-2 border-t pt-2">${acts(t)}</div></div>`).join('')
+        : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No transactions found in this period.</div>';
+    $('txMore').innerHTML = list.length > txLimit ? `<button onclick="txLimit+=200;renderTransactions()" class="bg-white border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold">Show more (${list.length - txLimit} remaining)</button>` : '';
+}
+function toggleTxSelection(uid, checked) {
+    if(checked) selectedTxUids.add(uid);
+    else selectedTxUids.delete(uid);
+    renderTransactions();
+}
+function toggleAllTx(checked) {
+    const shown = sortedTxList().slice(0, txLimit);
+    shown.forEach(transaction => {
+        if(transaction.id === undefined || transaction.id === null) return;
+        if(checked) selectedTxUids.add(transaction.uid);
+        else selectedTxUids.delete(transaction.uid);
+    });
+    renderTransactions();
+}
+function newPurchaseInvoiceNumber() {
+    const used = new Set(txs.map(t => t.invoiceNo.toLowerCase()).filter(Boolean));
+    const prefix = 'INV-' + todayStr().replace(/-/g, '') + '-';
+    let sequence = 1, invoice;
+    do { invoice = prefix + String(sequence++).padStart(3, '0'); } while(used.has(invoice.toLowerCase()));
+    return invoice;
+}
+function openPurchaseInvoice() {
+    if(!colsOk()) return;
+    if(!hasExt || !hasItemCols || !hasInvoiceCol) {
+        toast('Run the SQL shown in the upgrade banner to enable invoice date, item details and supplier invoice numbers.', false);
+        $('setupBanner').classList.remove('hidden');
+        return;
+    }
+    purchaseInvoiceLines = [{ title: '', qty: 1, unit: '', salePrice: '', itemClass: 'All', category: '', discountType: 'percentage', discountValue: 0 }];
+    $('piDate').value = todayStr();
+    $('piNumber').value = newPurchaseInvoiceNumber();
+    $('piVendor').value = '';
+    $('piNotes').value = '';
+    $('piPostAcc').checked = false;
+    $('purchaseVendorList').innerHTML = [...new Set(txs.filter(t => ['purchase', 'purchase_return'].includes(t.kind)).map(t => t.party).filter(Boolean))].sort().map(name => `<option value="${esc(name)}">`).join('');
+    fillPurchaseInvoiceClassOptions();
+    renderPurchaseInvoiceLines();
+    $('purchaseInvoiceModal').classList.remove('hidden');
+}
+function closePurchaseInvoice() { $('purchaseInvoiceModal').classList.add('hidden'); }
+function fillPurchaseInvoiceClassOptions() {
+    const classes = [...new Set([
+        ...(((_settingLists || {})['Class'] || []).map(value => String(value || '').trim())),
+        ...Object.values(items).map(item => String(item.cls || '').trim()),
+        ...purchaseInvoiceLines.map(line => String(line.itemClass || '').trim())
+    ].filter(value => value && value.toLowerCase() !== 'all'))];
+    return ['<option value="All">All classes</option>', ...classes.map(value => `<option value="${esc(value)}">${esc(value)}</option>`)].join('');
+}
+function fillPurchaseInvoiceCategoryOptions() {
+    const categories = [...new Set([
+        ...(((_settingLists || {})['Book Category'] || []).map(value => String(value || '').trim())),
+        ...Object.values(items).map(item => String(item.cat || '').trim()),
+        ...purchaseInvoiceLines.map(line => String(line.category || '').trim())
+    ].filter(Boolean))];
+    return ['<option value="">Select category</option>', ...categories.map(value => `<option value="${esc(value)}">${esc(value)}</option>`)].join('');
+}
+function renderPurchaseInvoiceLines() {
+    const body = purchaseInvoiceLines.map((line, index) => {
+        const amounts = purchaseInvoiceLineAmounts(line);
+        return `<tr class="border-b last:border-0">
+        <td class="p-1"><input list="bookList" data-field="title" data-index="${index}" value="${esc(line.title)}" oninput="updatePurchaseInvoiceLine(this)" onkeydown="purchaseInvoiceEnterNext(event, this)" class="w-full min-w-0 border rounded-md px-1.5 py-1.5 text-xs" placeholder="Item name"></td>
+        <td class="p-1"><input type="number" min="1" data-field="qty" data-index="${index}" value="${esc(line.qty)}" oninput="updatePurchaseInvoiceLine(this)" onkeydown="purchaseInvoiceEnterNext(event, this)" class="w-full min-w-0 border rounded-md px-1.5 py-1.5 text-xs"></td>
+        <td class="p-1"><input type="number" min="0.01" step="0.01" data-field="unit" data-index="${index}" value="${esc(line.unit)}" oninput="updatePurchaseInvoiceLine(this)" onkeydown="purchaseInvoiceEnterNext(event, this)" class="w-full min-w-0 border rounded-md px-1.5 py-1.5 text-xs" placeholder="PKR"></td>
+        <td class="p-1"><input type="number" min="0.01" step="0.01" data-field="salePrice" data-index="${index}" value="${esc(line.salePrice)}" oninput="updatePurchaseInvoiceLine(this)" onkeydown="purchaseInvoiceEnterNext(event, this)" class="w-full min-w-0 border rounded-md px-1.5 py-1.5 text-xs" placeholder="PKR"></td>
+        <td class="p-1"><select data-field="itemClass" data-index="${index}" onchange="updatePurchaseInvoiceLine(this)" onkeydown="purchaseInvoiceEnterNext(event, this)" class="w-full min-w-0 border rounded-md px-1 py-1.5 text-xs">${fillPurchaseInvoiceClassOptions()}</select></td>
+        <td class="p-1"><select data-field="category" data-index="${index}" onchange="updatePurchaseInvoiceLine(this)" onkeydown="purchaseInvoiceEnterNext(event, this)" class="w-full min-w-0 border rounded-md px-1 py-1.5 text-xs">${fillPurchaseInvoiceCategoryOptions()}</select></td>
+        <td class="p-1"><select data-field="discountType" data-index="${index}" onchange="updatePurchaseInvoiceLine(this)" onkeydown="purchaseInvoiceEnterNext(event, this)" class="w-full min-w-0 border rounded-md px-1 py-1.5 text-xs"><option value="percentage">Percent</option><option value="fixed">Lump sum</option></select></td>
+        <td class="p-1"><input type="number" min="0" step="0.01" data-field="discountValue" data-index="${index}" value="${esc(line.discountValue)}" oninput="updatePurchaseInvoiceLine(this)" onkeydown="purchaseInvoiceEnterNext(event, this)" class="w-full min-w-0 border rounded-md px-1.5 py-1.5 text-xs"></td>
+        <td class="p-1 text-right text-xs font-semibold text-indigo-800 whitespace-nowrap" data-net-amount="${index}">${fmt(amounts.net)}</td>
+        <td class="p-1 text-center"><button type="button" onclick="removePurchaseInvoiceLine(${index})" aria-label="Remove item" class="w-7 h-7 rounded-md bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold">×</button></td>
+        </tr>`;
+    }).join('');
+    $('piRows').innerHTML = `<table class="w-full table-fixed border-collapse text-left"><colgroup><col style="width:21%"><col style="width:6%"><col style="width:9%"><col style="width:9%"><col style="width:12%"><col style="width:12%"><col style="width:11%"><col style="width:9%"><col style="width:8%"><col style="width:3%"></colgroup><thead class="bg-slate-100 text-[10px] text-slate-600"><tr><th class="p-1.5">Item</th><th class="p-1.5">Qty</th><th class="p-1.5">Cost</th><th class="p-1.5">Sale</th><th class="p-1.5">Class</th><th class="p-1.5">Category</th><th class="p-1.5">Disc. type</th><th class="p-1.5">Discount</th><th class="p-1.5 text-right">Net</th><th class="p-1"></th></tr></thead><tbody>${body}</tbody></table>`;
+    purchaseInvoiceLines.forEach((line, index) => {
+        const select = $('piRows').querySelector(`select[data-index="${index}"][data-field="itemClass"]`);
+        if(select && [...select.options].some(option => option.value === line.itemClass)) select.value = line.itemClass;
+        else if(select) select.value = 'All';
+        const discountType = $('piRows').querySelector(`select[data-index="${index}"][data-field="discountType"]`);
+        if(discountType) discountType.value = line.discountType || 'percentage';
+        const category = $('piRows').querySelector(`select[data-index="${index}"][data-field="category"]`);
+        if(category && [...category.options].some(option => option.value === line.category)) category.value = line.category;
+        else if(category) category.value = '';
+    });
+    updatePurchaseInvoiceTotal();
+}
+function purchaseInvoiceLineAmounts(line) {
+    const gross = Math.round((Number(line.qty) || 0) * (Number(line.unit) || 0) * 100) / 100;
+    const value = Math.max(0, Number(line.discountValue) || 0);
+    const discount = line.discountType === 'percentage'
+        ? gross * Math.min(value, 100) / 100
+        : Math.min(value, gross);
+    const roundedDiscount = Math.round(discount * 100) / 100;
+    return { gross, discount: roundedDiscount, net: Math.max(0, Math.round((gross - roundedDiscount) * 100) / 100) };
+}
+function updatePurchaseInvoiceLine(input) {
+    const index = Number(input.dataset.index), field = input.dataset.field, line = purchaseInvoiceLines[index];
+    if(!line || !field) return;
+    line[field] = input.value;
+    if(field === 'title') {
+        const item = items[norm(input.value)];
+        if(item) {
+            if(!line.unit && item.lastBuy) line.unit = item.lastBuy;
+            if(!line.salePrice && item.sp) line.salePrice = item.sp;
+            if(line.itemClass === 'All' && item.cls) line.itemClass = item.cls;
+            if(!line.category && item.cat) line.category = item.cat;
+            renderPurchaseInvoiceLines();
+            return;
+        }
+    }
+    const amounts = purchaseInvoiceLineAmounts(line);
+    const netCell = $('piRows').querySelector(`td[data-net-amount="${index}"]`);
+    if(netCell) netCell.innerText = fmt(amounts.net);
+    updatePurchaseInvoiceTotal();
+}
+function purchaseInvoiceEnterNext(event, input) {
+    if(event.key !== 'Enter' || event.isComposing) return;
+    event.preventDefault();
+    const index = Number(input.dataset.index);
+    const fields = ['title', 'qty', 'unit', 'salePrice', 'itemClass', 'category', 'discountType', 'discountValue'];
+    const fieldIndex = fields.indexOf(input.dataset.field);
+    let next;
+    if(fieldIndex < fields.length - 1) {
+        next = $('piRows').querySelector(`[data-index="${index}"][data-field="${fields[fieldIndex + 1]}"]`);
+    } else {
+        if(index === purchaseInvoiceLines.length - 1) addPurchaseInvoiceLine();
+        next = $('piRows').querySelector(`[data-index="${index + 1}"][data-field="title"]`);
+    }
+    if(next) next.focus();
+}
+function updatePurchaseInvoiceTotal() {
+    if(!$('piTotal')) return;
+    const amounts = purchaseInvoiceLines.reduce((sum, line) => {
+        const lineAmounts = purchaseInvoiceLineAmounts(line);
+        sum.subtotal += lineAmounts.gross;
+        sum.discount += lineAmounts.discount;
+        sum.total += lineAmounts.net;
+        return sum;
+    }, { subtotal: 0, discount: 0, total: 0 });
+    $('piSubtotal').innerText = 'PKR ' + fmt(amounts.subtotal);
+    $('piDiscountTotal').innerText = 'PKR ' + fmt(amounts.discount);
+    $('piTotal').innerText = `Invoice total: PKR ${fmt(amounts.total)}`;
+}
+function addPurchaseInvoiceLine() {
+    purchaseInvoiceLines.push({ title: '', qty: 1, unit: '', salePrice: '', itemClass: 'All', category: '', discountType: 'percentage', discountValue: 0 });
+    renderPurchaseInvoiceLines();
+}
+function removePurchaseInvoiceLine(index) {
+    if(purchaseInvoiceLines.length === 1) purchaseInvoiceLines[0] = { title: '', qty: 1, unit: '', salePrice: '', itemClass: 'All', category: '', discountType: 'percentage', discountValue: 0 };
+    else purchaseInvoiceLines.splice(index, 1);
+    renderPurchaseInvoiceLines();
+}
+async function savePurchaseInvoice() {
+    const date = $('piDate').value, invoiceNo = $('piNumber').value.trim(), vendor = $('piVendor').value.trim();
+    const notes = $('piNotes').value.trim(), paid = $('piPostAcc').checked, wallet = $('piWallet').value;
+    if(!date || !invoiceNo || !vendor) { toast('Enter the invoice date, invoice number and vendor.', false); return; }
+    if(txs.some(t => t.invoiceNo.toLowerCase() === invoiceNo.toLowerCase())) { toast('This supplier invoice number already exists. Use a unique number.', false); return; }
+    const lines = purchaseInvoiceLines.map(line => ({
+        title: String(line.title || '').trim(), qty: Number(line.qty), unit: Number(line.unit), salePrice: Number(line.salePrice),
+        discountType: line.discountType || 'percentage', discountValue: Number(line.discountValue),
+        itemClass: String(line.itemClass || 'All').trim() || 'All', category: String(line.category || '').trim()
+    }));
+    if(!lines.length || lines.some(line => !line.title || !Number.isFinite(line.qty) || line.qty <= 0 || !Number.isFinite(line.unit) || line.unit <= 0 || !Number.isFinite(line.salePrice) || line.salePrice <= 0 || !Number.isFinite(line.discountValue) || line.discountValue < 0 || (line.discountType === 'percentage' && line.discountValue > 100) || (line.discountType === 'fixed' && line.discountValue > line.qty * line.unit))) {
+        toast('Each item needs a title, valid quantity and prices. Discount must be within that item total, and percentage cannot exceed 100%.', false);
+        return;
+    }
+    const discountedLines = lines.map(line => ({ ...line, amount: purchaseInvoiceLineAmounts(line).net }));
+    const used = new Set(txs.map(t => t.voucher.toUpperCase()).filter(Boolean));
+    const nextVoucher = () => {
+        let voucher;
+        do { voucher = genVoucher('BK-'); } while(used.has(voucher.toUpperCase()));
+        used.add(voucher.toUpperCase());
+        return voucher;
+    };
+    const rows = discountedLines.map(line => {
+        const voucher = nextVoucher();
+        return {
+            type: 'Purchase', party_name: vendor, book_title: line.title, qty: line.qty, unit_price: line.unit,
+            net_amount: line.amount, date, invoice_no: invoiceNo, voucher_no: voucher, payment_mode: null,
+            notes: notes || null, item_class: line.itemClass, category: line.category || null, sale_price: line.salePrice
+        };
+    });
+    showLoading('Saving purchase invoice...');
+    try {
+        const c = getSupabaseConfig(), headers = sbHeaders({ 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
+        const saved = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers, body: JSON.stringify(rows.map(mapRow)) });
+        if(!saved.ok) throw new Error(errMsg('Could not save invoice items: ' + await saved.text()));
+        let accountsSaved = true;
+        if(paid) {
+            const total = rows.reduce((sum, row) => sum + row.net_amount, 0);
+            accountsSaved = await postDuesEntry('pay', vendor, total, date, wallet, notes || `Supplier invoice ${invoiceNo}`, rows.map(row => ({ voucher: row.voucher_no, rem: row.net_amount, date })));
+        }
+        if(paid && accountsSaved) await loadDuesData();
+        closePurchaseInvoice();
+        await initBooks();
+        toast(accountsSaved ? `Invoice ${invoiceNo} saved (${rows.length} items).${paid ? ' Payment recorded in Accounts.' : ' Added to vendor payable.'}` : `Invoice ${invoiceNo} saved, but Accounts payment failed. The invoice remains in vendor payable; record payment from Accounts.`, accountsSaved);
+    } catch(error) {
+        console.error(error);
+        toast(error.message || 'Could not save the purchase invoice.', false);
+    } finally {
+        hideLoading();
+    }
+}
+function openEditPurchaseInvoice(invoiceNo) {
+    const group = txs.filter(t => t.kind === 'purchase' && t.invoiceNo.toLowerCase() === String(invoiceNo).toLowerCase());
+    if(!group.length || group.some(t => t.id === undefined || t.id === null)) {
+        toast('The invoice item records could not be identified for editing.', false);
+        return;
+    }
+    editingPurchaseInvoiceVouchers = group;
+    $('epiDate').value = group[0].date || todayStr();
+    $('epiNumber').value = group[0].invoiceNo;
+    $('epiCount').innerText = `${group.length} item${group.length === 1 ? '' : 's'} in this invoice`;
+    $('editPurchaseInvoiceModal').classList.remove('hidden');
+}
+function closeEditPurchaseInvoice() {
+    $('editPurchaseInvoiceModal').classList.add('hidden');
+    editingPurchaseInvoiceVouchers = [];
+}
+async function saveEditPurchaseInvoice() {
+    const group = editingPurchaseInvoiceVouchers, date = $('epiDate').value, invoiceNo = $('epiNumber').value.trim();
+    if(!group.length) { closeEditPurchaseInvoice(); return; }
+    if(!date || !invoiceNo) { toast('Enter both the invoice date and number.', false); return; }
+    const groupUids = new Set(group.map(t => t.uid));
+    if(txs.some(t => t.invoiceNo.toLowerCase() === invoiceNo.toLowerCase() && !groupUids.has(t.uid))) {
+        toast('Another invoice already uses this number.', false);
+        return;
+    }
+    const oldDate = group[0].date, oldNumber = group[0].invoiceNo;
+    const ids = group.map(t => encodeURIComponent(t.id)).join(',');
+    const linked = group.filter(t => t.mode && t.voucher);
+    const voucherFilter = linked.map(t => encodeURIComponent(t.voucher)).join(',');
+    showLoading('Updating invoice details...');
+    let booksUpdated = false;
+    const c = getSupabaseConfig(), headers = sbHeaders({ 'Content-Type': 'application/json', 'Prefer': 'return=representation' });
+    try {
+        const booksResponse = await fetch(`${c.url}/rest/v1/books?id=in.(${ids})`, {
+            method: 'PATCH', headers, body: JSON.stringify(mapRow({ date, invoice_no: invoiceNo }))
+        });
+        if(!booksResponse.ok) throw new Error('Could not update invoice items: ' + await booksResponse.text());
+        booksUpdated = true;
+        const changedBooks = await booksResponse.json();
+        if(!Array.isArray(changedBooks) || changedBooks.length !== group.length) throw new Error('Not all invoice items were updated. Check Books Edit permission.');
+        if(linked.length) {
+            const accountsResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=in.(${voucherFilter})`, {
+                method: 'PATCH', headers, body: JSON.stringify({ date })
+            });
+            if(!accountsResponse.ok) throw new Error('Books invoice details changed, but linked Accounts dates could not be updated: ' + await accountsResponse.text());
+            const changedAccounts = await accountsResponse.json();
+            if(!Array.isArray(changedAccounts) || changedAccounts.length !== linked.length) throw new Error('Books invoice details changed, but not all linked Accounts entries were updated.');
+        }
+        closeEditPurchaseInvoice();
+        await initBooks();
+        toast(`Invoice ${invoiceNo} date and number updated.`);
+    } catch(error) {
+        let message = error.message || 'Could not update invoice details.';
+        if(booksUpdated) {
+            const rollback = await fetch(`${c.url}/rest/v1/books?id=in.(${ids})`, {
+                method: 'PATCH',
+                headers: sbHeaders({ 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }),
+                body: JSON.stringify(mapRow({ date: oldDate, invoice_no: oldNumber }))
+            });
+            if(!rollback.ok) message += ' Invoice rollback also failed; refresh and reconcile the affected records.';
+        }
+        toast(message, false);
+    } finally {
+        hideLoading();
+    }
+}
+function viewAllRecentTx(kind) {
+    closeTx();
+    $('gPeriod').value = 'all';
+    $('gFrom').value = '';
+    $('gTo').value = '';
+    $('txSearch').value = '';
+    $('txType').value = kind;
+    txLimit = Number.MAX_SAFE_INTEGER;
+    selectedTxUids.clear();
+    showTab('transactions');
+}
+function deleteSelectedTx() {
+    const selected = [...selectedTxUids].map(uid => txByUid[uid]).filter(Boolean);
+    if(!selected.length) { toast('Select at least one transaction first.', false); return; }
+    if(selected.some(transaction => transaction.id === undefined || transaction.id === null)) {
+        toast('One or more selected transactions do not have a database ID and cannot be deleted.', false);
+        return;
+    }
+    const total = selected.reduce((sum, transaction) => sum + transaction.net, 0);
+    confirmBox(
+        `Permanently delete ${selected.length} selected transaction(s) totalling PKR ${fmt(total)}?${hasExt ? '\n\nLinked Accounts entries will also be removed. Transactions with partial settlements must be reconciled first.' : ''}`,
+        'Delete selected',
+        () => runDeleteSelectedTx(selected)
+    );
+}
+async function runDeleteSelectedTx(selected) {
+    showLoading('Checking selected transactions...');
+    const c = getSupabaseConfig();
+    const linked = selected.filter(transaction => hasExt && (/^(RV|PV)-/i.test(transaction.voucher || '') || /^BK-\d+$/i.test(transaction.voucher || '')));
+    const linkedAccounts = new Map();
+    try {
+        for(let start = 0; start < linked.length; start += 20) {
+            const batch = linked.slice(start, start + 20);
+            const checks = await Promise.all(batch.map(async transaction => {
+                const base = `${c.url}/rest/v1/accounts?select=voucher_id`;
+                const [directResponse, settlementResponse] = await Promise.all([
+                    fetch(`${base}&voucher_id=eq.${encodeURIComponent(transaction.voucher)}`, { headers: sbHeaders() }),
+                    fetch(`${base}&voucher_id=like.${encodeURIComponent(transaction.voucher + '-*')}`, { headers: sbHeaders() })
+                ]);
+                if(!directResponse.ok) throw new Error(`Could not check Accounts voucher ${transaction.voucher}: ${await directResponse.text()}`);
+                if(!settlementResponse.ok) throw new Error(`Could not check settlements for ${transaction.voucher}: ${await settlementResponse.text()}`);
+                const [directRows, settlementRows] = await Promise.all([directResponse.json(), settlementResponse.json()]);
+                if(!Array.isArray(directRows) || directRows.length > 1) throw new Error(`Voucher ${transaction.voucher} has duplicate Accounts entries. Resolve it before deleting.`);
+                if(Array.isArray(settlementRows) && settlementRows.length) throw new Error(`Voucher ${transaction.voucher} has partial settlement entries. Resolve them in Accounts before deleting.`);
+                return { transaction, direct: directRows[0] || null };
+            }));
+            batch.forEach((transaction, index) => linkedAccounts.set(transaction.uid, checks[index].direct));
+        }
+    } catch(error) {
+        hideLoading();
+        toast(error.message || 'Could not verify transactions before deletion.', false);
+        return;
+    }
+
+    let deletedCount = 0, accountErrors = [], errors = [];
+    for(let index = 0; index < selected.length; index++) {
+        const transaction = selected[index];
+        try {
+            showLoading(`Deleting transaction ${index + 1} of ${selected.length}...`);
+            const bookResponse = await fetch(`${c.url}/rest/v1/books?id=eq.${encodeURIComponent(transaction.id)}`, {
+                method: 'DELETE', headers: sbHeaders({ Prefer: 'return=representation' })
+            });
+            if(!bookResponse.ok) throw new Error(await bookResponse.text());
+            const removed = await bookResponse.json();
+            if(!Array.isArray(removed) || removed.length !== 1) throw new Error('Record was not deleted. Check Books Delete permission.');
+            deletedCount++;
+            selectedTxUids.delete(transaction.uid);
+            if(linkedAccounts.get(transaction.uid)) {
+                const accountResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(transaction.voucher)}`, {
+                    method: 'DELETE', headers: sbHeaders({ Prefer: 'return=representation' })
+                });
+                if(!accountResponse.ok) accountErrors.push(`${transaction.voucher}: ${await accountResponse.text()}`);
+                else {
+                    const removedAccounts = await accountResponse.json();
+                    if(!Array.isArray(removedAccounts) || removedAccounts.length !== 1)
+                        accountErrors.push(`${transaction.voucher}: linked Accounts entry was not deleted; reconcile it manually.`);
+                }
+            }
+        } catch(error) {
+            errors.push(`${transaction.voucher || '#' + transaction.id}: ${error.message || 'delete failed'}`);
+        }
+    }
+    await initBooks();
+    if(accountErrors.length || errors.length) {
+        const summary = `Deleted ${deletedCount} of ${selected.length} transaction(s).`;
+        toast(`${summary} ${[...accountErrors, ...errors].slice(0, 3).join(' ')}`, false);
+        if(accountErrors.length + errors.length > 3) console.error('Bulk transaction deletion issues:', [...accountErrors, ...errors]);
+    } else {
+        toast(`${deletedCount} selected transaction(s) deleted with linked Accounts entries.`);
+    }
+    hideLoading();
+}
+
+// ---------------- PARTIES ----------------
+
+function viewParty(name) { $('txSearch').value = name; $('txType').value = 'ALL'; showTab('transactions'); }
+
+// ---------------- EXPORT ----------------
+function exportCsv(name, header, rows) {
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    let csv = '\uFEFF' + [header, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+    let a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    a.download = `${name}-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+function exportInventoryCsv() {
+    let list = inventoryList(); if(!list.length) { toast('No records to export.', false); return; }
+    exportCsv('inventory', ['Title', 'Purchased', 'Sold', 'Purchase returns', 'Sale returns', 'In stock', 'Avg cost', 'Sale price', 'Stock value', 'Status'],
+        list.map(i => [i.title, i.p, i.s, i.pr, i.sr, i.stock, Math.round(i.avgCost * 100) / 100, i.lastSale, Math.round(i.value), STATUS[i.status].label]));
+}
+function exportTxCsv() {
+    let list = txList(); if(!list.length) { toast('No records to export.', false); return; }
+    exportCsv('book-transactions', ['Date', 'Invoice No', 'Voucher', 'Type', 'Student / Vendor', 'Book', 'Qty', 'Unit price', 'Discount', 'Net amount', 'Account', 'Notes'],
+        list.map(t => [t.date, t.invoiceNo, t.voucher, KINDS[t.kind].label, t.party, t.title, t.qty, t.unit, t.discount, t.net, t.mode, t.notes]));
+}
+
+// ====================================================================================
+//  TRANSACTION MODAL
+// ====================================================================================
+function setTxKind(kind) {
+    txKind = kind;
+    $('mTypeTabs').innerHTML = Object.keys(KINDS).map(k => `<button type="button" onclick="setTxKind('${k}')" class="py-2 rounded-lg border ${k === kind ? 'tab-on' : 'tab-off'}">${KINDS[k].label}</button>`).join('');
+    let isVendor = kind === 'purchase' || kind === 'purchase_return';
+    $('mTitle').innerText = 'New ' + KINDS[kind].label;
+    $('mPartyLabel').innerText = isVendor ? 'Vendor / Supplier name' : 'Student / Customer name';
+    $('mSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + (kind === 'sale' ? 'bg-emerald-600 hover:bg-emerald-700' : (kind === 'purchase' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-500 hover:bg-amber-600'));
+    $('mHint').innerText = KINDS[kind].money === 'in' ? 'Money comes in → recorded as a Receipt in Accounts' : 'Money goes out → recorded as a Payment in Accounts';
+    { const show = kind === 'purchase' && hasItemCols; $('mItemExtra').classList.toggle('hidden', !show); if(show) fillItemSelects(); $('mNewItemBtn').classList.toggle('hidden', kind !== 'purchase'); }
+    fillPartyList(kind);
+    renderRecentTx(kind);
+    refreshAutoInvoiceNumber();
+    onTitleInput(true);
+}
+function renderRecentTx(kind) {
+    const supported = kind === 'sale' || kind === 'purchase';
+    $('mRecentTitle').innerText = kind === 'purchase' ? 'Recent purchases' : 'Recent sales';
+    $('mViewAllTx').classList.toggle('hidden', !supported);
+    const recent = supported ? txs.filter(t => t.kind === kind).slice(0, 8) : [];
+    $('mRecentCount').innerText = recent.length ? `${recent.length} latest` : '';
+    $('mRecentList').innerHTML = recent.length ? recent.map(t => `<article class="rounded-xl border border-slate-200 bg-white p-2.5">
+        <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0"><button type="button" onclick="openItemLedger(${esc(JSON.stringify(t.key))})" class="text-xs font-semibold text-indigo-700 text-left hover:underline truncate">${esc(t.title || '-')}</button><div class="text-[10px] text-slate-500 truncate">${esc(t.party || 'No party')} · ${fmtDate(t.date)}</div></div>
+            <span class="text-[10px] font-bold whitespace-nowrap text-slate-700">PKR ${fmt(t.net)}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2 mt-1.5"><span class="text-[10px] text-slate-400">${esc(t.voucher || (t.id !== undefined ? '#' + t.id : 'No voucher'))} · Qty ${fmt(t.qty)}</span>
+            ${t.id !== undefined && t.id !== null ? `<button type="button" onclick="editTx(${esc(JSON.stringify(t.uid))})" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-semibold">✏ Edit</button>` : '<span class="text-[10px] text-slate-400">Not editable</span>'}
+        </div>
+    </article>`).join('') : '<p class="rounded-xl border border-dashed border-slate-300 p-3 text-xs text-slate-500">No recent transactions of this type.</p>';
+}
+function openTx(kind, key, editUid) {
+    const editing = editUid !== undefined && editUid !== null;
+    const editRecord = editing ? txByUid[editUid] : null;
+    editingTxUid = editing ? editUid : null;
+    editingAccountRow = editing ? editingAccountRow : null;
+    invoiceNumberManual = false;
+    $('mDate').value = todayStr(); $('mInvoiceNo').value = ''; $('mParty').value = ''; $('mTitleIn').value = ''; $('mQty').value = 1; $('mPrice').value = '';
+    $('mDiscType').value = 'percentage'; $('mDiscVal').value = 0; $('mNotes').value = ''; $('mSalePrice').value = ''; $('mPaidNow').value = ''; $('mWallet').value = 'cash'; $('mPostAcc').checked = true;
+    $('mPostAcc').disabled = false; $('mPaidNow').disabled = false; $('mWallet').disabled = false;
+    $('mEditAccountingHint').classList.add('hidden');
+    $('mAddAnotherBtn').classList.toggle('hidden', editing);
+    $('mDateWrap').classList.toggle('hidden', !hasExt);
+    $('mExtWrap').classList.toggle('hidden', !hasExt);
+    $('mInvoiceWrap').classList.toggle('hidden', !hasExt);
+    if(key && items[key]) $('mTitleIn').value = items[key].title;
+    setTxKind(kind);
+    $('mTypeTabs').classList.toggle('hidden', editing);
+    if(editRecord) {
+        $('mTitle').innerText = `Edit ${KINDS[editRecord.kind].label}`;
+        $('mHint').innerText = `Updating ${editRecord.voucher || '#' + editRecord.id}; linked account payment is kept in sync.`;
+        $('mDate').value = editRecord.date || todayStr();
+        $('mInvoiceNo').value = editRecord.voucher;
+        $('mParty').value = editRecord.party;
+        $('mTitleIn').value = editRecord.title;
+        $('mQty').value = editRecord.qty;
+        $('mPrice').value = editRecord.unit;
+        $('mDiscType').value = 'fixed';
+        $('mDiscVal').value = fmt(editRecord.discount).replace(/,/g, '');
+        $('mNotes').value = editRecord.notes;
+        $('mPostAcc').checked = !!editingAccountRow;
+        $('mPostAcc').disabled = true;
+        $('mPaidNow').value = 0;
+        $('mPaidNow').disabled = true;
+        $('mWallet').value = editRecord.mode || 'cash';
+        $('mWallet').disabled = !editingAccountRow;
+        if(editRecord.kind === 'purchase' && hasItemCols) {
+            $('mSalePrice').value = editRecord.salePrice || '';
+            if(editRecord.itemClass) $('mItemClass').value = editRecord.itemClass;
+            if(editRecord.category) $('mItemCat').value = editRecord.category;
+        }
+        if(editingAccountRow) {
+            $('mEditAccountingHint').innerText = 'Record in Accounts is already enabled for this transaction. Its amount, date and account will update together; this setting cannot be changed while editing.';
+            $('mEditAccountingHint').classList.remove('hidden');
+        } else {
+            $('mEditAccountingHint').innerText = 'No direct payment is linked to this transaction. Existing credit balance will stay unchanged; use Accounts to record settlements.';
+            $('mEditAccountingHint').classList.remove('hidden');
+        }
+        $('mSaveBtn').innerText = 'Save changes';
+        $('mSaveBtn').className = 'px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm';
+    } else {
+        $('mTitle').innerText = 'New ' + KINDS[kind].label;
+        $('mSaveBtn').innerText = 'Save';
+        $('mSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + (kind === 'sale' ? 'bg-emerald-600 hover:bg-emerald-700' : (kind === 'purchase' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-500 hover:bg-amber-600'));
+    }
+    if(key) onTitleInput();
+    calcNet();
+    $('txModal').classList.remove('hidden');
+    setTimeout(() => (key ? $('mQty') : $('mParty')).focus(), 50);
+}
+function closeTx() {
+    $('txModal').classList.add('hidden');
+    editingTxUid = null;
+    editingAccountRow = null;
+    $('mTypeTabs').classList.remove('hidden');
+    $('mAddAnotherBtn').classList.remove('hidden');
+}
+async function editTx(uid) {
+    const transaction = txByUid[uid];
+    if(!transaction || !['sale', 'purchase'].includes(transaction.kind)) return;
+    if(transaction.id === undefined || transaction.id === null) {
+        toast('This transaction has no database id and cannot be edited.', false);
+        return;
+    }
+    let linkedAccount = null;
+    if(hasExt && transaction.voucher) {
+        showLoading('Checking linked payments...');
+        try {
+            const c = getSupabaseConfig(), base = `${c.url}/rest/v1/accounts?select=voucher_id,from_account,to_account,description,amount_in,amount_out,date,remarks`;
+            const settled = await fetch(`${base}&voucher_id=like.${encodeURIComponent(transaction.voucher + '-*')}`, { headers: sbHeaders() });
+            if(!settled.ok) throw new Error('Could not verify transaction settlements: ' + await settled.text());
+            const settlementRows = await settled.json();
+            if(Array.isArray(settlementRows) && settlementRows.length) {
+                toast('This transaction already has linked partial payments. Settle or reverse those entries in Accounts before editing it.', false);
+                return;
+            }
+            const direct = await fetch(`${base}&voucher_id=eq.${encodeURIComponent(transaction.voucher)}`, { headers: sbHeaders() });
+            if(!direct.ok) throw new Error('Could not verify the linked Accounts entry: ' + await direct.text());
+            const directRows = await direct.json();
+            if(Array.isArray(directRows) && directRows.length > 1) throw new Error('Multiple Accounts entries use this voucher. Resolve the duplicate before editing.');
+            linkedAccount = Array.isArray(directRows) ? directRows[0] || null : null;
+            if(transaction.mode && !linkedAccount) throw new Error('This transaction is marked as paid in Accounts, but its linked voucher could not be found. Refresh and check Accounts before editing.');
+        } catch(error) {
+            toast(error.message || 'Could not check linked payments.', false);
+            return;
+        } finally {
+            hideLoading();
+        }
+    }
+    editingAccountRow = linkedAccount;
+    openTx(transaction.kind, null, uid);
+}
+
+function onTitleInput(skipPrice) {
+    let it = items[norm($('mTitleIn').value)], el = $('mStock'), kind = txKind;
+    if(!it) { el.innerHTML = $('mTitleIn').value.trim() ? '<span class="text-slate-400">New title — it will be added to inventory.</span>' : ''; return; }
+    if(kind === 'purchase' && hasItemCols) { if(it.cls) $('mItemClass').value = it.cls; if(it.cat) $('mItemCat').value = it.cat; if(!$('mSalePrice').value && it.sp) $('mSalePrice').value = it.sp; }
+ let low = it.stock <= 0 ? 'text-rose-600' : (it.status === 'low' ? 'text-amber-600' : 'text-emerald-600');
+    el.innerHTML = `In stock: <b class="${low}">${fmt(it.stock)}</b> · Avg cost ${fmt(it.avgCost)}${it.lastSale ? ' · Last sale price ' + fmt(it.lastSale) : ''}`;
+    if(skipPrice !== true && !$('mPrice').value) {
+        let p = (kind === 'sale' || kind === 'sale_return') ? (it.sp || it.lastSale) : (it.lastBuy || it.avgCost);
+        if(p) { $('mPrice').value = Math.round(p * 100) / 100; calcNet(); }
+    }
+}
+function calcNet() {
+    let qty = parseFloat($('mQty').value) || 0, price = parseFloat($('mPrice').value) || 0, gross = qty * price;
+    let dv = parseFloat($('mDiscVal').value) || 0, disc = $('mDiscType').value === 'percentage' ? gross * Math.min(dv, 100) / 100 : Math.min(dv, gross);
+    let net = Math.max(0, gross - disc);
+    $('mGross').innerText = fmt(gross); $('mDisc').innerText = fmt(disc); $('mNet').innerText = 'PKR ' + fmt(net);
+    return { qty, price, gross, disc, net };
+}
+function genVoucher(prefix) {
+    let used = new Set(txs.map(t => t.voucher)), id;
+    do { id = prefix + Math.floor(100000 + Math.random() * 900000); } while(used.has(id));
+    return id;
+}
+function voucherPrefix(kind, postAcc) {
+    return postAcc ? (KINDS[kind].money === 'in' ? 'RV-' : 'PV-') : 'BK-';
+}
+function refreshAutoInvoiceNumber() {
+    if(hasExt && !editingTxUid && !invoiceNumberManual && $('mInvoiceNo')) {
+        $('mInvoiceNo').value = genVoucher(voucherPrefix(txKind, $('mPostAcc').checked));
+    }
+}
+function normalizeInvoiceNumber(value, prefix) {
+    const invoice = String(value || '').trim();
+    if(!invoice) return '';
+    const existingPrefix = invoice.match(/^(RV-|PV-|BK-)/i);
+    if(existingPrefix) return existingPrefix[1].toUpperCase() === prefix ? invoice : null;
+    return prefix + invoice;
+}
+
+async function saveTx(addAnother) { if(!colsOk()) return;
+    let kind = txKind, meta = KINDS[kind];
+    const existingTx = editingTxUid ? txByUid[editingTxUid] : null;
+    let party = $('mParty').value.trim(), title = $('mTitleIn').value.trim(), n = calcNet(), date = $('mDate').value, notes = $('mNotes').value.trim();
+    if(!title) { toast('Please enter the book / item title.', false); return; }
+    if(n.qty <= 0) { toast('Quantity must be at least 1.', false); return; }
+    if(n.price <= 0) { toast('Please enter the unit price.', false); return; }
+    if(hasExt && !date) { toast('Please select a date.', false); return; }
+    const postAcc = hasExt && $('mPostAcc').checked;
+    const invoiceNo = hasExt ? normalizeInvoiceNumber($('mInvoiceNo').value, voucherPrefix(kind, postAcc)) : '';
+    if(hasExt && !invoiceNo) { toast('Invoice number must use the correct prefix for this transaction: ' + voucherPrefix(kind, postAcc), false); return; }
+    if(hasExt && txs.some(t => t.voucher.toUpperCase() === invoiceNo.toUpperCase() && t.uid !== editingTxUid)) {
+        toast('This invoice / voucher number is already in use. Enter a unique number.', false);
+        return;
+    }
+
+    if(hasItemCols && kind === 'purchase' && !existingTx && !(parseFloat($('mSalePrice').value) > 0)) { toast('Please enter the fixed sale price for this item.', false); return; }
+    let it = items[norm(title)];
+    const doSave = async () => {
+        let wallet = $('mWallet').value;
+        let voucher = hasExt ? invoiceNo : '';
+        let payload = { type: meta.stored, party_name: party, book_title: title, qty: n.qty, unit_price: n.price, net_amount: Math.round(n.net * 100) / 100 };
+        if(hasExt) Object.assign(payload, { date, voucher_no: voucher, payment_mode: existingTx ? (editingAccountRow ? wallet : existingTx.mode || null) : (postAcc ? wallet : null), notes: notes || null });
+ if(hasItemCols && kind === 'purchase') Object.assign(payload, { item_class: $('mItemClass').value || 'All', category: $('mItemCat').value || null, sale_price: parseFloat($('mSalePrice').value) || null });
+
+        if(existingTx) {
+            await updateExistingTx(existingTx, payload, n, meta, wallet);
+            return;
+        }
+        showLoading('Saving...');
+        try {
+            let c = getSupabaseConfig();
+            let res = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(mapRow(payload)) });
+            if(!res.ok) { hideLoading(); toast(errMsg('Could not save: ' + await res.text()), false); return; }
+
+            let accNote = '';
+            if(postAcc) {
+                let desc = `${meta.label}: ${title} x${n.qty}${party ? ' - ' + party : ''}`;
+                let acc = meta.money === 'in'
+                    ? { voucher_id: voucher, from_account: meta.head, to_account: wallet, description: desc, amount_in: payload.net_amount, amount_out: 0, date, remarks: notes }
+                    : { voucher_id: voucher, from_account: wallet, to_account: meta.head, description: desc, amount_in: 0, amount_out: payload.net_amount, date, remarks: notes };
+                let r2 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(acc) });
+                accNote = r2.ok ? ' and recorded in Accounts' : ' — but it could NOT be recorded in Accounts (add it manually)';
+                if(!r2.ok) console.error(await r2.text());
+            }
+            { const pn = Math.min(parseFloat($('mPaidNow').value) || 0, payload.net_amount);
+ if(!postAcc && hasExt && pn > 0 && party && (kind === 'sale' || kind === 'purchase')) { const ok = await postDuesEntry(kind === 'sale' ? 'recv' : 'pay', party, pn, date, wallet, 'Paid at ' + (kind === 'sale' ? 'sale' : 'purchase'), [{ voucher, rem: payload.net_amount }]); accNote = ok ? ` (PKR ${fmt(pn)} paid now, the rest is pending)` : ' - but the paid-now amount could NOT be recorded in Accounts'; } }
+            lastSaved = { kind, party, date };
+            toast(`${meta.label} saved${accNote}.`, !accNote.includes('NOT'));
+            await initBooks();
+            if(addAnother) {
+                openTx(kind); $('mParty').value = party; $('mDate').value = date || todayStr(); $('mTitleIn').focus();
+            } else closeTx();
+        } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+    };
+
+    const availableStock = it ? it.stock + (existingTx && existingTx.kind === 'sale' && existingTx.key === it.key ? existingTx.qty : 0) : 0;
+    if((kind === 'sale' || kind === 'purchase_return') && it && n.qty > availableStock) {
+        confirmBox(`Only ${fmt(availableStock)} unit(s) of "${it.title}" are available after accounting for this transaction, but you are entering ${fmt(n.qty)}.\n\nContinue anyway?`, 'Continue', doSave);
+    } else await doSave();
+}
+async function updateExistingTx(transaction, payload, totals, meta, wallet) {
+    showLoading('Updating transaction...');
+    let accountUpdated = false;
+    const c = getSupabaseConfig(), headers = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=representation" });
+    const oldAccount = editingAccountRow;
+    const newAccount = oldAccount ? (meta.money === 'in'
+        ? { voucher_id: payload.voucher_no, from_account: meta.head, to_account: wallet, description: `${meta.label}: ${payload.book_title} x${totals.qty}${payload.party_name ? ' - ' + payload.party_name : ''}`, amount_in: payload.net_amount, amount_out: 0, date: payload.date, remarks: payload.notes }
+        : { voucher_id: payload.voucher_no, from_account: wallet, to_account: meta.head, description: `${meta.label}: ${payload.book_title} x${totals.qty}${payload.party_name ? ' - ' + payload.party_name : ''}`, amount_in: 0, amount_out: payload.net_amount, date: payload.date, remarks: payload.notes }) : null;
+    try {
+        if(oldAccount) {
+            const accountResponse = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(transaction.voucher)}`, {
+                method: 'PATCH', headers, body: JSON.stringify(newAccount)
+            });
+            if(!accountResponse.ok) throw new Error('Could not update linked Accounts entry: ' + await accountResponse.text());
+            const accountRows = await accountResponse.json();
+            if(!Array.isArray(accountRows) || accountRows.length !== 1) throw new Error('Linked Accounts entry was not updated exactly once. Check Accounts permissions and voucher uniqueness.');
+            accountUpdated = true;
+        }
+        const bookResponse = await fetch(`${c.url}/rest/v1/books?id=eq.${encodeURIComponent(transaction.id)}`, {
+            method: 'PATCH', headers, body: JSON.stringify(mapRow(payload))
+        });
+        if(!bookResponse.ok) throw new Error('Could not update book transaction: ' + await bookResponse.text());
+        const bookRows = await bookResponse.json();
+        if(!Array.isArray(bookRows) || bookRows.length !== 1) throw new Error('Book transaction was not updated. Check Books Edit permission.');
+        toast(`Book ${meta.label.toLowerCase()} updated${oldAccount ? ' and linked Accounts entry updated' : ''}.`);
+        closeTx();
+        await initBooks();
+    } catch(error) {
+        let message = error.message || 'Could not update the transaction.';
+        if(accountUpdated) {
+            const rollback = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(payload.voucher_no)}`, {
+                method: 'PATCH',
+                headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
+                body: JSON.stringify({
+                    voucher_id: transaction.voucher,
+                    from_account: oldAccount.from_account, to_account: oldAccount.to_account,
+                    description: oldAccount.description, amount_in: oldAccount.amount_in,
+                    amount_out: oldAccount.amount_out, date: oldAccount.date, remarks: oldAccount.remarks
+                })
+            });
+            if(!rollback.ok) message += ' The Accounts update could not be rolled back; reconcile this voucher in Accounts.';
+        }
+        toast(message, false);
+    } finally {
+        hideLoading();
+    }
+}
+
+// ====================================================================================
+//  DELETE + PRINT SLIP
+// ====================================================================================
+// ====================================================================================
+// STUDENT SALE (class-wise course) + IMPORT ITEMS
+// ====================================================================================
+let ssStudents = null, ssStudent = null, ssLines = [], impRows = [];
+const ssLabel = s => `${s.student_name} (${s.admis_no}) - ${s.class}`;
+function fillItemSelects() {
+    const L = _settingLists || {};
+    const cls = $('mItemClass');
+    if(cls) {
+        const current = cls.value;
+        const classes = [...new Set(['All', ...(L['Class'] || []), ...Object.values(items).map(item => item.cls), current].map(value => String(value || '').trim()).filter(Boolean))];
+        cls.innerHTML = classes.map(value => `<option value="${esc(value)}">${value === 'All' ? 'All classes' : esc(value)}</option>`).join('');
+        if(classes.includes(current)) cls.value = current;
+    }
+    const cat = $('mItemCat');
+    if(cat) {
+        const current = cat.value;
+        const categories = [...new Set([...(L['Book Category'] || []), ...Object.values(items).map(item => item.cat), current].map(value => String(value || '').trim()).filter(Boolean))];
+        cat.innerHTML = '<option value="">Select category</option>' + categories.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join('');
+        if(categories.includes(current)) cat.value = current;
+    }
+}
+async function openStudentSale() {
+    if(!colsOk()) return;
+    if(!hasExt || !hasItemCols) { toast('Run the SQL shown in the yellow box first, then refresh.', false); return; }
+    showLoading('Loading students...');
+    if(!ssStudents) { try { const a = await (await ERP.db.request('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; } }
+    hideLoading();
+    ssStudent = null; ssLines = [];
+    $('ssStudent').value = ''; $('ssDate').value = todayStr(); $('ssDiscType').value = 'percentage'; $('ssDiscVal').value = 0; $('ssNotes').value = ''; $('ssWallet').value = 'cash'; $('ssPost').checked = true; $('ssPaidNow').value = '';
+    $('ssStudentList').innerHTML = ssStudents.filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).map(s => `<option value="${esc(ssLabel(s))}">`).join('');
+    $('ssOtherList').innerHTML = Object.values(items).map(i => `<option value="${esc(i.title)}">`).join('');
+    renderSS(); $('studentSaleModal').classList.remove('hidden');
+}
+function closeSS() { $('studentSaleModal').classList.add('hidden'); }
+function ssPick() {
+    ssStudent = (ssStudents || []).find(s => ssLabel(s) === $('ssStudent').value.trim()) || null;
+    if(!ssStudent) { ssLines = []; renderSS(); return; }
+    const cl = norm(ssStudent.class);
+    ssLines = Object.values(items).filter(i => i.cls && (norm(i.cls) === cl || norm(i.cls) === 'all'))
+        .sort((a, b) => (a.cat || '').localeCompare(b.cat || '') || a.title.localeCompare(b.title))
+        .map(i => ({ key: i.key, title: i.title, cat: i.cat || '', price: i.sp || i.lastSale || 0, qty: 1, on: i.stock > 0, stock: i.stock }));
+    renderSS();
+}
+function ssAddOther() {
+    const it = items[norm($('ssOther').value)];
+    if(!it) { toast('Pick an item from the list.', false); return; }
+    if(ssLines.some(l => l.key === it.key)) { toast('This item is already in the list.', false); return; }
+    ssLines.push({ key: it.key, title: it.title, cat: it.cat || '', price: it.sp || it.lastSale || 0, qty: 1, on: true, stock: it.stock });
+    $('ssOther').value = ''; renderSS();
+}
+function ssQty(i, d) { ssLines[i].qty = Math.max(1, (parseInt(ssLines[i].qty) || 1) + d); renderSS(); }
+function ssField(i, f, v) { if(f === 'on') ssLines[i].on = v; else if(f === 'qty') ssLines[i].qty = Math.max(1, parseInt(v) || 1); else ssLines[i].price = parseFloat(v) || 0; renderSS(); }
+function ssTotals() {
+    const on = ssLines.filter(l => l.on && l.qty > 0 && l.price > 0);
+    const gross = on.reduce((s, l) => s + l.qty * l.price, 0), dv = parseFloat($('ssDiscVal').value) || 0;
+    const disc = $('ssDiscType').value === 'percentage' ? gross * Math.min(dv, 100) / 100 : Math.min(dv, gross);
+    return { on, gross, disc: Math.round(disc * 100) / 100, net: Math.max(0, gross - disc) };
+}
+function renderSS() {
+    $('ssInfo').innerHTML = ssStudent ? `Class: <b>${esc(ssStudent.class)}</b> · ${ssLines.length} course item(s) found` + (ssLines.length ? '' : ' <span class="text-amber-600">No item is linked to this class yet. Add one below or import items.</span>') : '<span class="text-slate-400">Select a student to load the class course.</span>';
+    $('ssRows').innerHTML = ssLines.map((l, i) => `<div class="flex flex-wrap items-center gap-2 border rounded-xl p-2 ${l.on ? 'bg-white' : 'bg-slate-50 opacity-60'}">
+        <input type="checkbox" ${l.on ? 'checked' : ''} onchange="ssField(${i},'on',this.checked)" class="w-4 h-4">
+        <div class="flex-1 min-w-[140px]"><div class="text-sm font-semibold">${esc(l.title)}</div><div class="text-[11px] text-slate-500">${esc(l.cat)} · stock <b class="${l.stock <= 0 ? 'text-rose-600' : ''}">${fmt(l.stock)}</b></div></div>
+        <input type="number" min="0" value="${l.price}" onchange="ssField(${i},'price',this.value)" class="w-20 border rounded-lg p-1.5 text-sm text-right" title="Unit price">
+        <div class="flex items-center"><button type="button" onclick="ssQty(${i},-1)" class="w-7 h-7 rounded-lg bg-slate-100 font-bold">−</button><input type="number" min="1" value="${l.qty}" onchange="ssField(${i},'qty',this.value)" class="w-12 text-center border rounded-lg p-1 mx-1 text-sm"><button type="button" onclick="ssQty(${i},1)" class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 font-bold">+</button></div>
+        <div class="w-20 text-right text-sm font-bold">${fmt(l.qty * l.price)}</div></div>`).join('');
+    const T = ssTotals();
+    $('ssGross').innerText = fmt(T.gross); $('ssDisc').innerText = fmt(T.disc); $('ssNet').innerText = 'PKR ' + fmt(T.net);
+}
+async function saveStudentSale() {
+    const T = ssTotals(), date = $('ssDate').value, notes = $('ssNotes').value.trim(), post = $('ssPost').checked, wallet = $('ssWallet').value;
+    if(!ssStudent) { toast('Please select a student.', false); return; }
+    if(!T.on.length) { toast('Tick at least one item with a price.', false); return; }
+    if(!date) { toast('Please select a date.', false); return; }
+    const short = T.on.filter(l => l.qty > l.stock);
+    const go = async () => {
+        const bill = 'SB' + Math.floor(100000 + Math.random() * 900000), used = new Set(txs.map(t => t.voucher));
+        const newV = () => { let v; do { v = (post ? 'RV-' : 'BK-') + Math.floor(100000 + Math.random() * 900000); } while(used.has(v)); used.add(v); return v; };
+        let left = T.disc; const who = `${ssStudent.student_name} (${ssStudent.admis_no})`, rows = [], acc = [];
+        T.on.forEach((l, k) => {
+            const g = l.qty * l.price, share = k === T.on.length - 1 ? left : Math.round(T.disc * g / T.gross * 100) / 100;
+            left = Math.round((left - share) * 100) / 100;
+            const net = Math.round((g - share) * 100) / 100, v = newV();
+            rows.push({ type: 'Sale', party_name: who, book_title: l.title, qty: l.qty, unit_price: l.price, net_amount: net, date, voucher_no: v, payment_mode: post ? wallet : null, notes: (notes ? notes + ' | ' : '') + 'Bill ' + bill });
+            if(post) acc.push({ voucher_id: v, from_account: 'Book Store Sale', to_account: wallet, description: `Sale: ${l.title} x${l.qty} - ${who}`, amount_in: net, amount_out: 0, date, remarks: notes });
+        });
+        showLoading('Saving sale...');
+        try {
+            const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
+            const r1 = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.map(mapRow)) });
+            if(!r1.ok) { hideLoading(); toast(errMsg('Could not save: ' + await r1.text()), false); return; }
+            let note = '';
+            if(acc.length) { const r2 = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: H, body: JSON.stringify(acc) }); note = r2.ok ? ' and recorded in Accounts' : ' - but it could NOT be recorded in Accounts (add it manually)'; }
+            { const pn = Math.min(parseFloat($('ssPaidNow').value) || 0, T.net); if(!post && pn > 0) { const ok = await postDuesEntry('recv', who, pn, date, wallet, 'Paid at sale ' + bill, rows.map(rw => ({ voucher: rw.voucher_no, rem: rw.net_amount }))); note = ok ? ` (PKR ${fmt(pn)} paid now, the rest is pending)` : ' - but the paid-now amount could NOT be recorded'; } }
+            toast(`Sale saved (${rows.length} items, PKR ${fmt(T.net)})${note}.`, !note.includes('NOT'));
+            closeSS(); await initBooks();
+        } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+    };
+    if(short.length) confirmBox('Not enough stock for: ' + short.map(l => `${l.title} (stock ${fmt(l.stock)}, entering ${l.qty})`).join(', ') + '.\n\nContinue anyway?', 'Continue', go); else go();
+}
+
+// ---- Import items (Excel / CSV): each row becomes a Purchase that creates / tops-up the item ----
+function clearImpFile() {
+    impRows = [];
+    $('impFile').value = '';
+    $('impPreview').innerHTML = '';
+    $('impGo').classList.add('hidden');
+}
+function openImport() {
+    if(!colsOk()) return;
+    if(!hasExt || !hasItemCols) { toast('Run the SQL shown in the yellow box first, then refresh.', false); return; }
+    impRows = []; $('impFile').value = ''; $('impPreview').innerHTML = ''; $('impGo').classList.add('hidden'); $('impSettle').value = 'payable';
+    const wallet = $('impWallet');
+    wallet.value = Array.from(wallet.options).some(option => option.value === 'cash') ? 'cash' : (wallet.options[0] ? wallet.options[0].value : '');
+    setImpSettleMode();
+    $('importModal').classList.remove('hidden');
+}
+function downloadTemplate() {
+    const rows = [['title', 'class', 'category', 'qty', 'purchase_price', 'sale_price', 'vendor', 'date', 'discount_percent'],
+        ['Math - Class Five', 'Five', 'Books', 50, 180, 250, 'ABC Traders', todayStr(), 0],
+        ['Notebook 200 pages', 'All', 'Notebooks', 100, 60, 90, 'ABC Traders', todayStr(), 5],
+        ['Study Planner', 'All', 'Study Planner', 40, 120, 200, 'XYZ Stationers', todayStr(), 0],
+        ['Lamination Paper', 'All', 'Lamination Paper', 500, 3, 5, 'XYZ Stationers', todayStr(), 0]];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\uFEFF' + rows.map(r => r.join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8;' }));
+    a.download = 'book_items_template.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+function impDate(v) {
+    const valid = (year, month, day) => {
+        const d = new Date(year, month - 1, day);
+        return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
+            ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+    };
+    if(v instanceof Date && !isNaN(v)) return valid(v.getFullYear(), v.getMonth() + 1, v.getDate());
+    if(typeof v === 'number' && Number.isFinite(v) && typeof XLSX !== 'undefined') {
+        const parsed = XLSX.SSF.parse_date_code(v);
+        return parsed ? valid(parsed.y, parsed.m, parsed.d) : '';
+    }
+    const t = String(v ?? '').trim(); let m;
+    if(!t) return '';
+    if(m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:T.*)?$/)) return valid(Number(m[1]), Number(m[2]), Number(m[3]));
+    if(m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/)) return valid(Number(m[3]), Number(m[2]), Number(m[1]));
+    if(/^\d+(?:\.\d+)?$/.test(t) && typeof XLSX !== 'undefined') {
+        const parsed = XLSX.SSF.parse_date_code(Number(t));
+        return parsed ? valid(parsed.y, parsed.m, parsed.d) : '';
+    }
+    return '';
+}
+function validateImpRows() {
+    const L = _settingLists || {}, classes = new Set((L['Class'] || []).map(norm)), cats = new Set((L['Book Category'] || []).map(norm));
+    impRows.forEach(o => {
+        o.err = [];
+        if(!o.title) o.err.push('title missing');
+        if(o.qty <= 0) o.err.push('qty');
+        if(o.buy <= 0) o.err.push('purchase_price');
+        if(o.sale <= 0) o.err.push('sale_price');
+        if(!o.date) o.err.push('invalid purchase date');
+        if(!o.vendor) o.err.push('vendor required');
+        if(o.cls && norm(o.cls) !== 'all' && !classes.has(norm(o.cls))) o.err.push('class not in Settings');
+        if(o.disc < 0 || o.disc > 100) o.err.push('discount must be 0–100%');
+        o.warn = o.cat && !cats.has(norm(o.cat)) ? 'category not in Settings' : '';
+        if(o.dateMissing) o.warn = [o.warn, 'purchase date missing; today used'].filter(Boolean).join('; ');
+        o.net = Math.round(o.qty * o.buy * (1 - Math.min(o.disc, 100) / 100) * 100) / 100;
+    });
+}
+function updateImpRow(index, field, value) {
+    const row = impRows[index];
+    if(!row) return;
+    if(field === 'qty' || field === 'buy' || field === 'sale' || field === 'disc') row[field] = parseFloat(value) || 0;
+    else if(field === 'date') {
+        row.date = value ? impDate(value) : todayStr();
+        row.dateMissing = !value;
+    } else row[field] = String(value || '').trim();
+    renderImpPreview();
+}
+function impEnterNext(event, input) {
+    if(event.key !== 'Enter' || event.isComposing || event.defaultPrevented) return;
+    event.preventDefault();
+    const index = Number(input.dataset.impIndex), field = input.dataset.impField;
+    const fields = ['date', 'vendor', 'title', 'cls', 'cat', 'qty', 'buy', 'sale', 'disc'];
+    const fieldIndex = fields.indexOf(field);
+    if(index < 0 || fieldIndex < 0) return;
+    updateImpRow(index, field, input.value);
+    const next = fieldIndex < fields.length - 1
+        ? $('impPreview').querySelector(`[data-imp-index="${index}"][data-imp-field="${fields[fieldIndex + 1]}"]`)
+        : $('impPreview').querySelector(`[data-imp-index="${index + 1}"][data-imp-field="${fields[0]}"]`);
+    if(next) next.focus();
+    else if(!$('impGo').classList.contains('hidden')) $('impGo').focus();
+}
+function setImpSettleMode() {
+    const payable = $('impSettle').value === 'payable';
+    $('impWalletWrap').classList.toggle('hidden', payable);
+    renderImpPreview();
+}
+function renderImpPreview() {
+    validateImpRows();
+    const ok = impRows.filter(o => !o.err.length);
+    if(!impRows.length) {
+        $('impPreview').innerHTML = '';
+        $('impGo').classList.add('hidden');
+        return;
+    }
+    const textInput = (i, field, value, type = 'text', extra = '') =>
+        `<input type="${type}" value="${esc(value)}" data-imp-index="${i}" data-imp-field="${field}" onchange="updateImpRow(${i},'${field}',this.value)" onkeydown="impEnterNext(event,this)" ${extra} class="w-full min-w-[90px] border rounded px-1.5 py-1 text-xs bg-white">`;
+    const selectInput = (i, field, value, values, placeholder = '') => {
+        const options = [...new Set([...values, value].map(item => String(item || '').trim()).filter(Boolean))];
+        return `<select data-imp-index="${i}" data-imp-field="${field}" onchange="updateImpRow(${i},'${field}',this.value)" onkeydown="impEnterNext(event,this)" class="w-full min-w-[90px] border rounded px-1.5 py-1 text-xs bg-white">${placeholder ? `<option value="">${esc(placeholder)}</option>` : ''}${options.map(option => `<option value="${esc(option)}">${esc(option)}</option>`).join('')}</select>`;
+    };
+    const L = _settingLists || {};
+    const classes = ['All', ...(L['Class'] || []), ...Object.values(items).map(item => item.cls)];
+    const categories = [...(L['Book Category'] || []), ...Object.values(items).map(item => item.cat)];
+    $('impPreview').innerHTML = `<div class="font-semibold mb-1">${ok.length} valid row(s), ${impRows.length - ok.length} with errors (skipped). Total purchase cost: PKR ${fmt(ok.reduce((s, o) => s + o.net, 0))}</div>
+        <p class="text-slate-500 mb-2">You can edit the date, vendor, item, class, category, quantity, prices, and discount here before importing.</p>
+        <div class="overflow-auto max-h-80 border rounded-lg"><table class="w-full text-left"><thead class="bg-slate-100 sticky top-0 z-10"><tr><th class="p-1.5">Row</th><th class="p-1.5">Purchase date</th><th class="p-1.5">Vendor</th><th class="p-1.5">Title</th><th class="p-1.5">Class</th><th class="p-1.5">Category</th><th class="p-1.5">Qty</th><th class="p-1.5">Buy</th><th class="p-1.5">Sale</th><th class="p-1.5">Discount %</th><th class="p-1.5">Net</th><th class="p-1.5">Result</th></tr></thead><tbody>${impRows.map((o, i) => `<tr class="border-t ${o.err.length ? 'bg-rose-50' : ''}">
+            <td class="p-1.5">${o.n}</td>
+            <td class="p-1.5">${textInput(i, 'date', o.date, 'date')}</td>
+            <td class="p-1.5">${textInput(i, 'vendor', o.vendor)}</td>
+            <td class="p-1.5">${textInput(i, 'title', o.title)}</td>
+            <td class="p-1.5">${selectInput(i, 'cls', o.cls, classes)}</td>
+            <td class="p-1.5">${selectInput(i, 'cat', o.cat, categories, 'Select category')}</td>
+            <td class="p-1.5">${textInput(i, 'qty', o.qty, 'number', 'min="0" step="any"')}</td>
+            <td class="p-1.5">${textInput(i, 'buy', o.buy, 'number', 'min="0" step="any"')}</td>
+            <td class="p-1.5">${textInput(i, 'sale', o.sale, 'number', 'min="0" step="any"')}</td>
+            <td class="p-1.5">${textInput(i, 'disc', o.disc, 'number', 'min="0" max="100" step="any"')}</td>
+            <td class="p-1.5 whitespace-nowrap">${fmt(o.net)}</td>
+            <td class="p-1.5 whitespace-nowrap ${o.err.length ? 'text-rose-600 font-semibold' : 'text-emerald-700'}">${o.err.length ? esc(o.err.join(', ')) : 'OK'}${o.warn ? ' <span class="text-amber-600">(' + esc(o.warn) + ')</span>' : ''}</td>
+        </tr>`).join('')}</tbody></table></div>
+        ${impRows.some(o => o.dateMissing) ? '<p class="mt-1 text-amber-700">* Purchase date was blank; today’s date is used unless you edit it above.</p>' : ''}`;
+    impRows.forEach((row, index) => {
+        ['cls', 'cat'].forEach(field => {
+            const select = $('impPreview').querySelector(`select[data-imp-index="${index}"][data-imp-field="${field}"]`);
+            if(select) select.value = row[field] || '';
+        });
+    });
+    $('impGo').classList.toggle('hidden', !ok.length);
+}
+async function readImp() {
+    const f = $('impFile').files[0]; if(!f) { toast('Choose a file first.', false); return; }
+    try {
+        await sbLoadXlsx();
+        const wb = /\.csv$/i.test(f.name) ? XLSX.read(await f.text(), { type: 'string', raw: true }) : XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        if(!sheet) { toast('The selected file has no worksheet to import.', false); return; }
+        const raw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
+        const normalizeHeader = x => String(x ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        const g = (r, aliases) => {
+            const names = Array.isArray(aliases) ? aliases : [aliases];
+            const key = Object.keys(r).find(x => names.map(normalizeHeader).includes(normalizeHeader(x)));
+            return key ? r[key] : '';
+        };
+        impRows = raw.map((r, i) => {
+            const rawDate = g(r, ['date', 'purchase_date', 'purchased_date', 'purchase_day', 'date_of_purchase', 'purchase_day_date', 'purchase_from_date']);
+            const parsedDate = impDate(rawDate), dateMissing = String(rawDate ?? '').trim() === '';
+            return {
+                n: i + 2,
+                title: String(g(r, 'title')).trim().replace(/\s+/g, ' '),
+                cls: String(g(r, 'class')).trim() || 'All',
+                cat: String(g(r, 'category')).trim(),
+                qty: parseFloat(String(g(r, 'qty')).replace(/,/g, '')) || 0,
+                buy: parseFloat(String(g(r, ['purchase_price', 'buy_price', 'purchase_rate', 'cost_price', 'unit_cost'])).replace(/,/g, '')) || 0,
+                sale: parseFloat(String(g(r, ['sale_price', 'selling_price', 'sale_rate', 'selling_rate'])).replace(/,/g, '')) || 0,
+                vendor: String(g(r, ['vendor', 'vender', 'supplier', 'vendor_name', 'supplier_name', 'party_name', 'purchase_from', 'purchased_from', 'dealer', 'trader', 'company'])).trim(),
+                date: parsedDate || (dateMissing ? todayStr() : ''),
+                dateMissing,
+                disc: parseFloat(g(r, ['discount_percent', 'discount_percentage', 'discount'])) || 0,
+                err: [], warn: '', net: 0
+            };
+        }).filter(o => o.title || o.qty || o.buy);
+        renderImpPreview();
+    } catch (e) { console.error(e); toast(e.message || 'Could not read this file.', false); }
+}
+function saveImp() {
+    validateImpRows();
+    const ok = impRows.filter(o => !o.err.length); if(!ok.length) return;
+    const settlement = $('impSettle').value, wallet = $('impWallet').value;
+    if(settlement !== 'payable' && !wallet) { toast('Choose the account used to pay for these purchases.', false); return; }
+    const total = ok.reduce((s, o) => s + o.net, 0);
+    const posting = settlement === 'payable' ? 'The amount will remain in each vendor’s Payable balance.' : `PKR ${fmt(total)} will be recorded as paid from ${WALLETS[wallet] ? WALLETS[wallet].label : wallet}, matched to the vendor bills.`;
+    confirmBox(`Import ${ok.length} item purchase(s)? Stock increases accordingly (importing the same file twice doubles the stock).\n\n${posting}`, 'Import', async () => {
+        const id = 'IMP' + Math.floor(100000 + Math.random() * 900000);
+        const usedVouchers = new Set(txs.map(t => t.voucher).filter(Boolean));
+        const nextBillVoucher = () => {
+            let voucher;
+            do { voucher = `BK-${Math.floor(100000 + Math.random() * 900000)}`; } while(usedVouchers.has(voucher));
+            usedVouchers.add(voucher);
+            return voucher;
+        };
+        const rows = ok.map((o, i) => ({
+            type: 'Purchase', party_name: o.vendor, book_title: o.title, qty: o.qty, unit_price: o.buy, net_amount: o.net, date: o.date,
+            voucher_no: nextBillVoucher(), payment_mode: null,
+            notes: `Batch ${id}`, item_class: o.cls, category: o.cat || null, sale_price: o.sale
+        }));
+        showLoading('Importing items...');
+        try {
+            const c = getSupabaseConfig(), H = sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" });
+            for(let i = 0; i < rows.length; i += 200) {
+                const r = await fetch(`${c.url}/rest/v1/books`, { method: 'POST', headers: H, body: JSON.stringify(rows.slice(i, i + 200).map(mapRow)) });
+                if(!r.ok) { hideLoading(); toast(errMsg('Import stopped: ' + await r.text()), false); return; }
+            }
+            let paymentFailures = 0, modeUpdateFailures = 0;
+            if(settlement !== 'payable') {
+                const groups = new Map();
+                ok.forEach((o, i) => {
+                    const key = partyKey(o.vendor);
+                    let group = groups.get(key);
+                    if(!group) { group = { vendor: o.vendor, total: 0, bills: [] }; groups.set(key, group); }
+                    group.total = Math.round((group.total + o.net) * 100) / 100;
+                    group.bills.push({ voucher: rows[i].voucher_no, rem: o.net, date: o.date, settlementDate: o.date });
+                });
+                const paidVouchers = [];
+                for(const group of groups.values()) {
+                    const posted = await postDuesEntry('pay', group.vendor, group.total, todayStr(), wallet, `Books purchase import ${id}`, group.bills);
+                    if(!posted) paymentFailures += group.bills.length;
+                    else group.bills.forEach(bill => paidVouchers.push(bill.voucher));
+                }
+                for(let i = 0; i < paidVouchers.length; i += 100) {
+                    const batch = paidVouchers.slice(i, i + 100);
+                    const filter = `in.(${batch.map(voucher => `"${voucher}"`).join(',')})`;
+                    const modeResponse = await fetch(`${c.url}/rest/v1/books?voucher_no=${encodeURIComponent(filter)}`, {
+                        method: 'PATCH', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=representation" }),
+                        body: JSON.stringify({ payment_mode: wallet })
+                    });
+                    if(!modeResponse.ok) {
+                        console.error('Payments were recorded, but the Books account labels could not be updated:', await modeResponse.text());
+                        modeUpdateFailures += batch.length;
+                    } else {
+                        const updated = await modeResponse.json();
+                        if(!Array.isArray(updated) || updated.length !== batch.length) modeUpdateFailures += batch.length;
+                    }
+                }
+            }
+            $('importModal').classList.add('hidden');
+            await initBooks();
+            if(paymentFailures || modeUpdateFailures) {
+                const message = `${rows.length} purchase(s) imported. ${paymentFailures ? `${paymentFailures} payment(s) could not be recorded; those vendor amounts remain payable. ` : ''}${modeUpdateFailures ? `${modeUpdateFailures} Books row(s) could not be updated with the selected account label; check Accounts before retrying.` : ''}`;
+                toast(message, false);
+            } else {
+                toast(settlement === 'payable'
+                    ? `${rows.length} purchase(s) imported to vendor Payable.`
+                    : `${rows.length} purchase(s) imported and recorded from ${WALLETS[wallet] ? WALLETS[wallet].label : wallet}.`);
+            }
+        } catch (e) { hideLoading(); console.error(e); toast('Could not complete the import. Check the latest Books and Accounts entries before retrying.', false); }
+    });
+}
+
+// ====================================================================================
+// NEW ITEM (+ button in Purchase): saves only the item (title, class, category, default sale price)
+// Items are stored in the settings table as rows with setting_key = 'Book Item' (JSON value).
+// ====================================================================================
+let masterItems = [];
+async function loadMasterItems() {
+    try {
+        const r = await ERP.db.request('settings', 'select=*&setting_key=eq.Book%20Item');
+        const a = r.ok ? await r.json() : [];
+        masterItems = (Array.isArray(a) ? a : []).map(x => { try { const o = JSON.parse(x.setting_value); return o && o.t ? { t: String(o.t).trim(), c: o.c || '', k: o.k || '', p: parseFloat(o.p) || 0, raw: x.setting_value } : null; } catch (e) { return null; } }).filter(Boolean);
+    } catch (e) { masterItems = []; }
+}
+function mergeMaster() {
+    masterItems.forEach(m => {
+        const key = norm(m.t); if(!key) return;
+        const it = items[key] || (items[key] = { key, title: m.t, p: 0, pr: 0, s: 0, sr: 0, pAmt: 0, prAmt: 0, lastSale: 0, lastBuy: 0, lastDate: '', stock: 0, avgCost: 0, value: 0, status: 'out' });
+        if(!it.cls && m.c) it.cls = m.c;
+        if(!it.cat && m.k) it.cat = m.k;
+        if(!it.sp && m.p) it.sp = m.p;
+    });
+}
+function openNewItem() {
+    fillItemSelects();
+    $('niClass').innerHTML = $('mItemClass').innerHTML; $('niCat').innerHTML = $('mItemCat').innerHTML;
+    $('niTitle').value = $('mTitleIn').value.trim(); $('niPrice').value = '';
+    renderMasterList();
+    $('newItemModal').classList.remove('hidden');
+    setTimeout(() => $('niTitle').focus(), 50);
+}
+function closeNewItem() { $('newItemModal').classList.add('hidden'); }
+function renderMasterList() {
+    $('niList').innerHTML = masterItems.length ? masterItems.slice().sort((a, b) => a.t.localeCompare(b.t)).map((m, i) => `<div class="flex items-center justify-between gap-2 py-1 border-b last:border-0"><span class="truncate"><b>${esc(m.t)}</b> <span class="text-slate-500">${esc([m.c, m.k, m.p ? 'Sale ' + fmt(m.p) : ''].filter(Boolean).join(' · '))}</span></span><button type="button" onclick="deleteMasterItem(${i})" class="text-rose-500 hover:text-rose-700 px-1" title="Delete item">✕</button></div>`).join('') : '<p class="text-slate-400">No items saved from here yet.</p>';
+}
+async function saveNewItem() {
+    const t = $('niTitle').value.trim().replace(/\s+/g, ' '), c = $('niClass').value || 'All', k = $('niCat').value || '', p = parseFloat($('niPrice').value) || 0;
+    if(!t) { toast('Please enter the item title.', false); return; }
+    if(items[norm(t)]) { toast('This item already exists in the list.', false); return; }
+    const raw = JSON.stringify({ t, c, k, p });
+    showLoading('Saving item...');
+    try {
+        const cfg = getSupabaseConfig();
+        const r = await fetch(`${cfg.url}/rest/v1/settings`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify({ setting_key: 'Book Item', setting_value: raw }) });
+        hideLoading();
+        if(!r.ok) { toast('Could not save the item: ' + await r.text(), false); return; }
+        masterItems.push({ t, c, k, p, raw });
+        buildItems(); fillDatalists(); renderAll();
+        closeNewItem();
+        $('mTitleIn').value = t; onTitleInput();
+        toast(`Item "${t}" added. Enter qty and purchase price, then save the purchase.`);
+    } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+}
+function deleteMasterItem(i) {
+    const m = masterItems.slice().sort((a, b) => a.t.localeCompare(b.t))[i]; if(!m) return;
+    const used = txs.some(x => x.key === norm(m.t));
+    confirmBox(`Delete the item "${m.t}" from the list?` + (used ? '\n\nIt already has transactions, so it will stay in the inventory.' : ''), 'Delete', async () => {
+        showLoading('Deleting...');
+        try {
+            const cfg = getSupabaseConfig();
+            const r = await fetch(`${cfg.url}/rest/v1/settings?setting_key=eq.Book%20Item&setting_value=eq.${encodeURIComponent(m.raw)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
+            hideLoading();
+            if(!r.ok) { toast('Could not delete: ' + await r.text(), false); return; }
+            masterItems = masterItems.filter(x => x.raw !== m.raw);
+            buildItems(); fillDatalists(); renderAll(); renderMasterList();
+        } catch (e) { hideLoading(); toast('Could not connect to the database.', false); }
+    });
+}
+
+// ====================================================================================
+// PENDING AMOUNTS (to receive from students / to pay to vendors), FIFO, promise dates
+// ====================================================================================
+let accRows = [], bookPromises = {}, bookDues = [], bookDuesMap = {};
+let statementViewMode = 'date';
+async function loadDuesData() {
+    try { const r = await ERP.db.request('accounts', 'select=voucher_id,from_account,to_account,description,remarks,amount_in,amount_out,date'); const a = r.ok ? await r.json() : []; accRows = Array.isArray(a) ? a : []; } catch (e) { accRows = []; }
+    try { const r = await ERP.db.request('settings', 'select=*&setting_key=eq.Book%20Promise'); const a = r.ok ? await r.json() : []; bookPromises = parsePromises(Array.isArray(a) ? a : []); } catch (e) { bookPromises = {}; }
+}
+async function ensureStudents() {
+    if(ssStudents) return;
+    try { const a = await (await ERP.db.request('students', 'select=admis_no,student_name,class,status')).json(); ssStudents = Array.isArray(a) ? a : []; } catch (e) { ssStudents = []; }
+}
+function recomputeDues() {
+    bookDues = computeDues(txs, accRows);   // same engine as Accounts → Receivable / Payable
+    bookDuesMap = {}; bookDues.forEach(p => { bookDuesMap[p.key] = p; });
+}
+async function postDuesEntry(kind, partyName, amt, date, wallet, notes, bills) {
+    // Settlement rows carry the voucher number of the bill they clear (BK-123456-xxxxxxx), oldest bill first
+    if(!bills) { const d = bookDuesMap[partyKey(partyName)]; bills = d ? (kind === 'recv' ? d.recvE : d.payE).filter(e => e.rem > 0.005) : []; }
+    bills = bills.slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+    let left = amt; const stamp = String(Date.now()).slice(-7), rows = [];
+    bills.forEach((bl, i) => {
+        if(left <= 0.004) return;
+        const a = Math.round(Math.min(left, bl.rem) * 100) / 100; left = Math.round((left - a) * 100) / 100;
+        const vid = `${bl.voucher}-${stamp}${i}`, rem = `Against ${bl.voucher}` + (notes ? ' | ' + notes : '');
+        rows.push(kind === 'recv'
+            ? { voucher_id: vid, from_account: 'Accounts Receivable', to_account: wallet, description: partyName, amount_in: a, amount_out: 0, date: bl.settlementDate || date, remarks: rem }
+            : { voucher_id: vid, from_account: wallet, to_account: 'Accounts Payable', description: partyName, amount_in: 0, amount_out: a, date: bl.settlementDate || date, remarks: rem });
+    });
+    if(!rows.length) return false;
+    try {
+        const c = getSupabaseConfig();
+        const r = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(rows) });
+        if(!r.ok) { console.error(await r.text()); return false; }
+        rows.forEach(x => accRows.push(x)); return true;
+    } catch (e) { console.error(e); return false; }
+}
+function openSettle(kind, key) {
+    const p = bookDuesMap[key]; if(!p) return;
+    const side = kind === 'recv' ? p.recv : p.pay;
+    $('sdKind').value = kind; $('sdKey').value = key;
+    $('sdTitle').innerText = kind === 'recv' ? '💵 Receive from student / customer' : '💸 Pay to vendor';
+    $('sdParty').value = p.name; $('sdPending').value = 'PKR ' + fmt(side.pending);
+    $('sdAmount').value = side.pending > 0 ? side.pending : ''; $('sdDate').value = todayStr(); $('sdNotes').value = ''; $('sdWallet').value = 'cash';
+    $('settleModal').classList.remove('hidden');
+}
+async function saveSettle() {
+    const kind = $('sdKind').value, p = bookDuesMap[$('sdKey').value]; if(!p) return;
+    const amt = parseFloat($('sdAmount').value) || 0, date = $('sdDate').value, side = kind === 'recv' ? p.recv : p.pay;
+    if(amt <= 0) { toast('Please enter an amount greater than 0.', false); return; }
+    if(!date) { toast('Please select a date.', false); return; }
+    if(amt > side.pending + 0.005) { toast(`The amount is more than the pending PKR ${fmt(side.pending)}.`, false); return; }
+    showLoading('Saving...');
+    const ok = await postDuesEntry(kind, p.name, amt, date, $('sdWallet').value, $('sdNotes').value.trim());
+    if(ok) await loadDuesData();
+    hideLoading();
+    if(!ok) { toast('Could not save the entry in Accounts.', false); return; }
+    $('settleModal').classList.add('hidden'); renderAll();
+    toast(`${kind === 'recv' ? 'Received' : 'Paid'} PKR ${fmt(amt)} against the oldest pending bills and recorded in Accounts.`);
+}
+function setStatementView(mode) {
+    statementViewMode = mode === 'bill' ? 'bill' : 'date';
+    const key = $('stmtPartyKey').value;
+    if(key) renderStatement(key);
+}
+function renderStatement(key) {
+    const p = bookDuesMap[key]; if(!p) return;
+    const pr = bookPromises[key];
+    const money = value => fmt(Math.round((Number(value) || 0) * 100) / 100);
+    const invoiceByVoucher = new Map(txs.filter(t => t.invoiceNo && t.voucher).map(t => [t.voucher.toUpperCase(), t.invoiceNo]));
+    const section = (title, bills, settlements, side, isPayable, color) => {
+        if(!bills.length && !settlements.length) return '';
+        const events = [
+            ...bills.map(e => ({ date: e.date || '', voucher: e.voucher || '', label: isPayable ? 'Purchase bill' : 'Sales bill', inAmount: isPayable ? 0 : e.amt, outAmount: isPayable ? e.amt : 0 })),
+            ...settlements.map(e => ({ date: e.date || '', voucher: e.voucher || '', label: e.label || (isPayable ? 'Payment / adjustment' : 'Receipt / adjustment'), inAmount: isPayable ? e.amt : 0, outAmount: isPayable ? 0 : e.amt, bill: e.bill || '' }))
+        ].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.inAmount === b.inAmount ? 0 : (a.inAmount ? -1 : 1)) || a.voucher.localeCompare(b.voucher));
+        let running = 0;
+        const dateGroups = new Map();
+        events.forEach(event => {
+            const keyDate = event.date || '';
+            const group = dateGroups.get(keyDate) || { date: keyDate, inAmount: 0, outAmount: 0, descriptions: [], vouchers: [] };
+            group.inAmount += event.inAmount;
+            group.outAmount += event.outAmount;
+            group.descriptions.push(event.label);
+            if(event.voucher) group.vouchers.push(event.voucher);
+            dateGroups.set(keyDate, group);
+        });
+        const dateRows = [...dateGroups.values()].sort((a, b) => a.date.localeCompare(b.date)).map(row => {
+            running += isPayable ? row.outAmount - row.inAmount : row.inAmount - row.outAmount;
+            return `<tr class="border-b"><td class="p-2 whitespace-nowrap">${row.date ? fmtDate(row.date) : 'Date not recorded'}</td><td class="p-2">${[...new Set(row.descriptions)].map(esc).join(' + ')} <span class="text-slate-400">(${row.vouchers.length} entries)</span></td><td class="p-2 text-right font-semibold text-emerald-700">${row.inAmount ? money(row.inAmount) : '-'}</td><td class="p-2 text-right font-semibold text-rose-600">${row.outAmount ? money(row.outAmount) : '-'}</td><td class="p-2 text-right font-bold">${money(running)}</td></tr>`;
+        }).join('');
+        const billGroups = new Map();
+        bills.forEach((bill, index) => {
+            const invoice = invoiceByVoucher.get(String(bill.voucher || '').toUpperCase());
+            const groupKey = invoice ? `invoice:${invoice.toLowerCase()}` : `voucher:${bill.voucher || index}`;
+            const group = billGroups.get(groupKey) || { date: bill.date || '', invoice: invoice || '', vouchers: [], count: 0, amount: 0, remaining: 0 };
+            if((bill.date || '') < group.date || !group.date) group.date = bill.date || '';
+            if(bill.voucher && !group.vouchers.includes(bill.voucher)) group.vouchers.push(bill.voucher);
+            group.count++;
+            group.amount += Number(bill.amt) || 0;
+            group.remaining += Number(bill.rem) || 0;
+            billGroups.set(groupKey, group);
+        });
+        let billBalance = 0;
+        const billRows = [...billGroups.values()].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.invoice || a.vouchers[0] || '').localeCompare(b.invoice || b.vouchers[0] || '')).map(bill => {
+            const cleared = Math.max(0, bill.amount - bill.remaining);
+            billBalance += bill.remaining;
+            return `<tr class="border-b"><td class="p-2 whitespace-nowrap">${bill.date ? fmtDate(bill.date) : 'Date not recorded'}</td><td class="p-2 font-mono">${esc(bill.invoice || bill.vouchers.join(', ') || '-')}</td><td class="p-2">${bill.count} item${bill.count === 1 ? '' : 's'} <span class="text-slate-400">· ${bill.vouchers.length} voucher${bill.vouchers.length === 1 ? '' : 's'}</span></td><td class="p-2 text-right">${money(bill.amount)}</td><td class="p-2 text-right text-emerald-600">${money(cleared)}</td><td class="p-2 text-right font-semibold ${bill.remaining > 0.005 ? 'text-rose-600' : 'text-slate-500'}">${money(bill.remaining)}</td><td class="p-2 text-right font-bold">${money(billBalance)}</td></tr>`;
+        }).join('');
+        const inTotal = events.reduce((sum, event) => sum + event.inAmount, 0);
+        const outTotal = events.reduce((sum, event) => sum + event.outAmount, 0);
+        const endingBalance = side.pending;
+        const modeTable = statementViewMode === 'date'
+            ? `<div class="overflow-x-auto"><table class="w-full text-left text-xs border-collapse"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Activity</th><th class="p-2 text-right">IN</th><th class="p-2 text-right">OUT</th><th class="p-2 text-right">Running balance</th></tr></thead><tbody>${dateRows || '<tr><td colspan="5" class="p-4 text-center text-slate-400">No ledger entries.</td></tr>'}</tbody><tfoot class="bg-slate-50 font-bold border-t"><tr><td class="p-2" colspan="2">Total</td><td class="p-2 text-right text-emerald-700">${money(inTotal)}</td><td class="p-2 text-right text-rose-600">${money(outTotal)}</td><td class="p-2 text-right">${money(endingBalance)}</td></tr></tfoot></table></div>`
+            : `<div class="overflow-x-auto"><table class="w-full text-left text-xs border-collapse"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Bill / Invoice</th><th class="p-2">Summary</th><th class="p-2 text-right">Bill total</th><th class="p-2 text-right">Cleared</th><th class="p-2 text-right">Remaining</th><th class="p-2 text-right">Running balance</th></tr></thead><tbody>${billRows || '<tr><td colspan="7" class="p-4 text-center text-slate-400">No bills found.</td></tr>'}</tbody><tfoot class="bg-slate-50 font-bold border-t"><tr><td class="p-2" colspan="3">Total</td><td class="p-2 text-right">${money(side.total)}</td><td class="p-2 text-right text-emerald-600">${money(side.settled)}</td><td class="p-2 text-right text-rose-600">${money(side.pending)}</td><td class="p-2 text-right">${money(endingBalance)}</td></tr></tfoot></table></div>`;
+        return `<section class="mt-4"><h4 class="font-bold text-sm mb-1 ${color}">${title}</h4><p class="text-[11px] text-slate-500 mb-2">${isPayable ? 'OUT increases payable; IN reduces payable.' : 'IN increases receivable; OUT reduces receivable.'}</p>${modeTable}<div class="mt-2 text-sm font-bold flex flex-wrap justify-between gap-2 bg-slate-50 rounded-xl p-2"><span>Total: PKR ${money(side.total)}</span><span>Cleared: PKR ${money(side.settled)}</span><span class="${side.pending > 0 ? 'text-rose-600' : 'text-emerald-600'}">${side.pending >= 0 ? 'Pending' : 'Advance'}: PKR ${money(Math.abs(side.pending))}</span></div></section>`;
+    };
+    $('stmtName').innerText = p.name;
+    $('stmtAcctLink').href = 'accounts.html?tab=ledgers&party=' + encodeURIComponent(p.name);
+    $('stmtPartyKey').value = key;
+    $('stmtViewDate').className = `px-3 py-1.5 rounded-lg text-xs font-semibold ${statementViewMode === 'date' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`;
+    $('stmtViewBill').className = `px-3 py-1.5 rounded-lg text-xs font-semibold ${statementViewMode === 'bill' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`;
+    $('stmtBody').innerHTML = section('Receivable ledger (sales on credit)', p.recvE, p.recvS, p.recv, false, 'text-emerald-700') + section('Payable ledger (purchases on credit)', p.payE, p.payS, p.pay, true, 'text-indigo-700')
+        + (pr ? `<p class="mt-3 text-sm">Promise to pay: <b>${fmtDate(pr.d)}</b>${pr.a ? ' (PKR ' + fmt(pr.a) + ')' : ''}${pr.note ? ' - ' + esc(pr.note) : ''}</p>` : '');
+}
+function openStatement(key) {
+    const p = bookDuesMap[key]; if(!p) return;
+    statementViewMode = 'date';
+    renderStatement(key);
+    $('stmtModal').classList.remove('hidden');
+}
+function printStatement() { document.body.classList.add('print-stmt'); window.print(); }
+window.addEventListener('afterprint', () => document.body.classList.remove('print-stmt'));
+function openPromise(key) {
+    const p = bookDuesMap[key]; if(!p) return; const pr = bookPromises[key];
+    $('prKey').value = key; $('prParty').innerText = p.name;
+    $('prDate').value = pr ? pr.d : ''; $('prAmt').value = pr && pr.a ? pr.a : ''; $('prNote').value = pr ? (pr.note || '') : '';
+    $('promiseModal').classList.remove('hidden');
+}
+async function savePromise(clear) {
+    const key = $('prKey').value, p = bookDuesMap[key], d = $('prDate').value;
+    if(!clear && !d) { toast('Please select the promise date.', false); return; }
+    const o = { k: key, n: p ? p.name : '', d: clear ? '' : d, a: parseFloat($('prAmt').value) || 0, note: $('prNote').value.trim(), ts: Date.now() };
+    showLoading('Saving...');
+    try {
+        const c = getSupabaseConfig();
+        const r = await fetch(`${c.url}/rest/v1/settings`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify({ setting_key: 'Book Promise', setting_value: JSON.stringify(o) }) });
+        hideLoading();
+        if(!r.ok) { toast('Could not save: ' + await r.text(), false); return; }
+        if(clear) delete bookPromises[key]; else bookPromises[key] = o;
+        $('promiseModal').classList.add('hidden'); renderAll(); toast(clear ? 'Promise removed.' : 'Promise date saved.');
+    } catch (e) { hideLoading(); toast('Could not connect to the database.', false); }
+}
+function renderParties() {
+    recomputeDues();
+    const q = norm($('pSearch').value), role = $('pRole').value, onlyP = $('pPending').checked, map = {}, today = todayStr();
+    periodTxs().forEach(t => {
+        if(!t.party) return;
+        const k = partyKey(t.party), p = map[k] || (map[k] = { key: k, name: t.party, customer: false, vendor: false, n: 0, qty: 0, amt: 0, last: '' });
+        p.n++;
+        if(t.kind === 'sale') { p.customer = true; p.qty += t.qty; p.amt += t.net; }
+        else if(t.kind === 'sale_return') { p.customer = true; p.qty -= t.qty; p.amt -= t.net; }
+        else if(t.kind === 'purchase') { p.vendor = true; p.qty += t.qty; p.amt += t.net; }
+        else if(t.kind === 'purchase_return') { p.vendor = true; p.qty -= t.qty; p.amt -= t.net; }
+        if(t.date > p.last) p.last = t.date;
+    });
+    bookDues.forEach(d => { if(!map[d.key]) map[d.key] = { key: d.key, name: d.name, customer: d.recvE.length > 0, vendor: d.payE.length > 0, n: 0, qty: 0, amt: 0, last: d.last }; });
+    let list = Object.values(map).map(p => { const d = bookDuesMap[p.key]; p.recv = d && d.recv.pending > 0.005 ? d.recv.pending : 0; p.pay = d && d.pay.pending > 0.005 ? d.pay.pending : 0; p.pr = bookPromises[p.key]; return p; })
+        .filter(p => (!q || norm(p.name).includes(q)) && (role === 'ALL' || (role === 'customer' ? p.customer : p.vendor)) && (!onlyP || p.recv || p.pay))
+        .sort((a, b) => (b.recv + b.pay) - (a.recv + a.pay) || b.amt - a.amt);
+    const roleTxt = p => p.customer && p.vendor ? 'Student + Vendor' : (p.vendor ? 'Vendor' : 'Student / Customer');
+    const prTxt = p => (p.recv || p.pay) && p.pr ? `<span class="${p.pr.d < today ? 'text-rose-600 font-bold' : 'text-slate-700'}">${fmtDate(p.pr.d)}${p.pr.d < today ? ' (overdue)' : ''}</span>` : '<span class="text-slate-300">-</span>';
+    const btns = p => `<div class="flex flex-wrap gap-1 no-print" data-k="${esc(p.key)}">${p.recv ? `<button onclick="openSettle('recv', this.parentNode.dataset.k)" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold">Receive</button>` : ''}${p.pay ? `<button onclick="openSettle('pay', this.parentNode.dataset.k)" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded font-semibold">Pay</button>` : ''}${(p.recv || p.pay) ? `<button onclick="openPromise(this.parentNode.dataset.k)" class="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded font-semibold">Promise</button>` : ''}${bookDuesMap[p.key] ? `<button onclick="openStatement(this.parentNode.dataset.k)" class="text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-semibold">Statement</button>` : ''}<button onclick="viewParty(this.parentNode.dataset.n)" data-x="" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded font-semibold">View</button></div>`;
+    $('pBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-semibold text-slate-800">${esc(p.name)}</td><td class="p-2.5 text-slate-600">${roleTxt(p)}</td><td class="p-2.5 text-right">PKR ${fmt(p.amt)}</td><td class="p-2.5 text-right font-bold ${p.recv ? 'text-emerald-700' : 'text-slate-300'}">${p.recv ? 'PKR ' + fmt(p.recv) : '-'}</td><td class="p-2.5 text-right font-bold ${p.pay ? 'text-rose-600' : 'text-slate-300'}">${p.pay ? 'PKR ' + fmt(p.pay) : '-'}</td><td class="p-2.5">${prTxt(p)}</td><td class="p-2.5 text-slate-500">${fmtDate(p.last)}</td><td class="p-2.5 no-print">${btns(p).replace('data-k="', 'data-n="' + esc(p.name) + '" data-k="')}</td></tr>`).join('')
+        : `<tr><td colspan="8" class="p-8 text-center text-slate-400">No students or vendors found.</td></tr>`;
+    $('pCards').innerHTML = list.map(p => `<div class="bg-white rounded-xl border p-3"><div class="font-semibold text-sm">${esc(p.name)}</div><div class="text-[11px] text-slate-500 mb-1">${roleTxt(p)} · last ${fmtDate(p.last)}</div><div class="flex flex-wrap gap-3 text-xs mb-2"><span>Net: <b>PKR ${fmt(p.amt)}</b></span>${p.recv ? `<span class="text-emerald-700">To receive: <b>PKR ${fmt(p.recv)}</b></span>` : ''}${p.pay ? `<span class="text-rose-600">To pay: <b>PKR ${fmt(p.pay)}</b></span>` : ''}</div>${(p.recv || p.pay) ? `<div class="text-xs mb-2">Promise: ${prTxt(p)}</div>` : ''}${btns(p).replace('data-k="', 'data-n="' + esc(p.name) + '" data-k="')}</div>`).join('');
+}
+
+function deleteTx(uid) {
+    let t = txByUid[uid]; if(!t) return;
+    if(!hasId || t.id === undefined) { toast('This record has no id column, so it cannot be deleted from here.', false); return; }
+    let linked = /^(RV|PV)-/i.test(t.voucher);
+    confirmBox(`Delete this ${KINDS[t.kind].label.toLowerCase()} (${t.title}, ${fmt(t.qty)} pcs, PKR ${fmt(t.net)})?${linked ? '\n\nThe linked entry in Accounts (' + t.voucher + ') will be deleted too.' : ''}`, 'Yes, delete', async () => {
+        showLoading('Deleting...');
+        try {
+            let c = getSupabaseConfig();
+            if(hasExt && /^BK-\d+$/i.test(t.voucher || '')) {
+                const settlementResponse = await fetch(`${c.url}/rest/v1/accounts?select=voucher_id&voucher_id=like.${encodeURIComponent(t.voucher + '-*')}`, { headers: sbHeaders() });
+                if(!settlementResponse.ok) throw new Error('Could not check vendor payments: ' + await settlementResponse.text());
+                const settlements = await settlementResponse.json();
+                if(Array.isArray(settlements) && settlements.length) {
+                    hideLoading();
+                    toast('This purchase has linked vendor payments. Reverse those Accounts entries before deleting it.', false);
+                    return;
+                }
+            }
+            let res = await fetch(`${c.url}/rest/v1/books?id=eq.${encodeURIComponent(t.id)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=representation" }) });
+            if(!res.ok) { hideLoading(); toast('Could not delete: ' + await res.text(), false); return; }
+            let gone = await res.json();
+            if(!Array.isArray(gone) || !gone.length) { hideLoading(); toast('Nothing was deleted (check permissions / RLS).', false); return; }
+            if(linked) await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(t.voucher)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=minimal" }) });
+            toast('Transaction deleted.');
+            await initBooks();
+        } catch (e) { hideLoading(); console.error(e); toast(e.message || 'Connection error.', false); }
+    });
+}
+
+function printSlip(uid) {
+    let t = txByUid[uid]; if(!t) return;
+    let who = (t.kind === 'purchase' || t.kind === 'purchase_return') ? 'Vendor' : 'Student / Customer';
+    let html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(KINDS[t.kind].label)} slip</title>
+    <style>body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:0;padding:24px}.box{border:2px solid #1e1b4b;border-radius:6px;padding:20px;max-width:560px;margin:0 auto}
+    h1{margin:0;font-size:20px;text-align:center;color:#1e1b4b}.sub{text-align:center;font-size:12px;color:#64748b;margin-bottom:10px}
+    .ttl{text-align:center;font-weight:bold;font-size:14px;border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;padding:6px 0;margin:10px 0 14px;letter-spacing:.5px}
+    table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 4px;vertical-align:top}td.l{width:34%;color:#475569}
+    .amt{font-size:19px;font-weight:bold;border:2px solid #1e1b4b;padding:5px 12px;display:inline-block}
+    .sig{display:flex;justify-content:space-between;margin-top:40px;font-size:12px}.sig div{border-top:1px solid #334155;padding-top:4px;width:40%;text-align:center}</style></head><body><div class="box">
+    <h1>Concept School</h1><div class="sub">Shibra Campus · Book Store</div><div class="ttl">${esc(KINDS[t.kind].label.toUpperCase())} SLIP</div>
+    <table>
+    <tr><td class="l">Slip No</td><td><b>${esc(t.voucher || (t.id !== undefined ? '#' + t.id : '-'))}</b></td></tr>
+    <tr><td class="l">Date</td><td>${fmtDate(t.date)}</td></tr>
+    <tr><td class="l">${who}</td><td>${esc(t.party || '-')}</td></tr>
+    <tr><td class="l">Item</td><td>${esc(t.title)}</td></tr>
+    <tr><td class="l">Quantity × Price</td><td>${fmt(t.qty)} × PKR ${fmt(t.unit)} = PKR ${fmt(t.gross)}</td></tr>
+    <tr><td class="l">Discount</td><td>PKR ${fmt(t.discount)}</td></tr>
+    <tr><td class="l">Net amount</td><td><span class="amt">PKR ${fmt(t.net)}</span></td></tr>
+    <tr><td class="l">In words</td><td>Rupees ${numToWords(t.net)} Only</td></tr>
+    </table>
+    <div class="sig"><div>Prepared by</div><div>${t.kind === 'sale' ? 'Received by' : 'Signature'}</div></div></div></body></html>`;
+    let f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(f);
+    f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+    setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 1500); }, 300);
+}
+
+// ====================================================================================
+//  SETTINGS
+// ====================================================================================
+
+
+
+document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeItemLedger(); closeTx(); } });

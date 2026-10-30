@@ -1,0 +1,1671 @@
+// ====================================================================================
+//  CONFIG
+// ====================================================================================
+const WALLETS = {
+    cash:   { label: 'Cash in Hand',      icon: '💵', cls: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+    bank:   { label: 'Bank',              icon: '🏦', cls: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
+    online: { label: 'Online / JazzCash', icon: '📱', cls: 'text-amber-700 bg-amber-50 border-amber-200' }
+};
+let INCOME_HEADS  = ['Admission / Registration Fee', 'Annual Fund', 'Book Store Sale', 'Uniform / Stationery Sale', 'Transport Fee', 'Donation', 'Other Income'];
+let EXPENSE_HEADS = ['Salaries', 'Utility Bills', 'Rent', 'Stationery', 'Repair & Maintenance', 'Fuel / Transport', 'Events / Functions', 'Books Purchase', 'Printing', 'Internet / Phone', 'Refreshments', 'Misc Expense'];
+const KIND_META = {
+    partner_withdrawal: { label: 'Partner withdrawal', prefix: 'PD-', cls: 'bg-violet-50 text-violet-700 border-violet-200', title: 'Partner Withdrawal' },
+    bill_raised: { label: 'Bill Raised', prefix: 'AR-', cls: 'bg-teal-50 text-teal-700 border-teal-200', title: 'Bill Raised (Accounts Receivable)' },
+    bill_received: { label: 'Bill Received', prefix: 'AP-', cls: 'bg-orange-50 text-orange-700 border-orange-200', title: 'Bill Received (Accounts Payable)' },
+    receipt:  { label: 'Receipt',  prefix: 'RV-', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', title: 'Receipt Voucher' },
+    payment:  { label: 'Payment',  prefix: 'PV-', cls: 'bg-rose-50 text-rose-700 border-rose-200',          title: 'Payment Voucher' },
+    transfer: { label: 'Transfer', prefix: 'TV-', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200',    title: 'Transfer Voucher' },
+    opening:  { label: 'Opening',  prefix: 'OB-', cls: 'bg-slate-100 text-slate-600 border-slate-200',      title: 'Opening Balance' }
+};
+const fixedAssetEntryMeta = entry => entry.isFixedAsset
+    ? { label: entry.kind === 'payment' ? 'Asset purchase' : 'Asset sale', cls: 'bg-sky-50 text-sky-700 border-sky-200' }
+    : (entry.isPartnerWithdrawal ? KIND_META.partner_withdrawal : KIND_META[entry.kind]);
+
+// ====================================================================================
+//  STATE + HELPERS
+// ====================================================================================
+let entries = [], entryById = {}, feesByVoucher = {};
+let fixedAssets = [], fixedAssetEvents = [], fixedAssetsLoaded = false;
+let BUSINESS_PARTNERS = [];
+let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
+let dbLimit = 300;
+let dbSelectedEntries = new Set();
+let editingId = null, entryKind = 'receipt';
+document.addEventListener('shibra:me-ready', updatePartnerWithdrawalAccess);
+document.addEventListener('shibra:me-ready', updateFixedAssetAccess);
+
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-US');
+const ymd = d => d.toLocaleDateString('en-CA');
+const todayStr = () => ymd(new Date());
+function parseYmd(s) { let [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); }
+function fmtDate(s) { return s ? parseYmd(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'; }
+function showLoading(t) { $('loadingText').innerText = t || 'Loading...'; $('loadingOverlay').classList.remove('hidden'); }
+function hideLoading() { $('loadingOverlay').classList.add('hidden'); }
+function toast(msg, ok) { UI.toast(msg, ok !== false); }
+function confirmBox(message, okLabel, onOk) { UI.confirm(message, { ok: okLabel || undefined }).then(v => { if (v) onOk(); }); }
+
+function sbHeaders(extra = {}) { let c = getSupabaseConfig(); return { "apikey": c.key, "Authorization": `Bearer ${c.key}`, ...extra }; }
+const titleCase = s => String(s || '').replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+const shortId = id => String(id || '').split('-').slice(0, 2).join('-');
+
+function numToWords(n) {
+    n = Math.floor(Math.abs(n));
+    if(n === 0) return 'Zero';
+    const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const two = x => x < 20 ? ones[x] : tens[Math.floor(x / 10)] + (x % 10 ? ' ' + ones[x % 10] : '');
+    const three = x => (x >= 100 ? ones[Math.floor(x / 100)] + ' Hundred' + (x % 100 ? ' ' : '') : '') + (x % 100 ? two(x % 100) : '');
+    let out = [];
+    let cr = Math.floor(n / 1e7); n %= 1e7;
+    let lk = Math.floor(n / 1e5); n %= 1e5;
+    let th = Math.floor(n / 1e3); n %= 1e3;
+    if(cr) out.push(three(cr) + ' Crore');
+    if(lk) out.push(two(lk) + ' Lakh');
+    if(th) out.push(two(th) + ' Thousand');
+    if(n) out.push(three(n));
+    return out.join(' ');
+}
+
+// ====================================================================================
+//  LOAD + NORMALIZE
+// ====================================================================================
+function normWallet(v) {
+    const raw = String(v || '').trim(), low = raw.toLowerCase();
+    for(const k of Object.keys(WALLETS)) { if(k.toLowerCase() === low || String(WALLETS[k].label).toLowerCase() === low) return k; }   // a payment account chosen from Settings
+    if(/bank/.test(low)) return 'bank';
+    if(/online|jazz|easy|wallet|raast/.test(low)) return 'online';
+    return 'cash';
+}
+let WALLET_CHOICES = ['cash', 'bank', 'online'];
+function setupWallets(items) {
+    const list = payAccountList(items); WALLET_CHOICES = list.map(o => o.value);
+    list.forEach(o => { if(WALLETS[o.value]) return; const m = o.label.match(/^(\S+)\s+(.*)$/) || [null, '🏦', o.label];
+        WALLETS[o.value] = { label: m[2], icon: m[1], cls: m[1] === '📱' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-indigo-700 bg-indigo-50 border-indigo-200' }; });
+    fillWalletSelects();
+}
+function fillWalletSelects() {
+    const opt = k => `<option value="${esc(k)}">${WALLETS[k].icon} ${esc(WALLETS[k].label)}</option>`;
+    const set = (id, keys, withAll) => { const el = $(id); if(!el) return; const cur = el.value; el.innerHTML = (withAll ? '<option value="ALL">All accounts</option>' : '') + keys.map(opt).join(''); if(cur && [...el.options].some(o => o.value === cur)) el.value = cur; };
+    set('gWallet', Object.keys(WALLETS), true); set('emWallet', WALLET_CHOICES); set('emWallet2', WALLET_CHOICES); set('pwWallet', WALLET_CHOICES);
+}
+function setWalletValue(id, key) {
+    const el = $(id); if(!key || !WALLETS[key]) return;
+    if(![...el.options].some(o => o.value === key)) { const o = document.createElement('option'); o.value = key; o.textContent = WALLETS[key].icon + ' ' + WALLETS[key].label; el.appendChild(o); }
+    el.value = key;
+}
+function updatePartnerWithdrawalAccess() {
+    const button = $('partnerWithdrawalButton');
+    if(button) button.classList.toggle('hidden', !ME || ME.role !== 'Admin');
+}
+function updateFixedAssetAccess() {
+    const allowed = can('accounts', 'a');
+    ['assetOpeningBtn', 'assetPurchaseBtn', 'assetSaleBtn', 'assetDepreciationBtn'].forEach(id => {
+        const button = $(id);
+        if(button) button.classList.toggle('hidden', !allowed);
+    });
+}
+
+function normalize(row, idx) {
+    const id = String(row.voucher_id || '').trim();
+    const inAmt = parseFloat(row.amount_in) || 0, outAmt = parseFloat(row.amount_out) || 0;
+    const from = String(row.from_account || '').trim(), to = String(row.to_account || '').trim();
+    const desc = String(row.description || '').trim(), rem = String(row.remarks || '').trim();
+    const up = id.toUpperCase();
+    let e = { id, idx, date: String(row.date || '').slice(0, 10), raw: row, notes: rem, legacy: false, isFee: false, isLiabilitySettlement: false, isPartnerWithdrawal: false, isFixedAsset: false, isSecurityRefund: securityRefundVouchers.has(id), manual: false, wallet2: null, fee: null };
+
+    const mb = up.match(/^(AR|AP)-\d+$/), ms = up.match(/^((?:AR|AP|BK)-\d+)-/);
+
+    if(mb) {
+
+        Object.assign(e, { kind: mb[1] === 'AR' ? 'bill_raised' : 'bill_received', wallet: 'cash', amount: inAmt || outAmt, head: mb[1] === 'AR' ? 'Accounts Receivable' : 'Accounts Payable', title: desc, manual: true });
+
+    } else if(ms) {
+
+        const isIn = inAmt > 0;
+
+        Object.assign(e, { kind: isIn ? 'receipt' : 'payment', wallet: normWallet(isIn ? to : from), amount: inAmt || outAmt, head: isIn ? 'Accounts Receivable' : 'Accounts Payable', title: desc, manual: true, billRef: ms[1] });
+
+    } else if(up.startsWith('TV-')) {
+        Object.assign(e, { kind: 'transfer', wallet: normWallet(from), wallet2: normWallet(to), amount: inAmt || outAmt, head: 'Transfer', title: desc, manual: true });
+    } else if(up.startsWith('OB-')) {
+        Object.assign(e, { kind: 'opening', wallet: normWallet(to), amount: inAmt || outAmt, head: 'Opening Balance', title: desc || 'Opening Balance', manual: true });
+    } else if(up.startsWith('FA-P-')) {
+        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt, head: 'Fixed asset purchase', title: desc, manual: true, isFixedAsset: true });
+    } else if(up.startsWith('FA-S-')) {
+        Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt, head: 'Fixed asset sale', title: desc, manual: true, isFixedAsset: true });
+    } else if(up.startsWith('PD-')) {
+        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt || inAmt, head: 'Partner Drawings',
+            title: desc, manual: true, isPartnerWithdrawal: true });
+    } else if(up.startsWith('PV-')) {
+        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt || inAmt, head: to || 'Misc Expense',
+            title: desc, manual: true, isLiabilitySettlement: partyKey(to) === partyKey('Staff Security Payable'),
+            isPartnerWithdrawal: partyKey(to) === partyKey('Partner Drawings') });
+    } else if(up.startsWith('RV-')) {
+        Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt || outAmt, head: from || 'Other Income', title: desc, manual: true });
+    } else if(/^(cash receipt|cash payment|salary payment)$/i.test(from)) {
+        // entries from the old accounts page (type in from_account, title in to_account, payment mode in remarks)
+        let isReceipt = inAmt > 0 && outAmt === 0;
+        Object.assign(e, {
+            kind: isReceipt ? 'receipt' : 'payment', wallet: normWallet(rem), amount: isReceipt ? inAmt : outAmt,
+            head: /salary/i.test(from) ? 'Salaries' : (isReceipt ? 'Other Income' : 'Misc Expense'),
+            title: desc || to, notes: '', legacy: true, manual: true
+        });
+    } else if(outAmt > 0 && inAmt === 0) {
+        Object.assign(e, { kind: 'payment', wallet: normWallet(from), amount: outAmt, head: to || desc || 'Misc Expense', title: desc,
+            isPartnerWithdrawal: partyKey(to) === partyKey('Partner Drawings') });
+    } else {
+        // fee payments (fees.html) and other receipts: from = head, to = wallet
+        Object.assign(e, { kind: 'receipt', wallet: normWallet(to), amount: inAmt, head: from || 'Receipt', title: desc });
+        if(/^V-\d+/i.test(id)) {
+            e.isFee = true;
+            let m = from.match(/^(.*?)\s*\((.*?)\)\s*-\s*(.*)$/);
+            e.fee = m ? { type: m[1], period: m[2], student: m[3] } : { type: from, period: '', student: '' };
+            let fv = feesByVoucher[shortId(id)];
+            if(fv) { e.fee.cls = fv.class || ''; e.fee.adm = fv.admis_no || ''; if(!e.fee.student) e.fee.student = fv.student_name || ''; }
+        }
+    }
+    e.ref = e.isFee ? shortId(id) : (e.billRef || id);
+    e.headLabel = e.isFee ? 'Fee – ' + titleCase((e.fee && e.fee.type) || 'Tuition Fee') : (e.isPartnerWithdrawal ? 'Partner withdrawal' : e.head);
+    return e;
+}
+
+async function initAccounts() {
+    _bd = null;
+    showLoading('Loading accounts...');
+    const settingsPromise = loadSettingLists();
+    try {
+        let [L, [aRes, fRes, securityRes]] = await Promise.all([
+            settingsPromise,
+            Promise.all([
+                ERP.db.request('accounts', 'select=*&order=date.asc,voucher_id.asc'),
+                ERP.db.request('fees', 'select=voucher_id,admis_no,student_name,class,period,type'),
+                ERP.db.request('staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes')
+            ])
+        ]);
+        INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; BUSINESS_PARTNERS = L['Business Partner'] || []; setupWallets(L['Payment Account']);
+        updatePartnerWithdrawalAccess();
+        updateFixedAssetAccess();
+        if(!INCOME_HEADS.some(h => partyKey(h) === partyKey(BOOK_SALE_HEAD))) INCOME_HEADS.push(BOOK_SALE_HEAD);
+        if(!INCOME_HEADS.some(h => partyKey(h) === partyKey('Accounts Receivable'))) INCOME_HEADS.push('Accounts Receivable');
+        if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey('Accounts Payable'))) EXPENSE_HEADS.push('Accounts Payable');
+        if(!EXPENSE_HEADS.some(h => partyKey(h) === partyKey(BOOK_BUY_HEAD))) EXPENSE_HEADS.push(BOOK_BUY_HEAD);
+        let acc = await aRes.json(), fees = await fRes.json();
+        staffSecurityReady = securityRes.ok;
+        staffSecurityLedger = staffSecurityReady ? await securityRes.json() : [];
+        if(!Array.isArray(staffSecurityLedger)) { staffSecurityLedger = []; staffSecurityReady = false; }
+        securityRefundVouchers = new Set(staffSecurityLedger.filter(entry => entry.entry_type === 'refund' && entry.voucher_id).map(entry => String(entry.voucher_id)));
+        feesByVoucher = {};
+        (Array.isArray(fees) ? fees : []).forEach(f => { feesByVoucher[String(f.voucher_id || '').trim()] = f; });
+        if(!Array.isArray(acc)) throw new Error('accounts failed to load');
+        const allE = acc.map(normalize); entryById = {}; allE.forEach(e => entryById[e.id] = e);
+        billEntries = allE.filter(e => e.kind === 'bill_raised' || e.kind === 'bill_received');
+        entries = allE.filter(e => e.kind !== 'bill_raised' && e.kind !== 'bill_received');
+        if(!$('gFrom').value) applyPreset();
+        renderAll();
+    } catch (e) {
+        console.error(e);
+        toast('Could not load data. Check your internet connection or API settings.', false);
+    }
+    hideLoading();
+}
+
+const ASSET_EVENT_LABELS = { opening: 'Opening asset', purchase: 'Purchase', sale: 'Sale', depreciation: 'Depreciation' };
+function assetBalances(asset) {
+    const rows = fixedAssetEvents.filter(event => String(event.asset_id) === String(asset.id));
+    const quantity = rows.reduce((sum, event) => sum + (Number(event.quantity_change) || 0), 0);
+    const cost = rows.reduce((sum, event) => sum + (Number(event.cost_change) || 0), 0);
+    const depreciation = rows.reduce((sum, event) => sum + (Number(event.accumulated_depreciation_change) || 0), 0);
+    return { quantity: Math.max(0, quantity), cost: Math.max(0, cost), depreciation: Math.max(0, depreciation), bookValue: Math.max(0, cost - depreciation) };
+}
+function renderFixedAssets() {
+    const totals = fixedAssets.reduce((sum, asset) => {
+        const row = assetBalances(asset);
+        sum.quantity += row.quantity; sum.cost += row.cost; sum.depreciation += row.depreciation; sum.bookValue += row.bookValue;
+        return sum;
+    }, { quantity: 0, cost: 0, depreciation: 0, bookValue: 0 });
+    $('assetCards').innerHTML = [
+        ['Items', fmt(fixedAssets.length)], ['Available units', fmt(totals.quantity)],
+        ['Original cost', 'PKR ' + fmt(totals.cost)], ['Net book value', 'PKR ' + fmt(totals.bookValue)]
+    ].map(([label, value]) => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"><div class="text-xs text-slate-500">${esc(label)}</div><div class="text-xl font-extrabold text-indigo-950 mt-1">${esc(value)}</div></div>`).join('');
+
+    const query = $('assetSearch').value.trim().toLowerCase();
+    const rows = fixedAssets.filter(asset => !query || [asset.asset_code, asset.name, asset.category, asset.description].join(' ').toLowerCase().includes(query));
+    $('assetCount').textContent = `${fmt(rows.length)} of ${fmt(fixedAssets.length)} assets`;
+    const canAddAssets = can('accounts', 'a');
+    $('assetBody').innerHTML = rows.length ? rows.map(asset => {
+        const balance = assetBalances(asset);
+        const buttons = balance.quantity > 0 && canAddAssets
+            ? `<button onclick="openAssetEvent('purchase',${Number(asset.id)})" class="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Buy more</button> <button onclick="openAssetEvent('sale',${Number(asset.id)})" class="px-2 py-1 rounded bg-indigo-50 text-indigo-700">Sell</button> ${balance.bookValue > 0 ? `<button onclick="openAssetEvent('depreciation',${Number(asset.id)})" class="px-2 py-1 rounded bg-amber-50 text-amber-700">Depreciate</button>` : ''}`
+            : balance.quantity > 0 ? 'Active' : 'Disposed';
+        return `<tr class="border-b"><td class="p-2.5 font-semibold">${esc(asset.name)}<small class="block text-slate-500">${esc(asset.asset_code || '')}${asset.description ? ' · ' + esc(asset.description) : ''}</small></td><td class="p-2.5">${esc(asset.category)}</td><td class="p-2.5 text-right">${fmt(balance.quantity)}</td><td class="p-2.5 text-right">PKR ${fmt(balance.cost)}</td><td class="p-2.5 text-right">PKR ${fmt(balance.depreciation)}</td><td class="p-2.5 text-right font-bold">PKR ${fmt(balance.bookValue)}</td><td class="p-2.5 whitespace-nowrap">${buttons}</td></tr>`;
+    }).join('') : '<tr><td colspan="7" class="p-8 text-center text-slate-400">No assets recorded yet. Add an opening asset or record a new purchase.</td></tr>';
+
+    const assetById = new Map(fixedAssets.map(asset => [String(asset.id), asset]));
+    $('assetEventCount').textContent = `${fmt(fixedAssetEvents.length)} transactions`;
+    $('assetEventBody').innerHTML = fixedAssetEvents.length ? fixedAssetEvents.map(event => {
+        const asset = assetById.get(String(event.asset_id));
+        const quantity = event.event_type === 'depreciation' ? '—' : fmt(Math.abs(Number(event.quantity_change) || 0));
+        const account = event.account_name ? `${event.account_name}${event.party ? ' · ' + event.party : ''}` : event.event_type === 'opening' ? 'Opening balance' : 'Non-cash';
+        return `<tr class="border-b"><td class="p-2.5 whitespace-nowrap">${fmtDate(event.event_date)}</td><td class="p-2.5">${esc(asset ? asset.name : 'Asset')}<small class="block text-slate-500">${esc(asset ? asset.asset_code || '' : '')}</small></td><td class="p-2.5">${esc(ASSET_EVENT_LABELS[event.event_type] || event.event_type)}</td><td class="p-2.5 text-right">${quantity}</td><td class="p-2.5 text-right">PKR ${fmt(event.amount)}</td><td class="p-2.5">${esc(account)}</td><td class="p-2.5">${esc(event.voucher_id || '—')}</td><td class="p-2.5">${esc(event.remarks || '—')}</td></tr>`;
+    }).join('') : '<tr><td colspan="8" class="p-8 text-center text-slate-400">No asset activity in the register.</td></tr>';
+}
+async function loadFixedAssets() {
+    $('assetSetupNotice').classList.add('hidden');
+    try {
+        const [assetResponse, eventResponse] = await Promise.all([
+            ERP.db.request('fixed_assets', 'select=*&order=asset_code.asc'),
+            ERP.db.request('fixed_asset_transactions', 'select=*&order=event_date.desc,id.desc')
+        ]);
+        if(!assetResponse.ok) throw new Error(await assetResponse.text());
+        if(!eventResponse.ok) throw new Error(await eventResponse.text());
+        const [assetRows, eventRows] = await Promise.all([assetResponse.json(), eventResponse.json()]);
+        if(!Array.isArray(assetRows) || !Array.isArray(eventRows)) throw new Error('The asset tables returned invalid data.');
+        fixedAssets = assetRows; fixedAssetEvents = eventRows; fixedAssetsLoaded = true;
+        renderFixedAssets();
+    } catch(error) {
+        fixedAssetsLoaded = false;
+        $('assetSetupError').textContent = error.message || 'Could not load asset data.';
+        $('assetSetupNotice').classList.remove('hidden');
+    }
+}
+function openAssetEvent(type, assetId = '') {
+    if(!can('accounts', 'a')) { toast('You do not have permission to add asset transactions.', false); return; }
+    const modal = $('assetEventModal');
+    modal.dataset.type = type;
+    $('assetEventError').textContent = '';
+    $('assetName').value = ''; $('assetCategory').value = ''; $('assetDescription').value = '';
+    $('assetDate').value = todayStr(); $('assetQuantity').value = type === 'depreciation' ? '' : '1';
+    $('assetAmount').value = ''; $('assetParty').value = ''; $('assetNotes').value = '';
+    const eligible = fixedAssets.filter(asset => assetBalances(asset).quantity > 0);
+    $('assetPick').innerHTML = (type === 'purchase' ? '<option value="new">New asset item</option>' : '')
+        + eligible.map(asset => `<option value="${esc(asset.id)}">${esc(asset.asset_code)} · ${esc(asset.name)} (${esc(asset.category)})</option>`).join('');
+    if(assetId && eligible.some(asset => String(asset.id) === String(assetId))) $('assetPick').value = String(assetId);
+    else if(type !== 'opening' && type !== 'purchase' && eligible.length) $('assetPick').value = String(eligible[0].id);
+    $('assetWallet').innerHTML = WALLET_CHOICES.map(wallet => `<option value="${esc(wallet)}">${esc(WALLETS[wallet].label)}</option>`).join('');
+    if(!eligible.length && (type === 'sale' || type === 'depreciation')) {
+        toast('Add an opening asset or purchase before recording this transaction.', false); return;
+    }
+    updateAssetEventFields();
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+    const isNew = type === 'opening' || (type === 'purchase' && $('assetPick').value === 'new');
+    setTimeout(() => $(isNew ? 'assetName' : type === 'depreciation' ? 'assetAmount' : 'assetQuantity').focus(), 20);
+}
+function updateAssetEventFields() {
+    const type = $('assetEventModal').dataset.type, isNew = type === 'opening' || (type === 'purchase' && $('assetPick').value === 'new');
+    const selected = fixedAssets.find(asset => String(asset.id) === $('assetPick').value);
+    const balance = selected ? assetBalances(selected) : null;
+    $('assetPickWrap').classList.toggle('hidden', type === 'opening');
+    $('assetNewFields').classList.toggle('hidden', !isNew);
+    $('assetQuantityWrap').classList.toggle('hidden', type === 'depreciation');
+    $('assetWalletWrap').classList.toggle('hidden', type === 'opening' || type === 'depreciation');
+    $('assetPartyWrap').classList.toggle('hidden', type === 'opening' || type === 'depreciation');
+    $('assetName').required = isNew; $('assetCategory').required = isNew;
+    $('assetDate').required = true; $('assetAmount').required = true;
+    $('assetQuantity').required = type !== 'depreciation';
+    $('assetWallet').required = type === 'purchase' || type === 'sale';
+    $('assetQuantity').max = type === 'sale' && balance ? balance.quantity : '';
+    $('assetAmount').max = type === 'depreciation' && balance ? balance.bookValue : '';
+    $('assetModalTitle').textContent = ({ opening: 'Register opening asset', purchase: 'Record asset purchase', sale: 'Record asset sale', depreciation: 'Record depreciation' })[type];
+    $('assetModalHint').textContent = type === 'opening' ? 'Record an asset already owned; no cash or bank transaction is created.' : type === 'depreciation' ? 'Reduces book value only; it does not post a depreciation expense or change cash/bank.' : type === 'sale' ? 'Sale proceeds post to the selected account; disposal gain/loss is not calculated.' : 'This purchase is saved to both the asset register and the Accounts daybook.';
+    $('assetAmountLabel').textContent = ({ opening: 'Opening value (PKR)', purchase: 'Purchase cost (PKR)', sale: 'Sale proceeds (PKR)', depreciation: 'Depreciation amount (PKR)' })[type];
+    $('assetWalletLabel').textContent = type === 'sale' ? 'Received in' : 'Paid from';
+    $('assetPartyLabel').textContent = type === 'sale' ? 'Buyer (optional)' : 'Vendor (optional)';
+    $('assetEventSave').textContent = type === 'opening' ? 'Save opening asset' : type === 'purchase' ? 'Save purchase' : type === 'sale' ? 'Save sale' : 'Save depreciation';
+}
+function closeAssetEvent() {
+    $('assetEventModal').classList.add('hidden'); $('assetEventModal').classList.remove('flex');
+}
+async function saveAssetEvent() {
+    const button = $('assetEventSave'), type = $('assetEventModal').dataset.type;
+    const isNew = type === 'opening' || (type === 'purchase' && $('assetPick').value === 'new');
+    const amount = Number($('assetAmount').value), quantity = Number($('assetQuantity').value), date = $('assetDate').value;
+    if(!date || !(amount > 0) || (type !== 'depreciation' && !(quantity > 0))) {
+        $('assetEventError').textContent = 'Enter a valid date and positive amount and quantity.'; return;
+    }
+    const payload = {
+        event_type: type, event_date: date, amount,
+        quantity: type === 'depreciation' ? null : quantity,
+        asset_id: isNew ? null : $('assetPick').value,
+        asset_name: isNew ? $('assetName').value.trim() : '',
+        category: isNew ? $('assetCategory').value.trim() : '',
+        description: isNew ? $('assetDescription').value.trim() : '',
+        account_name: type === 'purchase' || type === 'sale' ? $('assetWallet').value : null,
+        party: $('assetParty').value.trim(), remarks: $('assetNotes').value.trim()
+    };
+    if(isNew && (!payload.asset_name || !payload.category)) { $('assetEventError').textContent = 'Enter the asset name and category.'; return; }
+    if(type === 'sale' && quantity > assetBalances(fixedAssets.find(asset => String(asset.id) === String(payload.asset_id))).quantity) {
+        $('assetEventError').textContent = 'Sale quantity exceeds available units.'; return;
+    }
+    if(type === 'depreciation' && amount > assetBalances(fixedAssets.find(asset => String(asset.id) === String(payload.asset_id))).bookValue) {
+        $('assetEventError').textContent = 'Depreciation cannot exceed the current book value.'; return;
+    }
+    button.disabled = true; button.textContent = 'Saving...';
+    try {
+        const config = getSupabaseConfig();
+        const response = await fetch(`${config.url}/rest/v1/rpc/record_fixed_asset_event`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ p: payload })
+        });
+        if(!response.ok) throw new Error(await response.text());
+        const result = await response.json();
+        if(typeof sbCacheClear === 'function') { sbCacheClear('accounts'); sbCacheClear('fixed_assets'); sbCacheClear('fixed_asset_transactions'); }
+        closeAssetEvent();
+        toast(`${ASSET_EVENT_LABELS[type]} saved${result.voucher_id ? ' · ' + result.voucher_id : ''}`);
+        fixedAssetsLoaded = false;
+        await initAccounts();
+    } catch(error) {
+        $('assetEventError').textContent = error.message || 'Could not save the asset transaction.';
+    } finally {
+        button.disabled = false;
+        updateAssetEventFields();
+    }
+}
+function exportFixedAssetsCsv() {
+    const query = $('assetSearch').value.trim().toLowerCase();
+    const assets = fixedAssets.filter(asset => !query || [asset.asset_code, asset.name, asset.category, asset.description].join(' ').toLowerCase().includes(query));
+    if(!assets.length) { toast('There are no matching assets to export.', false); return; }
+    exportCsv('fixed-assets', ['Asset code', 'Asset', 'Category', 'Quantity', 'Cost', 'Depreciation', 'Book value'],
+        assets.map(asset => {
+            const balance = assetBalances(asset);
+            return [asset.asset_code, asset.name, asset.category, balance.quantity, balance.cost, balance.depreciation, balance.bookValue];
+        }));
+}
+function exportFixedAssetEventsCsv() {
+    if(!fixedAssetEvents.length) { toast('There is no asset activity to export.', false); return; }
+    const assetById = new Map(fixedAssets.map(asset => [String(asset.id), asset]));
+    exportCsv('fixed-asset-activity', ['Date', 'Asset code', 'Asset', 'Type', 'Quantity', 'Amount', 'Account', 'Party', 'Voucher', 'Notes'],
+        fixedAssetEvents.map(event => {
+            const asset = assetById.get(String(event.asset_id));
+            const account = event.account_name || (event.event_type === 'opening' ? 'Opening balance' : 'Non-cash');
+            return [event.event_date, asset ? asset.asset_code : '', asset ? asset.name : 'Asset', ASSET_EVENT_LABELS[event.event_type] || event.event_type,
+                event.event_type === 'depreciation' ? '' : Math.abs(Number(event.quantity_change) || 0), event.amount, account, event.party, event.voucher_id, event.remarks];
+        }));
+}
+
+// ====================================================================================
+//  FILTER / PERIOD
+// ====================================================================================
+function applyPreset() {
+    let p = $('gPeriod').value, now = new Date(), from = '', to = '';
+    let first = new Date(now.getFullYear(), now.getMonth(), 1);
+    if(p === 'today') { from = to = todayStr(); }
+    else if(p === 'yesterday') { let d = new Date(); d.setDate(d.getDate() - 1); from = to = ymd(d); }
+    else if(p === 'last7') { let d = new Date(); d.setDate(d.getDate() - 6); from = ymd(d); to = todayStr(); }
+    else if(p === 'month') { from = ymd(first); to = ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0)); }
+    else if(p === 'lastmonth') { from = ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)); to = ymd(new Date(now.getFullYear(), now.getMonth(), 0)); }
+    else if(p === 'year') { from = `${now.getFullYear()}-01-01`; to = `${now.getFullYear()}-12-31`; }
+    else if(p === 'all') { from = entries.length ? entries.reduce((m, e) => e.date && e.date < m ? e.date : m, '9999-12-31') : todayStr(); to = todayStr(); }
+    if(p !== 'custom') { $('gFrom').value = from; $('gTo').value = to; }
+}
+function onPeriodChange() { applyPreset(); renderAll(); }
+function onCustomDate() { $('gPeriod').value = 'custom'; renderAll(); }
+function getRange() { return { from: $('gFrom').value || '0000-01-01', to: $('gTo').value || '9999-12-31', wallet: $('gWallet').value }; }
+
+// Wallet delta: how much this entry changes the balance of an account (wallet)
+function delta(e, w) {
+    if(e.kind === 'receipt' || e.kind === 'opening') return (w === 'ALL' || e.wallet === w) ? e.amount : 0;
+    if(e.kind === 'payment') return (w === 'ALL' || e.wallet === w) ? -e.amount : 0;
+    if(e.kind === 'transfer') { if(w === 'ALL') return 0; return (e.wallet === w ? -e.amount : 0) + (e.wallet2 === w ? e.amount : 0); }
+    return 0;
+}
+function touchesWallet(e, w) { return w === 'ALL' || e.wallet === w || e.wallet2 === w; }
+function balanceBefore(date, w) { return entries.reduce((s, e) => (e.date && e.date < date) ? s + delta(e, w) : s, 0); }
+function balanceUpTo(date, w) { return entries.reduce((s, e) => (e.date && e.date <= date) ? s + delta(e, w) : s, 0); }
+function scopeList() {
+    let r = getRange();
+    return entries.filter(e => e.date >= r.from && e.date <= r.to && touchesWallet(e, r.wallet))
+                  .sort((a, b) => a.date.localeCompare(b.date) || a.idx - b.idx);
+}
+
+// ====================================================================================
+//  TABS + RENDER
+// ====================================================================================
+function showTab(t) {
+    ['overview', 'daybook', 'fees', 'heads', 'wallets', 'dues', 'assets'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
+    if (t === 'overview') renderOverview();
+    else if (t === 'daybook') renderDaybook();
+    else if (t === 'fees') renderFeeTab();
+    else if (t === 'heads') renderHeads();
+    else if (t === 'wallets') renderWallets();
+    else if (t === 'dues') renderDues();
+    else if (t === 'assets') {
+        if (!fixedAssetsLoaded) loadFixedAssets();
+        else renderFixedAssets();
+    }
+    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable', assets: 'Purchases / Assets' };
+    let r = getRange();
+    $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;
+}
+function currentTab() { let b = document.querySelector('.tabbtn.tab-on'); return b ? b.dataset.tab : 'overview'; }
+
+function renderAll() {
+    showTab(currentTab());
+}
+
+function sumKind(list, kind, w) { return list.filter(e => e.kind === kind && !e.isFixedAsset && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal)) && (w === 'ALL' || e.wallet === w)).reduce((s, e) => s + e.amount, 0); }
+
+function barRow(label, value, max, total, color) {
+    let w = max > 0 ? Math.max(2, Math.round(value / max * 100)) : 0;
+    let pct = total > 0 ? Math.round(value / total * 100) : 0;
+    return `<div><div class="flex justify-between text-xs mb-1"><span class="font-medium text-slate-700 truncate pr-2">${esc(label)}</span><span class="text-slate-600 whitespace-nowrap">PKR ${fmt(value)} <span class="text-slate-400">(${pct}%)</span></span></div><div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-2 rounded-full ${color}" style="width:${w}%"></div></div></div>`;
+}
+
+// ---------------- OVERVIEW ----------------
+function renderOverview() {
+    let r = getRange(), list = scopeList();
+    let income = sumKind(list, 'receipt', r.wallet), expense = sumKind(list, 'payment', r.wallet);
+    let feeIn = list.filter(e => e.isFee && (r.wallet === 'ALL' || e.wallet === r.wallet)).reduce((s, e) => s + e.amount, 0);
+    let closing = balanceUpTo(r.to === '9999-12-31' ? todayStr() : r.to, r.wallet);
+    let net = income - expense;
+    let cards = [
+        { t: 'Total Income', v: 'PKR ' + fmt(income), c: 'text-emerald-600', s: `Fee: PKR ${fmt(feeIn)}` },
+        { t: 'Total Expense', v: 'PKR ' + fmt(expense), c: 'text-rose-600' },
+        { t: net >= 0 ? 'Surplus' : 'Deficit', v: 'PKR ' + fmt(Math.abs(net)), c: net >= 0 ? 'text-indigo-700' : 'text-rose-600' },
+        { t: 'Fee Collection', v: 'PKR ' + fmt(feeIn), c: 'text-emerald-700', s: `${list.filter(e => e.isFee).length} receipts` },
+        { t: 'Closing balance', v: 'PKR ' + fmt(closing), c: closing >= 0 ? 'text-slate-900' : 'text-rose-600', s: r.wallet === 'ALL' ? 'Cash + Bank + Online' : WALLETS[r.wallet].label },
+        { t: 'Partner withdrawals', v: 'PKR ' + fmt(list.filter(e => e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).reduce((sum, e) => sum + e.amount, 0)), c: 'text-violet-700', s: 'Not included in expenses / profit' }
+    ];
+    $('kpiCards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`).join('');
+
+    // monthly chart
+    let from = parseYmd(r.from === '0000-01-01' ? todayStr() : r.from), to = parseYmd(r.to === '9999-12-31' ? todayStr() : r.to);
+    let months = [], cur = new Date(from.getFullYear(), from.getMonth(), 1);
+    while(cur <= to) { months.push({ key: ymd(cur).slice(0, 7), label: cur.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), inc: 0, exp: 0 }); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1); }
+    if(months.length > 12) months = months.slice(-12);
+    let mm = {}; months.forEach(m => mm[m.key] = m);
+    list.forEach(e => { let m = mm[e.date.slice(0, 7)]; if(!m || e.isFixedAsset) return; if(e.kind === 'receipt') m.inc += e.amount; if(e.kind === 'payment' && !e.isLiabilitySettlement && !e.isPartnerWithdrawal) m.exp += e.amount; });
+    let max = Math.max(1, ...months.map(m => Math.max(m.inc, m.exp)));
+    let W = Math.max(520, months.length * 70), H = 230, padL = 8, padB = 28, padT = 20, ch = H - padB - padT, gw = (W - padL) / Math.max(months.length, 1), bw = Math.min(22, gw / 3);
+    const short = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : (v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + 'k' : String(Math.round(v)));
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:${W}px" role="img" aria-label="Monthly income and expense">`;
+    for(let i = 0; i <= 4; i++) { let y = padT + ch - ch * i / 4; svg += `<line x1="${padL}" x2="${W}" y1="${y}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>`; }
+    months.forEach((m, i) => {
+        let cx = padL + gw * i + gw / 2, hI = ch * m.inc / max, hE = ch * m.exp / max;
+        svg += `<rect x="${cx - bw - 1}" y="${padT + ch - hI}" width="${bw}" height="${hI}" rx="3" fill="#10b981"/>`;
+        svg += `<rect x="${cx + 1}" y="${padT + ch - hE}" width="${bw}" height="${hE}" rx="3" fill="#f43f5e"/>`;
+        if(m.inc) svg += `<text x="${cx - bw / 2 - 1}" y="${padT + ch - hI - 4}" font-size="9" fill="#047857" text-anchor="middle">${short(m.inc)}</text>`;
+        if(m.exp) svg += `<text x="${cx + bw / 2 + 1}" y="${padT + ch - hE - 4}" font-size="9" fill="#be123c" text-anchor="middle">${short(m.exp)}</text>`;
+        svg += `<text x="${cx}" y="${H - 8}" font-size="10" fill="#64748b" text-anchor="middle">${m.label}</text>`;
+    });
+    svg += '</svg>';
+    $('monthChart').innerHTML = svg;
+
+    // top expense heads
+    let heads = {};
+    list.filter(e => e.kind === 'payment' && !e.isFixedAsset && !e.isLiabilitySettlement && !e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { heads[e.headLabel] = (heads[e.headLabel] || 0) + e.amount; });
+    let arr = Object.entries(heads).sort((a, b) => b[1] - a[1]).slice(0, 6), tot = Object.values(heads).reduce((s, v) => s + v, 0);
+    $('topExpenses').innerHTML = arr.length ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, 'bg-rose-500')).join('') : '<p class="text-xs text-slate-400">No expenses in this period.</p>';
+
+    // recent
+    let recent = [...list].reverse().slice(0, 8);
+    $('recentBody').innerHTML = recent.length ? recent.map(e => {
+        let d = delta(e, r.wallet);
+        const meta = fixedAssetEntryMeta(e);
+        return `<tr class="border-b"><td class="py-2 pr-3 text-slate-500 whitespace-nowrap">${fmtDate(e.date)}</td><td class="py-2 pr-3"><span class="px-2 py-0.5 rounded-md border ${meta.cls}">${meta.label}</span></td><td class="py-2 pr-3 text-slate-700">${esc(entryLabel(e))}</td><td class="py-2 text-right font-bold ${d >= 0 ? 'text-emerald-600' : 'text-rose-600'} whitespace-nowrap">${e.kind === 'transfer' && r.wallet === 'ALL' ? 'PKR ' + fmt(e.amount) : (d >= 0 ? '+ ' : '- ') + 'PKR ' + fmt(Math.abs(d))}</td></tr>`;
+    }).join('') : '<tr><td class="py-4 text-center text-slate-400">No entries in this period.</td></tr>';
+    const partnerRows = list.filter(e => e.isPartnerWithdrawal && (r.wallet === 'ALL' || e.wallet === r.wallet)).slice().reverse();
+    $('partnerWithdrawalTotal').innerText = `Selected period: PKR ${fmt(partnerRows.reduce((sum, e) => sum + e.amount, 0))}`;
+    $('partnerWithdrawalBody').innerHTML = partnerRows.length ? partnerRows.map(e => {
+        const type = (e.notes.match(/(?:^|\|\s*)Type:\s*([^|]+)/i) || [])[1] || 'Partner drawings';
+        const notes = e.notes.replace(/(?:^|\|\s*)Type:\s*[^|]+/i, '').replace(/^\s*\|\s*|\s*\|\s*$/g, '').trim();
+        return `<tr class="border-b"><td class="p-2 whitespace-nowrap">${fmtDate(e.date)}</td><td class="p-2 font-semibold">${esc(e.title || 'Partner')}</td><td class="p-2">${esc(type)}</td><td class="p-2">${WALLETS[e.wallet].icon} ${esc(WALLETS[e.wallet].label)}</td><td class="p-2 text-right font-bold text-violet-700">PKR ${fmt(e.amount)}</td><td class="p-2 text-slate-500">${esc(notes || '-')}</td></tr>`;
+    }).join('') : `<tr><td colspan="6" class="p-4 text-center text-slate-400">${BUSINESS_PARTNERS.length ? 'No partner withdrawals in this period.' : 'Add partner names in Settings → Business partners to start recording withdrawals.'}</td></tr>`;
+}
+
+function entryLabel(e) {
+    if(e.isFee) return `${(e.fee && e.fee.student) || '-'} — ${titleCase((e.fee && e.fee.type) || 'Fee')}${e.fee && e.fee.period ? ' (' + e.fee.period + ')' : ''}`;
+    if(e.kind === 'transfer') return `${WALLETS[e.wallet].label} → ${WALLETS[e.wallet2].label}${e.title ? ' · ' + e.title : ''}`;
+    if(e.isPartnerWithdrawal) return `Partner withdrawal — ${e.title || 'Partner'}`;
+    return `${e.head}${e.title && e.title !== e.head ? ' — ' + e.title : ''}`;
+}
+
+// ---------------- DAYBOOK ----------------
+function resetLimitRender() { dbLimit = 300; renderDaybook(); }
+function daybookRows(applyFilters = true) {
+    let r = getRange(), list = scopeList(), run = balanceBefore(r.from, r.wallet);
+    list.forEach(e => { e._d = delta(e, r.wallet); run += e._d; e._bal = run; });
+    if(!applyFilters) return list;
+    let type = $('dbType').value, q = $('dbSearch').value.trim().toLowerCase();
+    return list.filter(e => {
+        if(type === 'fee' && !e.isFee) return false;
+        if(type === 'partner' && !e.isPartnerWithdrawal) return false;
+        if(type === 'manual' && !e.manual) return false;
+        if(['receipt', 'payment', 'transfer'].includes(type) && e.kind !== type) return false;
+        if(q && !(entryLabel(e) + ' ' + e.id + ' ' + e.notes + ' ' + ((e.fee && e.fee.adm) || '')).toLowerCase().includes(q)) return false;
+        return true;
+    });
+}
+function isDaybookEntryDeletable(e) {
+    if(!e || e.isFixedAsset || e.isSecurityRefund) return false;
+    if((e.kind === 'bill_raised' || e.kind === 'bill_received') && entries.some(x => x.billRef === e.id)) return false;
+    return true;
+}
+function updateDaybookSelectionControls(eligibleRows) {
+    const eligibleIds = new Set(eligibleRows.map(e => e.id));
+    dbSelectedEntries = new Set([...dbSelectedEntries].filter(id => eligibleIds.has(id)));
+    const selectAll = $('dbSelectAll');
+    const deleteButton = $('dbDeleteSelected');
+    const selectedCount = dbSelectedEntries.size;
+    if(selectAll) {
+        selectAll.checked = eligibleRows.length > 0 && selectedCount === eligibleRows.length;
+        selectAll.indeterminate = selectedCount > 0 && selectedCount < eligibleRows.length;
+        selectAll.disabled = eligibleRows.length === 0;
+    }
+    if(deleteButton) {
+        deleteButton.innerText = `Delete selected (${selectedCount})`;
+        deleteButton.disabled = selectedCount === 0;
+    }
+}
+function toggleDaybookSelection(checkbox) {
+    const id = checkbox.dataset.entryId, entry = entryById[id];
+    if(!isDaybookEntryDeletable(entry)) {
+        checkbox.checked = false;
+        return;
+    }
+    if(checkbox.checked) dbSelectedEntries.add(id);
+    else dbSelectedEntries.delete(id);
+    updateDaybookSelectionControls(daybookRows().filter(isDaybookEntryDeletable));
+}
+function toggleDaybookSelectAll(checked) {
+    const eligibleRows = daybookRows().filter(isDaybookEntryDeletable);
+    dbSelectedEntries = checked ? new Set(eligibleRows.map(e => e.id)) : new Set();
+    renderDaybook();
+}
+function renderDaybook() {
+    let r = getRange(), list = scopeList();
+    let opening = balanceBefore(r.from, r.wallet), rec = 0, pay = 0;
+    list.forEach(e => { let d = delta(e, r.wallet); if(d > 0) rec += d; else pay += -d; });
+    let strip = [
+        { t: 'Opening balance', v: opening, c: 'text-slate-800' },
+        { t: 'Total receipts', v: rec, c: 'text-emerald-600' },
+        { t: 'Total payments', v: pay, c: 'text-rose-600' },
+        { t: 'Closing balance', v: opening + rec - pay, c: 'text-indigo-700' }
+    ];
+    $('dbStrip').innerHTML = strip.map(s => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${s.t}</div><div class="text-xl font-extrabold ${s.c} mt-1">PKR ${fmt(s.v)}</div></div>`).join('');
+
+    const rows = daybookRows();
+    const eligibleRows = rows.filter(isDaybookEntryDeletable);
+    updateDaybookSelectionControls(eligibleRows);
+    const isNewestFirst = $('dbOrder').value === 'desc';
+    const orderedEntries = isNewestFirst ? [...rows].reverse() : rows;
+    const openingBalance = balanceBefore(r.from, r.wallet);
+    const closingBalance = openingBalance + rec - pay;
+    const ledgerRows = orderedEntries.map(entry => ({ entry, balance: entry._bal }));
+    $('dbCount').innerText = `${rows.length} ledger entr${rows.length === 1 ? 'y' : 'ies'} · ${isNewestFirst ? 'newest first' : 'oldest first'}`;
+    const shown = ledgerRows.slice(0, dbLimit);
+    const renderBoundaryRow = (label, balance) => `<tr class="bg-slate-50 border-y border-slate-200 font-semibold">
+        <td class="no-print"></td><td colspan="7" class="p-3 text-slate-600">${label}</td>
+        <td class="p-3 text-right font-bold text-indigo-900 whitespace-nowrap">PKR ${fmt(balance)}</td>
+        <td class="no-print"></td>
+    </tr>`;
+    const renderEntryRow = (e, balance) => {
+        const isAllWalletTransfer = e.kind === 'transfer' && r.wallet === 'ALL';
+        let recAmt = e._d > 0 ? 'PKR ' + fmt(e._d) : '', payAmt = e._d < 0 ? 'PKR ' + fmt(-e._d) : '';
+        const entryMeta = fixedAssetEntryMeta(e);
+        let kindBadge = `<span class="px-2 py-0.5 rounded-md border ${entryMeta.cls}">${entryMeta.label}</span>${e.isFee ? '<span class="ml-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">Fee</span>' : ''}`;
+        let acct = e.kind === 'transfer' ? `${WALLETS[e.wallet].icon} → ${WALLETS[e.wallet2].icon}` : `${WALLETS[e.wallet].icon} ${WALLETS[e.wallet].label}`;
+        let canEdit = e.manual && !e.isSecurityRefund && !e.isFixedAsset;
+        const balanceClass = balance < 0 ? 'text-rose-700' : 'text-indigo-900';
+        const transferNote = isAllWalletTransfer ? `<div class="text-[11px] text-slate-500">Account transfer · PKR ${fmt(e.amount)}</div>` : '';
+        const canDelete = isDaybookEntryDeletable(e);
+        return `<tr class="hover:bg-indigo-50/40 align-top">
+            <td class="p-3 no-print">${canDelete ? `<input type="checkbox" aria-label="Select voucher ${esc(e.ref)}" data-entry-id="${esc(e.id)}" ${dbSelectedEntries.has(e.id) ? 'checked' : ''} onchange="toggleDaybookSelection(this)">` : '<input type="checkbox" disabled aria-label="This entry must be managed from its source page" title="Manage this entry from its source page">'}</td>
+            <td class="p-3 whitespace-nowrap text-slate-600">${fmtDate(e.date)}</td>
+            <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap" title="${esc(e.id)}">${esc(e.ref)}</td>
+            <td class="p-2.5 whitespace-nowrap">${kindBadge}</td>
+            <td class="p-2.5 whitespace-nowrap text-slate-600">${acct}</td>
+            <td class="p-2.5 text-slate-800 font-medium">${esc(entryLabel(e))}${transferNote}${e.notes ? `<div class="text-[11px] text-slate-400 font-normal mt-0.5">${esc(e.notes)}</div>` : ''}</td>
+            <td class="p-2.5 text-right font-bold text-emerald-700 whitespace-nowrap">${isAllWalletTransfer ? '' : recAmt}</td>
+            <td class="p-2.5 text-right font-bold text-rose-600 whitespace-nowrap">${payAmt}</td>
+            <td class="p-2.5 text-right font-bold ${balanceClass} whitespace-nowrap">PKR ${fmt(balance)}</td>
+            <td class="p-2.5 whitespace-nowrap no-print">
+                <button onclick="printVoucher(${esc(JSON.stringify(e.id))})" title="Print voucher" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button>
+                ${e.isFixedAsset ? '<span class="text-[10px] text-slate-400">Managed in Assets</span>' : e.isSecurityRefund ? '<span class="text-[10px] text-slate-400">Managed by Payroll</span>' : canEdit ? `<button onclick="editEntry(${esc(JSON.stringify(e.id))})" title="Edit" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>` : `<button onclick="quickEdit(${esc(JSON.stringify(e.id))})" title="Edit account / date / amount" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>`}
+                ${e.isSecurityRefund || e.isFixedAsset ? '' : `<button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`}
+            </td></tr>`;
+    };
+    if(!shown.length) {
+        $('dbBody').innerHTML = '<tr><td colspan="10" class="p-8 text-center text-slate-400">No entries found in this period.</td></tr>';
+    } else {
+        const firstBoundary = isNewestFirst ? closingBalance : openingBalance;
+        const lastBoundary = isNewestFirst ? openingBalance : closingBalance;
+        $('dbBody').innerHTML = renderBoundaryRow(isNewestFirst ? 'Closing balance · end of selected period' : 'Opening balance · brought forward', firstBoundary)
+            + shown.map(({ entry, balance }) => renderEntryRow(entry, balance)).join('')
+            + (shown.length === ledgerRows.length ? renderBoundaryRow(isNewestFirst ? 'Opening balance · start of selected period' : 'Closing balance · end of selected period', lastBoundary) : '');
+    }
+    $('dbMore').innerHTML = ledgerRows.length > dbLimit ? `<button onclick="dbLimit+=300;renderDaybook()" class="bg-white border border-slate-200 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold">Show more (${ledgerRows.length - dbLimit} remaining entries)</button>` : '';
+}
+
+function exportCsv(name, header, rows) {
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    let csv = '\uFEFF' + [header, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+    let a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    a.download = `${name}-${todayStr()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+}
+function exportDaybookCsv() {
+    let rows = daybookRows();
+    if(!rows.length) { toast('No entries to export.', false); return; }
+    exportCsv('daybook', ['Date', 'Voucher', 'Type', 'Account', 'Details', 'Receipt', 'Payment', 'Balance', 'Notes'],
+        rows.map(e => [e.date, e.id, fixedAssetEntryMeta(e).label, e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label, entryLabel(e), e._d > 0 ? e._d : '', e._d < 0 ? -e._d : '', e._bal, e.notes]));
+}
+function exportOverviewCsv() {
+    const rows = scopeList();
+    if(!rows.length) { toast('No entries in this overview period to export.', false); return; }
+    exportCsv('accounts-overview', ['Date', 'Voucher', 'Type', 'Account', 'Category', 'Details', 'Money in', 'Money out', 'Notes'],
+        rows.map(e => [
+            e.date, e.id, fixedAssetEntryMeta(e).label,
+            e.kind === 'transfer' ? `${WALLETS[e.wallet].label} -> ${WALLETS[e.wallet2].label}` : WALLETS[e.wallet].label,
+            e.headLabel || e.head, entryLabel(e),
+            e.kind === 'receipt' || e.kind === 'opening' ? e.amount : '',
+            e.kind === 'payment' ? e.amount : '', e.notes
+        ]));
+}
+
+// ---------------- FEE COLLECTION ----------------
+function feeList() {
+    let r = getRange(), q = $('feSearch').value.trim().toLowerCase();
+    return entries.filter(e => e.isFee && e.date >= r.from && e.date <= r.to && (r.wallet === 'ALL' || e.wallet === r.wallet))
+        .filter(e => !q || (entryLabel(e) + ' ' + e.id + ' ' + ((e.fee && e.fee.adm) || '')).toLowerCase().includes(q))
+        .sort((a, b) => b.date.localeCompare(a.date) || b.idx - a.idx);
+}
+function renderFeeTab() {
+    let list = feeList(), total = list.reduce((s, e) => s + e.amount, 0);
+    let byW = {}; Object.keys(WALLETS).forEach(k => byW[k] = 0); list.forEach(e => byW[e.wallet] += e.amount);
+    let students = new Set(list.map(e => (e.fee && e.fee.student) || e.id)).size;
+    let cards = [
+        { t: 'Total fee collection', v: 'PKR ' + fmt(total), c: 'text-emerald-600', s: `${list.length} receipts · ${students} students` },
+        ...Object.keys(WALLETS).map(w => ({ t: WALLETS[w].icon + ' ' + WALLETS[w].label, v: 'PKR ' + fmt(byW[w]), c: 'text-slate-800' }))
+    ];
+    $('feeCards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm print-card"><div class="text-xs text-slate-500">${c.t}</div><div class="text-xl font-extrabold ${c.c} mt-1">${c.v}</div>${c.s ? `<div class="text-[11px] text-slate-400 mt-0.5">${c.s}</div>` : ''}</div>`).join('');
+    $('feBody').innerHTML = list.length ? list.slice(0, 600).map(e => `<tr class="border-b hover:bg-slate-50">
+        <td class="p-2.5 whitespace-nowrap text-slate-600">${fmtDate(e.date)}</td>
+        <td class="p-2.5 font-mono text-indigo-900" title="${esc(e.id)}">${esc(e.ref)}</td>
+        <td class="p-2.5 font-semibold">${esc((e.fee && e.fee.student) || '-')}${e.fee && e.fee.adm ? `<div class="text-[11px] text-slate-400 font-normal">Adm# ${esc(e.fee.adm)}</div>` : ''}</td>
+        <td class="p-2.5 text-slate-600">${esc((e.fee && e.fee.cls) || '-')}</td>
+        <td class="p-2.5 text-slate-600">${esc(titleCase((e.fee && e.fee.type) || '-'))}</td>
+        <td class="p-2.5 text-indigo-700">${esc((e.fee && e.fee.period) || '-')}</td>
+        <td class="p-2.5 whitespace-nowrap">${WALLETS[e.wallet].icon} ${WALLETS[e.wallet].label}</td>
+        <td class="p-2.5 text-right font-bold text-emerald-600 whitespace-nowrap">PKR ${fmt(e.amount)}</td>
+        <td class="p-2.5 whitespace-nowrap no-print">
+            <button onclick="printVoucher(${esc(JSON.stringify(e.id))})" title="Print receipt" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button>
+            <button onclick="quickEdit(${esc(JSON.stringify(e.id))})" title="Edit payment (account, date, amount)" class="px-1.5 hover:bg-slate-100 rounded">✏️</button>
+            <button onclick="deleteEntry(${esc(JSON.stringify(e.id))})" title="Delete payment" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>
+        </td></tr>`).join('') : `<tr><td colspan="9" class="p-8 text-center text-slate-400">No fee collection in this period.</td></tr>`;
+    $('feFoot').innerHTML = list.length ? `<tr><td colspan="7" class="p-3 text-right">Total:</td><td class="p-3 text-right text-emerald-700">PKR ${fmt(total)}</td><td class="no-print"></td></tr>` : '';
+}
+function exportFeeCsv() {
+    let list = feeList();
+    if(!list.length) { toast('No records to export.', false); return; }
+    exportCsv('fee-collection', ['Date', 'Voucher', 'Student', 'Admis No', 'Class', 'Fee type', 'Period', 'Account', 'Amount'],
+        list.map(e => [e.date, e.id, (e.fee || {}).student, (e.fee || {}).adm, (e.fee || {}).cls, (e.fee || {}).type, (e.fee || {}).period, WALLETS[e.wallet].label, e.amount]));
+}
+
+// ---------------- HEADS ----------------
+function renderHeads() {
+    let r = getRange(), list = scopeList();
+    const build = (kind, color, el) => {
+        let map = {};
+        list.filter(e => e.kind === kind && !e.isFixedAsset && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal)) && (r.wallet === 'ALL' || e.wallet === r.wallet)).forEach(e => { map[e.headLabel] = (map[e.headLabel] || 0) + e.amount; });
+        let arr = Object.entries(map).sort((a, b) => b[1] - a[1]), tot = arr.reduce((s, x) => s + x[1], 0);
+        $(el).innerHTML = arr.length
+            ? arr.map(([k, v]) => barRow(k, v, arr[0][1], tot, color)).join('') + `<div class="flex justify-between text-sm font-bold border-t pt-2 mt-2"><span>Total</span><span>PKR ${fmt(tot)}</span></div>`
+            : '<p class="text-xs text-slate-400">No entries in this period.</p>';
+    };
+    build('receipt', 'bg-emerald-500', 'incomeHeads');
+    build('payment', 'bg-rose-500', 'expenseHeads');
+}
+function exportHeadsCsv() {
+    const r = getRange(), list = scopeList(), rows = [];
+    ['receipt', 'payment'].forEach(kind => {
+        const totals = new Map();
+        list.filter(e => e.kind === kind && !e.isFixedAsset
+            && !(kind === 'payment' && (e.isLiabilitySettlement || e.isPartnerWithdrawal))
+            && (r.wallet === 'ALL' || e.wallet === r.wallet))
+            .forEach(e => totals.set(e.headLabel, (totals.get(e.headLabel) || 0) + e.amount));
+        [...totals].sort((a, b) => b[1] - a[1])
+            .forEach(([head, amount]) => rows.push([kind === 'receipt' ? 'Income' : 'Expense', head, amount]));
+        if(totals.size) rows.push([kind === 'receipt' ? 'Income total' : 'Expense total', '', [...totals.values()].reduce((sum, amount) => sum + amount, 0)]);
+    });
+    if(!rows.length) { toast('No head summary in this period to export.', false); return; }
+    exportCsv('heads-summary', ['Type', 'Head', 'Amount'], rows);
+}
+
+// ---------------- WALLETS ----------------
+function renderWallets() {
+    let r = getRange(), end = r.to === '9999-12-31' ? todayStr() : r.to;
+    let total = 0;
+    let cards = Object.keys(WALLETS).map(w => {
+        let b = balanceUpTo(end, w); total += b;
+        return `<button onclick="$('gWallet').value='${w}';showTab('daybook')" class="text-left bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-indigo-300 transition print-card">
+            <div class="text-xs text-slate-500">${WALLETS[w].icon} ${WALLETS[w].label}</div><div class="text-xl font-extrabold ${b >= 0 ? 'text-slate-900' : 'text-rose-600'} mt-1">PKR ${fmt(b)}</div><div class="text-[11px] text-slate-400 mt-0.5">as of ${fmtDate(end)}</div></button>`;
+    });
+    cards.push(`<div class="bg-indigo-900 text-white rounded-2xl p-4 shadow-sm"><div class="text-xs text-indigo-200">Total balance</div><div class="text-xl font-extrabold mt-1">PKR ${fmt(total)}</div><div class="text-[11px] text-indigo-300 mt-0.5">Cash + Bank + Online</div></div>`);
+    $('walletCards').innerHTML = cards.join('');
+
+    let inRange = entries.filter(e => e.date >= r.from && e.date <= r.to);
+    $('walletBody').innerHTML = Object.keys(WALLETS).map(w => {
+        let opening = balanceBefore(r.from, w), rec = 0, pay = 0, tin = 0, tout = 0;
+        inRange.forEach(e => {
+            if(e.wallet === w && (e.kind === 'receipt' || e.kind === 'opening')) rec += e.amount;
+            if(e.wallet === w && e.kind === 'payment') pay += e.amount;
+            if(e.kind === 'transfer') { if(e.wallet === w) tout += e.amount; if(e.wallet2 === w) tin += e.amount; }
+        });
+        return `<tr class="border-b"><td class="p-2.5 font-semibold">${WALLETS[w].icon} ${WALLETS[w].label}</td><td class="p-2.5 text-right">${fmt(opening)}</td><td class="p-2.5 text-right text-emerald-600">${fmt(rec)}</td><td class="p-2.5 text-right text-rose-600">${fmt(pay)}</td><td class="p-2.5 text-right">${fmt(tin)}</td><td class="p-2.5 text-right">${fmt(tout)}</td><td class="p-2.5 text-right font-bold">${fmt(opening + rec - pay + tin - tout)}</td></tr>`;
+    }).join('');
+}
+function exportWalletsCsv() {
+    const r = getRange(), end = r.to === '9999-12-31' ? todayStr() : r.to;
+    const inRange = entries.filter(e => e.date >= r.from && e.date <= r.to);
+    const rows = Object.keys(WALLETS).map(wallet => {
+        let opening = balanceBefore(r.from, wallet), receipts = 0, payments = 0, transferIn = 0, transferOut = 0;
+        inRange.forEach(e => {
+            if(e.wallet === wallet && (e.kind === 'receipt' || e.kind === 'opening')) receipts += e.amount;
+            if(e.wallet === wallet && e.kind === 'payment') payments += e.amount;
+            if(e.kind === 'transfer') {
+                if(e.wallet === wallet) transferOut += e.amount;
+                if(e.wallet2 === wallet) transferIn += e.amount;
+            }
+        });
+        return [WALLETS[wallet].label, opening, receipts, payments, transferIn, transferOut, opening + receipts - payments + transferIn - transferOut, balanceUpTo(end, wallet)];
+    });
+    exportCsv('cash-bank-summary', ['Account', 'Opening', 'Receipts', 'Payments', 'Transfer in', 'Transfer out', 'Closing for period', `Balance as of ${end}`], rows);
+}
+
+// ====================================================================================
+//  ENTRY (create / edit)
+// ====================================================================================
+function genVoucherNo(kind) {
+    let id;
+    do { id = KIND_META[kind].prefix + Math.floor(100000 + Math.random() * 900000); } while(entryById[id]);
+    return id;
+}
+function setEntryKind(kind) {
+    const hasBatchData = [...document.querySelectorAll('#emBatchRows [data-field]')].some(input =>
+        input.dataset.field !== 'wallet' && input.value.trim() !== ''
+    );
+    if(kind !== entryKind && hasBatchData) {
+        toast('Remove the additional entries before changing this voucher type.', false);
+        return;
+    }
+    if(kind !== entryKind) $('emBatchRows').innerHTML = '';
+    entryKind = kind; setTimeout(updateDuesPicker, 0);
+    let tabs = ['receipt', 'payment', 'bill_raised', 'bill_received', 'transfer', 'opening'];
+    $('emTypeTabs').innerHTML = tabs.map(k => `<button type="button" ${editingId ? 'disabled' : ''} onclick="setEntryKind('${k}')" class="py-2 rounded-lg border ${k === kind ? 'tab-on' : 'tab-off'} ${editingId && k !== kind ? 'opacity-40' : ''}">${KIND_META[k].label}</button>`).join('');
+    $('emTitle').innerText = (editingId ? 'Edit ' : 'New ') + KIND_META[kind].title;
+    $('emSaveBtn').className = 'px-5 py-2 text-white font-semibold rounded-lg text-sm ' + ((kind === 'payment' || kind === 'bill_received') ? 'bg-rose-600 hover:bg-rose-700' : (kind === 'transfer' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'));
+    let isT = kind === 'transfer', isO = kind === 'opening', isB = kind === 'bill_raised' || kind === 'bill_received';
+ $('emWalletWrap').classList.toggle('hidden', isB);
+ $('emTitleLabel').innerText = isB ? 'Party name (student / vendor / customer)' : 'Particulars (what for / from whom / to whom)';
+    $('emHeadWrap').classList.toggle('hidden', isT || isO || isB);
+    $('emWallet2Wrap').classList.toggle('hidden', !isT);
+    $('emTitleWrap').classList.toggle('hidden', isO);
+    $('emWalletLabel').innerText = isT ? 'From account' : (kind === 'payment' ? 'Paid from account' : (kind === 'receipt' ? 'Received in account' : 'Account'));
+    $('emHeadLabel').innerText = kind === 'payment' ? 'Expense head (category)' : 'Income head (source)';
+    $('headList').innerHTML = (kind === 'payment' ? EXPENSE_HEADS : INCOME_HEADS).map(h => `<option value="${esc(h)}">`).join('');
+    const batchMode = !editingId && (kind === 'receipt' || kind === 'payment');
+    $('entryModal').classList.toggle('em-batch-mode', batchMode);
+    $('emBatchWrap').classList.toggle('hidden', !batchMode);
+    $('emAmountWrap').classList.toggle('hidden', batchMode);
+    $('emHeadWrap').classList.toggle('hidden', batchMode || isT || isO || isB);
+    $('emWalletFieldsWrap').classList.toggle('hidden', batchMode);
+    $('emTitleWrap').classList.toggle('hidden', batchMode || isO);
+    $('emNotesWrap').classList.toggle('hidden', batchMode);
+    $('emDateAmountGrid').classList.toggle('grid-cols-1', batchMode);
+    $('emBatchHeadLabel').innerText = kind === 'payment' ? 'Expense head' : 'Income head';
+    $('emBatchWalletLabel').innerText = kind === 'payment' ? 'Paid from' : 'Received in';
+    updateBatchSaveLabel();
+    if(!editingId) $('emVoucherNo').innerText = 'Voucher no: ' + (editingId || 'auto');
+}
+let _bd = null;
+
+
+
+// ====================================================================================
+// ACCOUNTS RECEIVABLE / PAYABLE: bills (AR-/AP- or Book Store BK-) are settled with receipts / payments
+// that carry the SAME voucher number as the bill (e.g. BK-123456-1234567) until the bill is cleared.
+// ====================================================================================
+let billEntries = [];
+let duesLedgerSide = null;
+let duesLedgerOrder = 'oldest';
+let selectedVendorLedgerKey = '';
+let duesPaymentMode = 'bills';
+async function ensureBookDues() {
+    if(_bd) return _bd;
+    const accRaw = Object.values(entryById).map(e => e.raw);
+    try {
+        const r = await ERP.db.request('books', 'select=*'); const rows = r.ok ? await r.json() : [];
+        _bd = computeDues((Array.isArray(rows) ? rows : []).map(normBookRow), accRaw);
+    } catch (e) { console.error(e); _bd = computeDues([], accRaw); }
+    return _bd;
+}
+const isRecvHead = h => [partyKey('Accounts Receivable'), partyKey(BOOK_SALE_HEAD)].includes(partyKey(h));
+const isPayHead = h => [partyKey('Accounts Payable'), partyKey(BOOK_BUY_HEAD)].includes(partyKey(h));
+let duesSide = null;     // 'recv' | 'pay' while the pending-bills picker is active
+async function updateDuesPicker() {
+    const wrap = $('emPartyWrap'), bw = $('emBillsWrap'); if(!wrap) return;
+    const isR = entryKind === 'receipt' && isRecvHead($('emHead').value), isP = entryKind === 'payment' && isPayHead($('emHead').value);
+    duesSide = (!editingId && (isR || isP)) ? (isR ? 'recv' : 'pay') : null;
+    wrap.classList.toggle('hidden', !duesSide);
+    $('emPaymentModeWrap').classList.toggle('hidden', duesSide !== 'pay');
+    bw.classList.add('hidden'); $('emBills').innerHTML = '';
+    if(!duesSide) return;
+    $('emPartyLabel').innerText = duesSide === 'recv'
+        ? 'Student / customer with pending bills'
+        : duesPaymentMode === 'standalone' ? 'Vendor / party (including settled and advance balances)' : 'Vendor / party with pending bills';
+    const selectedParty = $('emParty').value;
+    $('emParty').innerHTML = '<option value="">Loading...</option>';
+    const pend = p => p[duesSide].pending;
+    const list = (await ensureBookDues())
+        .filter(p => duesSide === 'pay' && duesPaymentMode === 'standalone'
+            ? p.payE.length > 0 || p.payS.some(entry => entry.label === 'Payment')
+            : pend(p) > 0.005)
+        .sort((a, b) => pend(b) - pend(a) || a.name.localeCompare(b.name));
+    const partyBalanceLabel = p => pend(p) > 0.005
+        ? `pending PKR ${fmt(pend(p))}`
+        : pend(p) < -0.005 ? `advance PKR ${fmt(-pend(p))}` : 'settled';
+    $('emParty').innerHTML = list.length ? '<option value="">- choose -</option>' + list.map(p => `<option value="${esc(p.key)}">${esc(p.name)} - ${partyBalanceLabel(p)}</option>`).join('') : '<option value="">No pending bills</option>';
+    if(list.some(p => p.key === selectedParty)) $('emParty').value = selectedParty;
+}
+function dueBills() { const d = (_bd || []).find(x => x.key === $('emParty').value); return d ? (duesSide === 'recv' ? d.recvE : d.payE).filter(e => e.rem > 0.005) : []; }
+function setDuesPaymentMode(mode) {
+    duesPaymentMode = mode === 'standalone' ? 'standalone' : 'bills';
+    if(duesSide !== 'pay') return;
+    const selectedParty = $('emParty').value;
+    updateDuesPicker().then(() => {
+        if($('emParty').value) pickDuesParty(true);
+        else if(selectedParty) $('emTitle2').value = '';
+    });
+}
+function pickDuesParty(preserveAmount = false) {
+    const bills = dueBills();
+    const showBills = duesSide === 'recv' || duesPaymentMode === 'bills';
+    $('emBillsLabel').innerText = duesSide === 'recv'
+        ? 'Pending bills (tick bills to settle; the amount is applied oldest-first).'
+        : 'Pending bills (selected bills are prioritized oldest-first; extra applies to other due bills, then remains as advance).';
+    $('emBillsWrap').classList.toggle('hidden', !showBills || !bills.length);
+    if(!showBills) {
+        const d = (_bd || []).find(x => x.key === $('emParty').value);
+        if(d) $('emTitle2').value = d.name;
+        return;
+    }
+    $('emBills').innerHTML = bills.map((b, i) => `<label class="flex items-center gap-2 px-2 py-1.5 text-xs cursor-pointer"><input type="checkbox" class="bill-cb" data-i="${i}" checked onchange="billTick()"><span class="font-mono text-indigo-900">${esc(b.voucher)}</span><span class="flex-1 truncate">${fmtDate(b.date)} - ${esc(b.title || (b.src === 'acct' ? 'Bill' : 'Book Store'))}</span><b class="text-rose-600">${fmt(b.rem)}</b></label>`).join('');
+    if(preserveAmount) {
+        const d = (_bd || []).find(x => x.key === $('emParty').value);
+        if(d) $('emTitle2').value = d.name;
+    } else billTick();
+}
+function billTick() {
+    const bills = dueBills(); let sum = 0;
+    document.querySelectorAll('.bill-cb').forEach(cb => { if(cb.checked && bills[+cb.dataset.i]) sum += bills[+cb.dataset.i].rem; });
+    $('emAmount').value = Math.round(sum * 100) / 100 || '';
+    const firstBatchAmount = $('emBatchRows')?.firstElementChild?.querySelector('[data-field="amount"]');
+    if(firstBatchAmount) firstBatchAmount.value = $('emAmount').value;
+    const d = (_bd || []).find(x => x.key === $('emParty').value); if(d) $('emTitle2').value = d.name;
+}
+async function saveAgainstBills(kind, date, amount, w, notes) {
+    const d = (_bd || []).find(x => x.key === $('emParty').value);
+    if(!d) { toast('Please choose the party first.', false); return; }
+    const bills = dueBills(), ticked = [...document.querySelectorAll('.bill-cb')].filter(cb => cb.checked).map(cb => bills[+cb.dataset.i]).filter(Boolean);
+    if(!ticked.length) { toast('Tick at least one bill to settle.', false); return; }
+    const cap = ticked.reduce((sum, bill) => sum + bill.rem, 0);
+    if(kind === 'receipt' && amount > cap + 0.005) {
+        toast(`The amount is more than the ticked bills (PKR ${fmt(cap)}).`, false);
+        return;
+    }
+    let left = amount; const stamp = String(Date.now()).slice(-7), rows = [];
+    ticked.sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach((b, i) => {
+        if(left <= 0.004) return;
+        const a = Math.round(Math.min(left, b.rem) * 100) / 100; left = Math.round((left - a) * 100) / 100;
+        const vid = `${b.voucher}-${stamp}${i}`, rem = `Against ${b.voucher}` + (notes ? ' | ' + notes : '');
+        rows.push(kind === 'receipt' ? { voucher_id: vid, from_account: 'Accounts Receivable', to_account: w, description: d.name, amount_in: a, amount_out: 0, date, remarks: rem }
+                                     : { voucher_id: vid, from_account: w, to_account: 'Accounts Payable', description: d.name, amount_in: 0, amount_out: a, date, remarks: rem });
+    });
+    if(left > 0.004 && kind === 'payment') {
+        rows.push({
+            voucher_id: genVoucherNo('payment'),
+            from_account: w,
+            to_account: BOOK_BUY_HEAD,
+            description: d.name,
+            amount_in: 0,
+            amount_out: left,
+            date,
+            remarks: `Vendor payment excess; applied oldest-first${notes ? ' | ' + notes : ''}`
+        });
+    }
+    showLoading('Saving...');
+    try {
+        const c = getSupabaseConfig();
+        const res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(rows) });
+        if(!res.ok) { const t = await res.text(); hideLoading(); toast('Could not save: ' + t, false); return; }
+        closeEntry(); toast(`${kind === 'receipt' ? 'Received' : 'Paid'} PKR ${fmt(amount)}${kind === 'payment' ? ` to ${d.name}; allocated oldest-first.` : ` against ${rows.map(r => r.voucher_id.split('-').slice(0, 2).join('-')).join(', ')}.`}`);
+        await initAccounts();
+    } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
+}
+async function saveStandaloneVendorPayment(date, amount, w, notes) {
+    const d = (_bd || []).find(x => x.key === $('emParty').value);
+    if(!d) { toast('Please choose the vendor first.', false); return; }
+    const id = genVoucherNo('payment');
+    const payload = {
+        voucher_id: id,
+        from_account: w,
+        to_account: BOOK_BUY_HEAD,
+        description: d.name,
+        amount_in: 0,
+        amount_out: amount,
+        date,
+        remarks: notes
+    };
+    showLoading('Saving vendor payment...');
+    try {
+        const c = getSupabaseConfig();
+        const res = await fetch(`${c.url}/rest/v1/accounts`, {
+            method: 'POST',
+            headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
+            body: JSON.stringify(payload)
+        });
+        if(!res.ok) { hideLoading(); toast('Could not save vendor payment: ' + await res.text(), false); return; }
+        closeEntry();
+        toast(`Vendor payment of PKR ${fmt(amount)} recorded for ${d.name}; applied oldest-first.`);
+        await initAccounts();
+    } catch(err) {
+        hideLoading();
+        console.error(err);
+        toast('Could not connect to the database.', false);
+    }
+}
+async function startSettle(kind, key) {
+    openEntry(kind);
+    $('emHead').value = kind === 'receipt' ? 'Accounts Receivable' : 'Accounts Payable';
+    if(kind === 'payment') {
+        const party = (_bd || []).find(item => item.key === key);
+        duesPaymentMode = party && party.pay.pending > 0.005 ? 'bills' : 'standalone';
+        const modeRadio = document.querySelector(`input[name="duesPaymentMode"][value="${duesPaymentMode}"]`);
+        if(modeRadio) modeRadio.checked = true;
+    }
+    await updateDuesPicker();
+    $('emParty').value = key; pickDuesParty();
+}
+function renderStaffSecurityPayable() {
+    const notice = $('staffSecurityNotice');
+    if(!staffSecurityReady) {
+        notice.innerText = 'Staff security ledger is not available. Run supabase_staff_security.sql and verify Accounts → View permission.';
+        notice.classList.remove('hidden');
+        return 0;
+    }
+    notice.classList.add('hidden');
+    const byStaff = new Map();
+    staffSecurityLedger.forEach(entry => {
+        const id = String(entry.staff_id || '');
+        if(!byStaff.has(id)) byStaff.set(id, { name: entry.staff_name || id, opening: 0, deductions: 0, refunds: 0 });
+        const item = byStaff.get(id);
+        item.name = entry.staff_name || item.name;
+        if(entry.entry_type === 'opening') item.opening += Number(entry.amount) || 0;
+        else if(entry.entry_type === 'deduction') item.deductions += Number(entry.amount) || 0;
+        else if(entry.entry_type === 'refund') item.refunds += Number(entry.amount) || 0;
+    });
+    const all = [...byStaff.values()].map(item => ({ ...item, outstanding: item.opening + item.deductions - item.refunds }));
+    return all.reduce((sum, item) => sum + item.outstanding, 0);
+}
+async function renderDues() {
+    if(!$('duesBody')) return;
+    const list = await ensureBookDues(), q = ($('duesSearch').value || '').trim().toLowerCase();
+    const sumP = k => list.reduce((s, p) => s + Math.max(p[k].pending, 0), 0);
+    const securityTotal = renderStaffSecurityPayable();
+    const vendorPayable = list.reduce((sum, party) => sum + party.pay.pending, 0);
+    const card = (type, label, amount, color, subtitle) => `<button type="button" onclick="toggleDuesLedger('${type}')" aria-expanded="${duesLedgerSide === type}" class="text-left bg-white rounded-2xl border ${duesLedgerSide === type ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200'} p-4 shadow-sm hover:border-indigo-300 transition print-card"><div class="text-xs text-slate-500">${label}</div><div class="text-xl font-extrabold ${color} mt-1">${amount}</div><div class="text-[11px] ${color} mt-0.5">${subtitle}</div><div class="text-[11px] text-indigo-500 mt-1">${duesLedgerSide === type ? 'Click to close ledger' : 'Click to view ledger'} ${duesLedgerSide === type ? '↑' : '↓'}</div></button>`;
+    $('duesCards').innerHTML = [
+        card('concept', 'Vendor payables', 'PKR ' + fmt(vendorPayable), vendorPayable > 0.005 ? 'text-rose-600' : 'text-emerald-700', vendorPayable > 0.005 ? 'Outstanding vendor balance' : vendorPayable < -0.005 ? 'Net vendor advance' : 'No outstanding vendor balance'),
+        card('security', 'Staff security payable', staffSecurityReady ? 'PKR ' + fmt(securityTotal) : 'Unavailable', !staffSecurityReady ? 'text-amber-700' : securityTotal > 0.005 ? 'text-rose-600' : 'text-emerald-700', !staffSecurityReady ? 'Ledger data unavailable' : securityTotal > 0.005 ? 'Outstanding liability' : 'No outstanding liability')
+    ].join('');
+    renderDuesLedger(q, list);
+    const rows = list.filter(p => !q || p.name.toLowerCase().includes(q)).sort((a, b) => (b.recv.pending + b.pay.pending) - (a.recv.pending + a.pay.pending));
+    const chips = p => [...p.recvE, ...p.payE].filter(e => e.rem > 0.005).map(e => `<span class="inline-block mr-1 mb-1 px-1.5 py-0.5 rounded border bg-slate-50 font-mono text-[10px]">${esc(e.voucher)} ${fmt(e.rem)}</span>`).join('');
+    $('duesBody').innerHTML = rows.length ? rows.map(p => {
+        const oldest = [...p.recvE, ...p.payE].filter(e => e.rem > 0.005).map(e => e.date).sort()[0];
+        return `<tr class="border-b hover:bg-slate-50 align-top"><td class="p-2.5 font-semibold text-slate-800">${esc(p.name)}<div class="mt-1 font-normal">${chips(p)}</div></td>
+        <td class="p-2.5 text-right font-bold ${p.recv.pending > 0.005 ? 'text-emerald-700' : 'text-slate-300'}">${p.recv.pending > 0.005 ? 'PKR ' + fmt(p.recv.pending) : '-'}</td>
+        <td class="p-2.5 text-right font-bold ${p.pay.pending > 0.005 ? 'text-rose-600' : p.pay.pending < -0.005 ? 'text-emerald-700' : 'text-slate-400'}">${p.pay.pending > 0.005 ? 'PKR ' + fmt(p.pay.pending) : p.pay.pending < -0.005 ? 'Advance PKR ' + fmt(-p.pay.pending) : 'Settled'}</td>
+        <td class="p-2.5 text-slate-500 whitespace-nowrap">${fmtDate(oldest)}</td>
+        <td class="p-2.5 no-print" data-k="${esc(p.key)}">${p.recv.pending > 0.005 ? `<button onclick="startSettle('receipt', this.parentNode.dataset.k)" class="text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-semibold mr-1">Receive</button>` : ''}${p.payE.length || p.payS.some(entry => entry.label === 'Payment') ? `<button onclick="startSettle('payment', this.parentNode.dataset.k)" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1 rounded font-semibold">${p.pay.pending > 0.005 ? 'Pay' : 'Pay advance'}</button>` : ''}</td></tr>`;
+    }).join('') : '<tr><td colspan="5" class="p-8 text-center text-slate-400">No pending bills.</td></tr>';
+    const remOf = {}; list.forEach(p => [...p.recvE, ...p.payE].forEach(e => { remOf[String(e.voucher).toUpperCase()] = e.rem; }));
+    const bl = [...billEntries].sort((a, b) => b.date.localeCompare(a.date));
+    $('billsBody').innerHTML = bl.length ? bl.map(e => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-mono text-indigo-900">${esc(e.id)}</td><td class="p-2.5 whitespace-nowrap">${fmtDate(e.date)}</td><td class="p-2.5"><span class="px-2 py-0.5 rounded-md border ${KIND_META[e.kind].cls}">${KIND_META[e.kind].label}</span></td><td class="p-2.5">${esc(e.title)}${e.notes ? `<div class="text-[11px] text-slate-400">${esc(e.notes)}</div>` : ''}</td><td class="p-2.5 text-right font-bold">PKR ${fmt(e.amount)}</td><td class="p-2.5 text-right font-bold ${remOf[e.id.toUpperCase()] > 0.005 ? 'text-rose-600' : 'text-emerald-600'}">${remOf[e.id.toUpperCase()] > 0.005 ? 'PKR ' + fmt(remOf[e.id.toUpperCase()]) : 'Cleared'}</td><td class="p-2.5 no-print whitespace-nowrap"><button onclick="editEntry('${esc(e.id)}')" class="text-[11px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-semibold mr-1">Edit</button><button onclick="deleteEntry('${esc(e.id)}')" class="text-[11px] bg-rose-50 text-rose-700 px-2 py-1 rounded font-semibold">Delete</button></td></tr>`).join('')
+        : '<tr><td colspan="7" class="p-6 text-center text-slate-400">No bills created here yet. Use "Bill Raised" or "Bill Received".</td></tr>';
+}
+async function exportDuesCsv() {
+    const list = await ensureBookDues(), query = ($('duesSearch').value || '').trim().toLowerCase();
+    const parties = list.filter(p => !query || p.name.toLowerCase().includes(query));
+    const rows = [];
+    parties.forEach(p => {
+        rows.push(['Party balance', '', p.name, '', '', p.recv.pending, p.pay.pending, '', '']);
+        [...p.recvE.map(entry => ({ entry, side: 'Receivable' })), ...p.payE.map(entry => ({ entry, side: 'Payable' }))]
+            .forEach(({ entry, side }) => rows.push(['Bill', entry.date, p.name, entry.voucher, side, entry.amt, entry.rem, entry.title || '', '']));
+    });
+
+    if(duesLedgerSide === 'security') {
+        const securityEntries = staffSecurityLedger.filter(entry =>
+            !query || `${entry.staff_name || ''} ${entry.staff_id || ''} ${entry.voucher_id || ''}`.toLowerCase().includes(query)
+        ).slice().sort((a, b) => String(a.transaction_date || '').localeCompare(String(b.transaction_date || '')));
+        let balance = 0;
+        securityEntries.forEach(entry => {
+            const amount = Number(entry.amount) || 0, incoming = entry.entry_type !== 'refund';
+            balance += incoming ? amount : -amount;
+            rows.push(['Staff security', entry.transaction_date, entry.staff_name || entry.staff_id || 'Staff', entry.voucher_id || '',
+                entry.entry_type, incoming ? amount : '', incoming ? '' : amount, balance, entry.notes || '']);
+        });
+    } else if(duesLedgerSide === 'concept' && selectedVendorLedgerKey) {
+        const vendor = list.find(p => p.key === selectedVendorLedgerKey);
+        if(vendor) {
+            const transactions = [
+                ...vendor.payE.map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Purchase', purchase: Number(entry.amt) || 0, payment: 0 })),
+                ...vendor.payS.filter(entry => entry.label === 'Payment').map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Payment', purchase: 0, payment: Number(entry.amt) || 0, account: entry.account || '' })),
+                ...vendor.payS.filter(entry => entry.label === 'Purchase return').map(entry => ({ date: entry.date || '', voucher: entry.voucher || '', activity: 'Purchase return', purchase: -(Number(entry.amt) || 0), payment: 0 }))
+            ].sort((a, b) => a.date.localeCompare(b.date) || a.voucher.localeCompare(b.voucher));
+            let balance = 0;
+            const groups = new Map();
+            transactions.forEach(entry => {
+                const key = entry.date || 'unknown';
+                if(!groups.has(key)) groups.set(key, { date: entry.date, opening: balance, purchase: 0, payment: 0, balance: 0, accounts: new Map() });
+                const group = groups.get(key);
+                group.purchase += entry.purchase;
+                group.payment += entry.payment;
+                balance += entry.purchase - entry.payment;
+                group.balance = balance;
+                if(entry.payment) {
+                    const account = entry.account || 'Account not recorded';
+                    group.accounts.set(account, (group.accounts.get(account) || 0) + entry.payment);
+                }
+            });
+            let ledgerGroups = [...groups.values()];
+            if(duesLedgerOrder === 'newest') ledgerGroups.reverse();
+            ledgerGroups.forEach(group => {
+                if(group.purchase) rows.push(['Vendor ledger', group.date, vendor.name, '', group.purchase < 0 ? 'Purchase return' : 'Purchase', Math.abs(group.purchase), '', group.opening + group.purchase, '']);
+                if(group.payment) {
+                    const accountDetails = [...group.accounts].map(([account, amount]) => `${account}: ${fmt(amount)}`).join('; ');
+                    rows.push(['Vendor ledger', group.date, vendor.name, '', 'Payment', '', group.payment, group.balance, accountDetails]);
+                }
+            });
+        }
+    }
+
+    if(!rows.length) { toast('No receivable/payable data to export.', false); return; }
+    exportCsv('receivable-payable', ['Record type', 'Date', 'Party', 'Voucher', 'Activity', 'Purchase / Receivable', 'Payment / Payable', 'Balance / Remaining', 'Details / Account'], rows);
+}
+
+function toggleDuesLedger(side) {
+    duesLedgerSide = duesLedgerSide === side ? null : side;
+    renderDues();
+}
+function setDuesLedgerOrder(order) {
+    duesLedgerOrder = order;
+    renderDues();
+}
+function selectVendorLedger(key) {
+    selectedVendorLedgerKey = key;
+    renderDues();
+}
+function renderDuesLedger(query, parties) {
+    const container = $('duesLedger');
+    if (!duesLedgerSide) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    const isSecurity = duesLedgerSide === 'security';
+    const vendorParties = (parties || [])
+        .filter(p => p.payE.length || p.payS.some(entry => entry.label === 'Payment'))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    const selectedVendor = vendorParties.find(p => p.key === selectedVendorLedgerKey) || null;
+    const title = isSecurity ? 'Staff security ledger' : selectedVendor ? `${selectedVendor.name} ledger` : 'Vendor party ledger';
+    const transactions = [];
+    let sequence = 0;
+    const addEntry = (date, item) => {
+        transactions.push({ date: date || '', sequence: sequence++, ...item });
+    };
+
+    if (isSecurity) {
+        if (staffSecurityReady) staffSecurityLedger
+            .forEach(entry => {
+                const amount = Number(entry.amount) || 0;
+                const incoming = entry.entry_type !== 'refund';
+                addEntry(entry.transaction_date, {
+                    voucher: entry.voucher_id || '',
+                    party: entry.staff_name || entry.staff_id || 'Staff',
+                    description: entry.entry_type === 'opening' ? 'Opening security' : entry.entry_type === 'deduction' ? 'Salary deduction' : 'Security refund',
+                    inAmount: incoming ? amount : 0,
+                    outAmount: incoming ? 0 : amount,
+                    searchText: `${entry.staff_name || ''} ${entry.staff_id || ''} ${entry.voucher_id || ''}`.toLowerCase()
+                });
+            });
+    } else {
+        if (selectedVendor) {
+            selectedVendor.payE.forEach(entry => addEntry(entry.date, {
+                voucher: entry.voucher || '',
+                party: selectedVendor.name,
+                description: entry.src === 'book' ? `Purchase${entry.title ? ' · ' + entry.title : ''}` : 'Purchase bill',
+                purchase: Number(entry.amt) || 0,
+                payment: 0
+            }));
+            selectedVendor.payS.filter(entry => entry.label === 'Payment').forEach(entry => addEntry(entry.date, {
+                voucher: entry.voucher || '',
+                party: selectedVendor.name,
+                description: 'Payment',
+                purchase: 0,
+                payment: Number(entry.amt) || 0,
+                account: entry.account || ''
+            }));
+            selectedVendor.payS.filter(entry => entry.label === 'Purchase return').forEach(entry => addEntry(entry.date, {
+                voucher: entry.voucher || '',
+                party: selectedVendor.name,
+                description: 'Purchase return',
+                purchase: -(Number(entry.amt) || 0),
+                payment: 0
+            }));
+        }
+    }
+
+    transactions.sort((a, b) => a.date.localeCompare(b.date) || a.sequence - b.sequence);
+    let runningBalance = 0;
+    transactions.forEach(entry => {
+        if (isSecurity) runningBalance += entry.inAmount - entry.outAmount;
+        else runningBalance += entry.purchase - entry.payment;
+        entry.balance = Math.round(runningBalance * 100) / 100;
+    });
+    const boundaryRow = (label, balance) => `<tr class="bg-slate-50 border-y border-slate-200 font-semibold"><td colspan="${isSecurity ? 5 : 4}" class="p-2.5 text-slate-600">${label}</td><td class="p-2.5 text-right font-bold text-indigo-900 whitespace-nowrap">PKR ${fmt(balance)}</td></tr>`;
+    let rows = '';
+    if(isSecurity) {
+        const visibleTransactions = duesLedgerOrder === 'oldest' ? transactions : [...transactions].reverse();
+        const filteredTransactions = visibleTransactions.filter(entry => !query || entry.searchText.includes(query));
+        rows = filteredTransactions.map(entry => {
+            const inAmount = entry.inAmount ? `PKR ${fmt(entry.inAmount)}` : '-';
+            const outAmount = entry.outAmount ? `PKR ${fmt(entry.outAmount)}` : '-';
+            const balanceClass = entry.balance < 0 ? 'text-rose-700' : 'text-indigo-900';
+            return `<tr class="border-b hover:bg-indigo-50/50 align-top">
+                <td class="p-2.5 whitespace-nowrap text-slate-600">${entry.date ? fmtDate(entry.date) : 'Date not recorded'}</td>
+                <td class="p-2.5 font-mono text-indigo-900 whitespace-nowrap">${esc(entry.voucher || '-')}</td>
+                <td class="p-2.5 text-slate-800">${esc(entry.party)}<div class="text-[11px] text-slate-500 mt-0.5">${esc(entry.description)}</div></td>
+                <td class="p-2.5 text-right font-semibold text-indigo-700 whitespace-nowrap">${inAmount}</td>
+                <td class="p-2.5 text-right font-semibold text-rose-600 whitespace-nowrap">${outAmount}</td>
+                <td class="p-2.5 text-right font-bold ${balanceClass} whitespace-nowrap">PKR ${fmt(entry.balance)}</td>
+            </tr>`;
+        }).join('');
+    } else {
+        const groups = new Map();
+        transactions.forEach(entry => {
+            const key = entry.date || 'unknown';
+            if(!groups.has(key)) groups.set(key, { key, date: entry.date, entries: [], purchase: 0, payment: 0, paymentAccounts: new Map(), hasPurchase: false, hasPayment: false, opening: 0, balance: 0 });
+            const group = groups.get(key);
+            group.entries.push(entry);
+            group.purchase += entry.purchase;
+            group.payment += entry.payment;
+            if(entry.payment) {
+                const paymentVoucher = entryById[String(entry.voucher || '')];
+                const sourceAccount = entry.account
+                    || (paymentVoucher && paymentVoucher.raw && paymentVoucher.raw.from_account)
+                    || (paymentVoucher && paymentVoucher.wallet)
+                    || '';
+                const walletKey = sourceAccount ? normWallet(sourceAccount) : '';
+                const accountLabel = walletKey && WALLETS[walletKey]
+                    ? WALLETS[walletKey].label
+                    : sourceAccount || 'Account not recorded';
+                group.paymentAccounts.set(accountLabel, (group.paymentAccounts.get(accountLabel) || 0) + entry.payment);
+            }
+            if(entry.purchase) group.hasPurchase = true;
+            if(entry.payment) group.hasPayment = true;
+            group.balance = entry.balance;
+        });
+        let visibleGroups = [...groups.values()];
+        let balanceBeforeGroup = 0;
+        visibleGroups.forEach(group => {
+            group.opening = balanceBeforeGroup;
+            balanceBeforeGroup = group.balance;
+        });
+        if(duesLedgerOrder === 'newest') visibleGroups.reverse();
+        rows = visibleGroups.map(group => {
+            const dateLabel = group.date ? fmtDate(group.date) : 'Date not recorded';
+            const purchaseBalance = Math.round((group.opening + group.purchase) * 100) / 100;
+            const renderDailyRow = (description, purchase, payment, balance, rowClass) => {
+                const balanceClass = balance < 0 ? 'text-rose-700' : 'text-indigo-900';
+                return `<tr class="${rowClass} border-b align-top">
+                    <td class="p-2.5 whitespace-nowrap text-slate-600">${dateLabel}</td>
+                    <td class="p-2.5 text-slate-800 font-medium">${description}</td>
+                    <td class="p-2.5 text-right font-semibold text-indigo-700 whitespace-nowrap">${purchase ? 'PKR ' + fmt(Math.abs(purchase)) : '-'}</td>
+                    <td class="p-2.5 text-right font-semibold text-rose-600 whitespace-nowrap">${payment ? 'PKR ' + fmt(payment) : '-'}</td>
+                    <td class="p-2.5 text-right font-bold ${balanceClass} whitespace-nowrap">PKR ${fmt(balance)}</td>
+                </tr>`;
+            };
+            const purchaseRow = group.hasPurchase
+                ? renderDailyRow(group.purchase < 0 ? 'Purchase return' : 'Purchase', group.purchase, 0, purchaseBalance, 'bg-indigo-50/50 hover:bg-indigo-50')
+                : '';
+            const paymentDescription = `Payment${group.paymentAccounts.size
+                ? `<div class="mt-1 space-y-0.5 text-[11px] font-normal text-slate-500">${[...group.paymentAccounts].map(([account, amount]) => `<div>PKR ${fmt(amount)} from ${esc(account)}</div>`).join('')}</div>`
+                : ''}`;
+            const paymentRow = group.hasPayment
+                ? renderDailyRow(paymentDescription, 0, group.payment, group.balance, 'bg-white hover:bg-indigo-50/40')
+                : '';
+            return purchaseRow + paymentRow;
+        }).join('');
+    }
+    const openingBalance = transactions.length
+        ? transactions[0].balance - (transactions[0].purchase || transactions[0].inAmount || 0) + (transactions[0].payment || transactions[0].outAmount || 0)
+        : 0;
+    const closingBalance = transactions.length ? transactions[transactions.length - 1].balance : 0;
+    const firstBoundary = duesLedgerOrder === 'oldest'
+        ? boundaryRow('Opening balance · brought forward', openingBalance)
+        : boundaryRow(isSecurity ? 'Closing balance' : 'Closing payable balance', closingBalance);
+    const lastBoundary = duesLedgerOrder === 'oldest'
+        ? boundaryRow(isSecurity ? 'Closing balance' : 'Closing payable balance', closingBalance)
+        : boundaryRow('Opening balance · brought forward', openingBalance);
+    const body = isSecurity && !staffSecurityReady
+        ? `<tr><td colspan="6" class="p-6 text-center text-slate-400">Staff security ledger data is unavailable.</td></tr>`
+        : !isSecurity && !selectedVendor
+            ? `<tr><td colspan="6" class="p-6 text-center text-slate-400">Select a vendor to view that party's purchases, payments, and running balance.</td></tr>`
+            : transactions.length
+                ? `${query && isSecurity ? '' : firstBoundary}${rows}${query && isSecurity ? '' : lastBoundary}`
+                : `<tr><td colspan="6" class="p-6 text-center text-slate-400">${isSecurity ? 'No staff security entries found.' : 'No purchase or payment transactions found for this vendor.'}</td></tr>`;
+    container.classList.remove('hidden');
+    const orderButton = (order, label) => `<button type="button" onclick="setDuesLedgerOrder('${order}')" aria-pressed="${duesLedgerOrder === order}" class="px-3 py-1.5 rounded-lg border text-xs font-semibold ${duesLedgerOrder === order ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">${label}</button>`;
+    const partyPicker = !isSecurity ? `<label class="flex items-center gap-2 text-xs font-medium text-slate-600"><span>Vendor</span><select onchange="selectVendorLedger(this.value)" class="border rounded-lg px-3 py-2 text-sm bg-white min-w-[220px]"><option value="">Select vendor</option>${vendorParties.map(p => `<option value="${esc(p.key)}" ${p.key === selectedVendorLedgerKey ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : '';
+    const inLabel = isSecurity ? 'IN' : 'Purchase';
+    const outLabel = isSecurity ? 'OUT' : 'Payment';
+    const balanceLabel = isSecurity ? 'Balance' : 'Balance payable';
+    container.innerHTML = `<div class="p-4 border-b flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-bold text-sm text-indigo-900">${esc(title)}</h3><p class="text-[11px] text-slate-500 mt-1">${isSecurity ? 'Staff security transactions with running balance.' : 'Daily totals are shown on separate Purchase and Payment rows, with the balance after each row.'}</p></div><div class="flex flex-wrap items-center gap-2">${partyPicker}<div class="flex gap-2" role="group" aria-label="Ledger date order">${orderButton('oldest', 'Oldest first')}${orderButton('newest', 'Newest first')}</div></div></div><div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th>${isSecurity ? '<th class="p-2.5">Voucher</th><th class="p-2.5">Particulars</th>' : '<th class="p-2.5">Activity</th>'}<th class="p-2.5 text-right">${inLabel}</th><th class="p-2.5 text-right">${outLabel}</th><th class="p-2.5 text-right">${balanceLabel}</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function openEntry(kind) {
+    editingId = null;
+    duesPaymentMode = 'bills';
+    const billModeRadio = document.querySelector('input[name="duesPaymentMode"][value="bills"]');
+    if(billModeRadio) billModeRadio.checked = true;
+    $('emBatchRows').innerHTML = '';
+    $('emDate').value = todayStr(); $('emAmount').value = ''; $('emHead').value = ''; $('emTitle2').value = ''; $('emNotes').value = '';
+    setWalletValue('emWallet', WALLET_CHOICES[0]); setWalletValue('emWallet2', WALLET_CHOICES[1] || WALLET_CHOICES[0]);
+    $('emVoucherNo').innerText = 'Voucher no: auto';
+    setEntryKind(kind);
+    if(kind === 'receipt' || kind === 'payment') addBatchEntry();
+    $('entryModal').classList.remove('hidden');
+}
+function updateBatchSaveLabel() {
+    const count = $('emBatchRows')?.children.length || 0;
+    $('emSaveBtn').innerText = count > 1 ? `Save ${count} entries` : 'Save voucher';
+}
+function addBatchEntry() {
+    if(entryKind !== 'receipt' && entryKind !== 'payment') return;
+    const rows = $('emBatchRows');
+    const row = document.createElement('div');
+    row.className = 'em-batch-row em-batch-grid rounded-xl border border-indigo-100 bg-indigo-50/40 p-2';
+    const walletOptions = WALLET_CHOICES.map(key => `<option value="${esc(key)}">${esc(WALLETS[key].icon)} ${esc(WALLETS[key].label)}</option>`).join('');
+    row.innerHTML = `<input data-field="amount" aria-label="Amount (PKR)" type="number" min="0.01" step="0.01" placeholder="Amount" class="w-full min-w-0 border rounded-lg p-2 text-sm font-semibold">
+        <input data-field="head" aria-label="${entryKind === 'payment' ? 'Expense head' : 'Income head'}" list="headList" placeholder="${entryKind === 'payment' ? 'Expense head' : 'Income head'}" class="w-full min-w-0 border rounded-lg p-2 text-sm">
+        <select data-field="wallet" aria-label="${entryKind === 'payment' ? 'Paid from account' : 'Received in account'}" class="w-full min-w-0 border rounded-lg p-2 text-sm bg-white">${walletOptions}</select>
+        <input data-field="title" aria-label="Particulars" list="partyNames" placeholder="Particulars" class="w-full min-w-0 border rounded-lg p-2 text-sm">
+        <input data-field="notes" aria-label="Notes" placeholder="Notes (optional)" class="w-full min-w-0 border rounded-lg p-2 text-sm">
+        <button type="button" onclick="removeBatchEntry(this)" aria-label="Remove entry" title="Remove entry" class="w-full h-9 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 font-bold">×</button>`;
+    rows.appendChild(row);
+    updateBatchSaveLabel();
+    row.querySelector('[data-field="amount"]').focus();
+}
+function removeBatchEntry(button) {
+    const row = button.closest('.em-batch-row');
+    if(row && $('emBatchRows').children.length === 1) {
+        row.querySelectorAll('[data-field]').forEach(field => {
+            if(field.dataset.field === 'wallet') field.selectedIndex = 0;
+            else field.value = '';
+        });
+        row.querySelector('[data-field="amount"]').focus();
+    } else row?.remove();
+    updateBatchSaveLabel();
+}
+document.addEventListener('keydown', event => {
+    if(event.key === 'Enter' && event.target.matches('#emDate') && $('entryModal').classList.contains('em-batch-mode')) {
+        event.preventDefault();
+        $('emBatchRows').querySelector('[data-field="amount"]')?.focus();
+        return;
+    }
+    const field = event.target.closest('#emBatchRows [data-field]');
+    if(!field || event.key !== 'Enter') return;
+    event.preventDefault();
+    const row = field.closest('.em-batch-row');
+    const fields = [...row.querySelectorAll('[data-field]')];
+    const nextIndex = fields.indexOf(field) + 1;
+    if(nextIndex < fields.length) fields[nextIndex].focus();
+    else addBatchEntry();
+});
+document.addEventListener('input', event => {
+    const field = event.target;
+    if(!field.matches('#emBatchRows [data-field="head"]')) return;
+    const firstRow = $('emBatchRows').firstElementChild;
+    if(field.closest('.em-batch-row') === firstRow) {
+        $('emHead').value = field.value;
+        updateDuesPicker();
+    }
+});
+function openPartnerWithdrawal() {
+    if(!ME || ME.role !== 'Admin') { toast('Only an Admin can record partner withdrawals.', false); return; }
+    if(!BUSINESS_PARTNERS.length) {
+        toast('Add the two partner names first in Settings → Business partners.', false);
+        return;
+    }
+    $('pwPartner').innerHTML = '<option value="">Select partner</option>' + BUSINESS_PARTNERS.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+    $('pwDate').value = todayStr();
+    $('pwAmount').value = '';
+    $('pwType').value = 'Profit distribution';
+    $('pwNotes').value = '';
+    setWalletValue('pwWallet', WALLET_CHOICES[0]);
+    $('partnerWithdrawalModal').classList.remove('hidden');
+}
+function closePartnerWithdrawal() { $('partnerWithdrawalModal').classList.add('hidden'); }
+async function savePartnerWithdrawal() {
+    if(!ME || ME.role !== 'Admin') { toast('Only an Admin can record partner withdrawals.', false); return; }
+    const partner = $('pwPartner').value.trim(), date = $('pwDate').value;
+    const amount = parseFloat($('pwAmount').value) || 0, wallet = $('pwWallet').value;
+    const type = $('pwType').value, notes = $('pwNotes').value.trim();
+    if(!BUSINESS_PARTNERS.includes(partner)) { toast('Select a partner from the list.', false); return; }
+    if(!date) { toast('Please select a date.', false); return; }
+    if(!Number.isFinite(amount) || amount <= 0) { toast('Amount must be greater than 0.', false); return; }
+    if(!WALLETS[wallet]) { toast('Select a valid payment account.', false); return; }
+    const id = genVoucherNo('partner_withdrawal');
+    const remarks = `Type: ${type}${notes ? ' | ' + notes : ''}`;
+    const payload = { voucher_id: id, from_account: wallet, to_account: 'Partner Drawings', description: partner, amount_in: 0, amount_out: amount, date, remarks };
+    showLoading('Saving partner withdrawal...');
+    try {
+        const c = getSupabaseConfig();
+        const res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(payload) });
+        if(!res.ok) { hideLoading(); toast('Could not save withdrawal: ' + await res.text(), false); return; }
+        closePartnerWithdrawal();
+        toast(`Partner withdrawal of PKR ${fmt(amount)} recorded for ${partner}.`);
+        await initAccounts();
+    } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
+}
+function editEntry(id) {
+    let e = entryById[id]; if(!e || !e.manual) return;
+    if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
+    if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
+    editingId = id;
+    $('emDate').value = e.date; $('emAmount').value = e.amount; $('emHead').value = (e.kind === 'receipt' || e.kind === 'payment') ? e.head : '';
+    $('emTitle2').value = e.title || ''; $('emNotes').value = e.notes || '';
+    setWalletValue('emWallet', e.wallet); setWalletValue('emWallet2', e.wallet2 || WALLET_CHOICES[1] || WALLET_CHOICES[0]);
+    setEntryKind(e.kind);
+    $('emVoucherNo').innerText = 'Voucher no: ' + id;
+    $('entryModal').classList.remove('hidden');
+}
+function quickEdit(id) {
+    const e = entryById[id]; if(!e) return;
+    if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
+    if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
+    $('qeVid').value = id; $('qeDate').value = e.date; $('qeAmount').value = e.amount; $('qeNotes').value = e.notes || '';
+    $('qeInfo').innerText = e.isFee ? `Fee payment: ${e.fee.student || ''} - ${titleCase(e.fee.type || '')} ${e.fee.period || ''}` : `${e.headLabel || e.head || ''}${e.title ? ' - ' + e.title : ''}`;
+    $('qeAcctLabel').innerText = (parseFloat(e.raw.amount_in) || 0) > 0 ? 'Received in (account)' : 'Paid from (account)';
+    $('qeWallet').innerHTML = Object.keys(WALLETS).map(k => `<option value="${esc(k)}">${WALLETS[k].icon} ${esc(WALLETS[k].label)}</option>`).join('');
+    $('qeWallet').value = e.wallet;
+    $('qeModal').classList.remove('hidden');
+}
+function closeQuickEdit() { $('qeModal').classList.add('hidden'); }
+async function saveQuickEdit() {
+    const id = $('qeVid').value, e = entryById[id]; if(!e) return;
+    if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
+    if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
+    const date = $('qeDate').value, amt = parseFloat($('qeAmount').value) || 0, w = $('qeWallet').value, notes = $('qeNotes').value.trim();
+    if(!date) { toast('Please enter a date.', false); return; }
+    if(amt <= 0) { toast('Amount must be greater than 0.', false); return; }
+    const isIn = (parseFloat(e.raw.amount_in) || 0) > 0, patch = { date, remarks: notes };
+    if(isIn) { patch.amount_in = amt; patch.to_account = w; } else { patch.amount_out = amt; patch.from_account = w; }
+    showLoading('Saving...');
+    try {
+        const c = getSupabaseConfig();
+        const res = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=representation" }), body: JSON.stringify(patch) });
+        if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
+        const done = await res.json();
+        if(!Array.isArray(done) || !done.length) { hideLoading(); toast('Nothing was changed (check permissions / RLS).', false); return; }
+        closeQuickEdit(); toast('Entry updated.');
+        await initAccounts();
+    } catch (err) { hideLoading(); console.error(err); toast('Connection error.', false); }
+}
+function closeEntry() {
+    $('entryModal').classList.add('hidden');
+    editingId = null;
+    $('emBatchRows').innerHTML = '';
+    updateBatchSaveLabel();
+}
+
+async function saveEntry() {
+    let kind = entryKind;
+    const batchMode = !editingId && (kind === 'receipt' || kind === 'payment');
+    const batchRows = batchMode ? [...document.querySelectorAll('#emBatchRows .em-batch-row')] : [];
+    const batchItems = batchRows.map(row => ({
+        amount: parseFloat(row.querySelector('[data-field="amount"]').value) || 0,
+        head: row.querySelector('[data-field="head"]').value.trim(),
+        wallet: row.querySelector('[data-field="wallet"]').value,
+        title: row.querySelector('[data-field="title"]').value.trim(),
+        notes: row.querySelector('[data-field="notes"]').value.trim()
+    }));
+    if(batchMode && batchItems.length) {
+        const first = batchItems[0];
+        $('emAmount').value = first.amount || '';
+        $('emHead').value = first.head;
+        $('emWallet').value = first.wallet;
+        $('emTitle2').value = first.title;
+        $('emNotes').value = first.notes;
+    }
+    let date = $('emDate').value, amount = parseFloat($('emAmount').value) || 0;
+    let head = $('emHead').value.trim(), title = $('emTitle2').value.trim(), notes = $('emNotes').value.trim();
+    let w = $('emWallet').value, w2 = $('emWallet2').value;
+    if(!date) { toast('Please enter a date.', false); return; }
+    if(batchMode && !batchItems.length) { toast('Add at least one entry.', false); return; }
+    if(amount <= 0) { toast('Amount must be greater than 0.', false); return; }
+ if(duesSide && !editingId && kind === 'payment' && duesPaymentMode === 'standalone') {
+     if(batchItems.length > 1) { toast('Vendor payments must be recorded one voucher at a time.', false); return; }
+     await saveStandaloneVendorPayment(date, amount, w, notes); return;
+ }
+ if(duesSide && !editingId && (kind === 'receipt' || kind === 'payment')) {
+     if(batchItems.length > 1) { toast('Pending bills must be settled one entry at a time.', false); return; }
+     await saveAgainstBills(kind, date, amount, w, notes); return;
+ }
+ if((kind === 'bill_raised' || kind === 'bill_received') && !title) { toast('Please enter the party name.', false); return; }
+    if((kind === 'receipt' || kind === 'payment') && !head) { toast('Please enter or select a head (category).', false); return; }
+    if(kind === 'transfer' && w === w2) { toast('From and To accounts must be different.', false); return; }
+
+    if(batchItems.length > 1) {
+        for(let i = 0; i < batchItems.length; i++) {
+            const item = batchItems[i];
+            if(item.amount <= 0) { toast(`Enter an amount greater than 0 for entry ${i + 1}.`, false); return; }
+            if(!item.head) { toast(`Enter a category for entry ${i + 1}.`, false); return; }
+            if(!WALLETS[item.wallet]) { toast(`Select a valid account for entry ${i + 1}.`, false); return; }
+            if((kind === 'receipt' && isRecvHead(item.head)) || (kind === 'payment' && isPayHead(item.head))) {
+                toast('Pending-bill categories must be recorded one entry at a time.', false);
+                return;
+            }
+        }
+        const usedIds = new Set();
+        const payloads = batchItems.map(item => {
+            let id;
+            do { id = genVoucherNo(kind); } while(usedIds.has(id));
+            usedIds.add(id);
+            return kind === 'receipt'
+                ? { voucher_id: id, from_account: item.head, to_account: item.wallet, description: item.title || item.head, amount_in: item.amount, amount_out: 0, date, remarks: item.notes }
+                : { voucher_id: id, from_account: item.wallet, to_account: item.head, description: item.title || item.head, amount_in: 0, amount_out: item.amount, date, remarks: item.notes };
+        });
+        showLoading(`Saving ${payloads.length} entries...`);
+        try {
+            const c = getSupabaseConfig();
+            const res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(payloads) });
+            if(!res.ok) { hideLoading(); toast('Could not save entries: ' + await res.text(), false); return; }
+            closeEntry();
+            toast(`${payloads.length} entries saved for ${fmtDate(date)}.`);
+            await initAccounts();
+        } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
+        return;
+    }
+
+    let id = editingId || genVoucherNo(kind);
+    let oldEntry = editingId ? entryById[editingId] : null;
+    if(oldEntry && oldEntry.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
+    if(oldEntry && oldEntry.legacy) id = genVoucherNo(kind);   // old-format entry gets converted to the new format
+
+    let payload;
+    if(kind === 'receipt')       payload = { voucher_id: id, from_account: head, to_account: w, description: title || head, amount_in: amount, amount_out: 0, date, remarks: notes };
+    else if(kind === 'payment')  payload = { voucher_id: id, from_account: w, to_account: head, description: title || head, amount_in: 0, amount_out: amount, date, remarks: notes };
+    else if(kind === 'bill_raised') payload = { voucher_id: id, from_account: 'Accounts Receivable', to_account: 'Bill', description: title, amount_in: amount, amount_out: 0, date, remarks: notes };
+ else if(kind === 'bill_received') payload = { voucher_id: id, from_account: 'Bill', to_account: 'Accounts Payable', description: title, amount_in: 0, amount_out: amount, date, remarks: notes };
+ else if(kind === 'transfer') payload = { voucher_id: id, from_account: w, to_account: w2, description: title || 'Account transfer', amount_in: amount, amount_out: amount, date, remarks: notes };
+    else                         payload = { voucher_id: id, from_account: 'Opening Balance', to_account: w, description: 'Opening Balance', amount_in: amount, amount_out: 0, date, remarks: notes };
+
+    showLoading('Saving...');
+    try {
+        let c = getSupabaseConfig(), res;
+        if(editingId) {
+            res = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(editingId)}`, { method: 'PATCH', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=representation" }), body: JSON.stringify(payload) });
+        } else {
+            res = await fetch(`${c.url}/rest/v1/accounts`, { method: 'POST', headers: sbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }), body: JSON.stringify(payload) });
+        }
+        if(!res.ok) { let t = await res.text(); hideLoading(); toast('Could not save: ' + t, false); return; }
+        closeEntry();
+        toast(editingId ? 'Voucher updated.' : `Voucher ${id} saved.`);
+        await initAccounts();
+    } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
+}
+
+// ====================================================================================
+//  DELETE
+// ====================================================================================
+function deleteSelectedDaybookEntries() {
+    const selected = daybookRows().filter(e => dbSelectedEntries.has(e.id) && isDaybookEntryDeletable(e));
+    if(!selected.length) {
+        dbSelectedEntries.clear();
+        renderDaybook();
+        return;
+    }
+    const ids = selected.map(e => e.id);
+    confirmBox(`Permanently delete ${ids.length} selected entr${ids.length === 1 ? 'y' : 'ies'}? Fee payments will reopen the related balances. Entries managed by Assets or Payroll cannot be deleted here.`, 'Delete selected', async () => {
+        showLoading('Deleting selected entries...');
+        const deletedIds = new Set(), failures = [];
+        let deletionAttempted = false;
+        try {
+            const c = getSupabaseConfig();
+            for(let i = 0; i < ids.length; i += 50) {
+                const batch = ids.slice(i, i + 50);
+                try {
+                    const encodedIds = batch.map(id => encodeURIComponent(id)).join(',');
+                    deletionAttempted = true;
+                    const res = await fetch(`${c.url}/rest/v1/accounts?voucher_id=in.(${encodedIds})`, {
+                        method: 'DELETE',
+                        headers: sbHeaders({ "Prefer": "return=representation" })
+                    });
+                    if(!res.ok) {
+                        failures.push(`Batch ${Math.floor(i / 50) + 1}: ${await res.text()}`);
+                        continue;
+                    }
+                    const gone = await res.json();
+                    if(!Array.isArray(gone)) {
+                        failures.push(`Batch ${Math.floor(i / 50) + 1}: the database returned an unexpected response.`);
+                        continue;
+                    }
+                    gone.forEach(row => {
+                        if(row && row.voucher_id != null) deletedIds.add(String(row.voucher_id));
+                    });
+                    if(gone.length !== batch.length) {
+                        failures.push(`Batch ${Math.floor(i / 50) + 1}: expected ${batch.length} deletions but the database confirmed ${gone.length}.`);
+                    }
+                } catch(err) {
+                    console.error('Could not delete a selected Daybook batch.', err);
+                    failures.push(`Batch ${Math.floor(i / 50) + 1}: ${err.message || 'connection error'}`);
+                }
+            }
+            hideLoading();
+            if(deletedIds.size > 0) dbSelectedEntries.clear();
+            if(deletionAttempted) await initAccounts();
+            if(failures.length) {
+                console.error('Some selected Daybook entries were not confirmed as deleted.', failures);
+                toast(`Deleted ${deletedIds.size} of ${ids.length}. Some entries could not be deleted; see the console for details.`, false);
+            } else {
+                toast(`${deletedIds.size} selected entr${deletedIds.size === 1 ? 'y' : 'ies'} deleted.`);
+            }
+        } catch(err) {
+            hideLoading();
+            console.error('Could not complete the selected Daybook deletion.', err);
+            toast(`Could not complete deletion. ${deletedIds.size} of ${ids.length} deletions were confirmed.`, false);
+        }
+    });
+}
+
+function deleteEntry(id) {
+    let e = entryById[id]; if(!e) return;
+    if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
+    if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
+ if(e.kind === 'bill_raised' || e.kind === 'bill_received') { const n = entries.filter(x => x.billRef === e.id).length; if(n) { toast(`This bill has ${n} receipt/payment entr${n > 1 ? 'ies' : 'y'}. Delete those first.`, false); return; } }
+    let msg = e.isFee
+        ? `This is a fee payment for ${e.fee.student || 'a student'} (PKR ${fmt(e.amount)}, ${e.fee.period || ''}).\n\nDeleting it will reopen the balance on the Fee Vouchers page.\n\nDelete it?`
+        : `${KIND_META[e.kind].label} voucher ${e.id} (PKR ${fmt(e.amount)}) will be permanently deleted. Delete it?`;
+    confirmBox(msg, 'Yes, delete', async () => {
+        showLoading('Deleting...');
+        try {
+            let c = getSupabaseConfig();
+            let res = await fetch(`${c.url}/rest/v1/accounts?voucher_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: sbHeaders({ "Prefer": "return=representation" }) });
+            if(!res.ok) { hideLoading(); toast('Could not delete: ' + await res.text(), false); return; }
+            let gone = await res.json();
+            if(!Array.isArray(gone) || gone.length === 0) { hideLoading(); toast('Entry was not deleted (check permissions / RLS).', false); return; }
+            toast('Entry deleted.');
+            await initAccounts();
+        } catch (err) { hideLoading(); toast('Connection error.', false); }
+    });
+}
+
+// ====================================================================================
+//  PRINT VOUCHER
+// ====================================================================================
+function printVoucher(id) {
+    let e = entryById[id]; if(!e) return;
+    let meta = e.isPartnerWithdrawal ? KIND_META.partner_withdrawal : KIND_META[e.kind];
+    let who = e.kind === 'receipt' ? 'Received from / Head' : (e.kind === 'payment' ? 'Paid to / Head' : (e.kind === 'transfer' ? 'Transfer' : 'Account'));
+    let whoVal = e.isFee ? `${(e.fee || {}).student || ''}${(e.fee || {}).cls ? ' (Class ' + e.fee.cls + ')' : ''}` :
+        (e.kind === 'transfer' ? `${WALLETS[e.wallet].label} → ${WALLETS[e.wallet2].label}` : e.head);
+    let particulars = e.isFee ? `${titleCase((e.fee || {}).type || 'Fee')} ${(e.fee || {}).period ? '(' + e.fee.period + ')' : ''}` : (e.title || e.head);
+    let acct = e.kind === 'transfer' ? '-' : WALLETS[e.wallet].label;
+    let html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(meta.title)} ${esc(e.id)}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:0;padding:28px}
+      .box{border:2px solid #1e1b4b;border-radius:6px;padding:22px;max-width:640px;margin:0 auto}
+      h1{margin:0;font-size:20px;text-align:center;color:#1e1b4b} .sub{text-align:center;font-size:12px;color:#64748b;margin-bottom:12px}
+      .ttl{text-align:center;font-weight:bold;font-size:15px;border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;padding:6px 0;margin:10px 0 16px;letter-spacing:.5px}
+      table{width:100%;border-collapse:collapse;font-size:13px} td{padding:7px 4px;vertical-align:top} td.l{width:34%;color:#475569}
+      .amt{font-size:20px;font-weight:bold;border:2px solid #1e1b4b;padding:6px 14px;display:inline-block;margin-top:8px}
+      .sig{display:flex;justify-content:space-between;margin-top:46px;font-size:12px} .sig div{border-top:1px solid #334155;padding-top:4px;width:30%;text-align:center}
+    </style></head><body><div class="box">
+      <h1>Concept School</h1><div class="sub">Shibra Campus</div>
+      <div class="ttl">${esc(meta.title.toUpperCase())}</div>
+      <table>
+        <tr><td class="l">Voucher No</td><td><b>${esc(e.isFee ? e.id : e.id)}</b></td></tr>
+        <tr><td class="l">Date</td><td>${fmtDate(e.date)}</td></tr>
+        <tr><td class="l">${who}</td><td>${esc(whoVal)}</td></tr>
+        <tr><td class="l">Particulars</td><td>${esc(particulars)}${e.notes ? '<br><span style="color:#64748b">' + esc(e.notes) + '</span>' : ''}</td></tr>
+        <tr><td class="l">Account</td><td>${esc(acct)}</td></tr>
+        <tr><td class="l">Amount</td><td><span class="amt">PKR ${fmt(e.amount)}</span></td></tr>
+        <tr><td class="l">In words</td><td>Rupees ${numToWords(e.amount)} Only</td></tr>
+      </table>
+      <div class="sig"><div>Prepared by</div><div>Approved by</div><div>${e.kind === 'payment' ? 'Received by' : 'Signature'}</div></div>
+    </div></body></html>`;
+    let f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(f);
+    f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+    setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 1500); }, 300);
+}
+
+// ====================================================================================
+//  SETTINGS
+// ====================================================================================
+
+
+
+document.addEventListener('keydown', ev => { if(ev.key === 'Escape') { closeEntry(); } });
+
+function updateStatementsShortcut() { const b = document.getElementById('stmtShortcut'); if (b) b.hidden = !(typeof ME !== 'undefined' && ME && ME.perms && can('reports', 'v')); }
+document.addEventListener('shibra:me-ready', updateStatementsShortcut);
