@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept School Shibra Campus - Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="css/theme.css?v=20261029-1">
+    <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/db.js?v=20261029-1"></script>
+    <script src="js/core/nav.js?v=20261029-1"></script>
+    <script src="js/core/ui.js?v=20261029-1"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans" onload="initDashboard()">
+<div class="min-h-screen flex flex-col md:flex-row">
+    <aside id="appNav"></aside>
+    <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
+        <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3 page-hero p-5 md:p-7 rounded-2xl">
+            <div>
+                <div class="page-kicker mb-2">Shibra Campus · Overview</div><h2 class="text-xl md:text-3xl font-extrabold text-indigo-950 tracking-tight">Concept School Shibra Campus</h2>
+                <p id="dateLine" class="text-sm text-slate-500 font-medium"></p>
+            </div>
+            <button onclick="initDashboard()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold">🔄 Refresh</button>
+        </div>
+
+        <div id="cards" class="grid grid-cols-2 lg:grid-cols-3 gap-3 items-start"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                <h3 class="font-bold text-indigo-900 text-sm mb-3">Active students’ pending dues by class (up to this month)</h3>
+                <div id="classRows" class="space-y-2 text-sm"></div>
+            </section>
+            <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                <h3 class="font-bold text-indigo-900 text-sm mb-3">Quick actions</h3>
+                <div id="quickActions" class="grid grid-cols-2 gap-2 text-sm font-semibold">
+                    <a href="students.html" class="border rounded-xl p-3 hover:bg-slate-50">👨‍🎓 Students</a>
+                    <a href="fees.html" class="border rounded-xl p-3 hover:bg-slate-50">💸 Fee Vouchers</a>
+                    <a href="followups.html" class="border rounded-xl p-3 hover:bg-slate-50">📞 Follow-up Calls</a>
+                    <a href="accounts.html" class="border rounded-xl p-3 hover:bg-slate-50">💰 Accounts &amp; Daybook</a>
+                    <a href="books.html" class="border rounded-xl p-3 hover:bg-slate-50">📚 Book Store</a>
+                    <a href="staff.html" class="border rounded-xl p-3 hover:bg-slate-50">👩‍🏫 Staff &amp; Payroll</a>
+                    <a href="statements.html" class="border rounded-xl p-3 hover:bg-slate-50">🧮 Financial Statements</a>
+                    <a href="reports.html" class="border rounded-xl p-3 hover:bg-slate-50">📈 Business Reports</a>
+                    <a href="increments.html" class="border rounded-xl p-3 hover:bg-slate-50">⚡ Bulk Updation</a>
+                    <a href="settings.html" class="border rounded-xl p-3 hover:bg-slate-50">⚙️ System Settings</a>
+                </div>
+                <p id="warnLine" class="text-xs text-amber-700 mt-3"></p>
+            </section>
+        </div>
+        <footer class="text-center text-xs text-slate-400 pt-4">Concept School Shibra Campus &copy; <span id="copyrightYear"></span></footer>
+    </main>
+</div>
+<script src="js/pages/index.js?v=20261029-1"></script>
+</body>
+</html>

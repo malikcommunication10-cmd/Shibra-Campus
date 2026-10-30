@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fee Vouchers - Concept School Shibra Campus</title>
+<script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <link rel="stylesheet" href="css/theme.css?v=20261029-1">
+    <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/db.js?v=20261029-1"></script>
+    <script src="js/core/nav.js?v=20261029-1"></script>
+    <script src="js/core/ui.js?v=20261029-1"></script>
+<style>
+body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+.inp{width:100%;border:1px solid #cbd5e1;border-radius:.6rem;padding:.6rem .75rem;font-size:.85rem;background:#fff;outline:none}
+.inp:focus{border-color:#4f46e5;box-shadow:0 0 0 3px #e0e7ff}
+.inp[readonly]{background:#f1f5f9}
+.lbl{display:block;font-size:.72rem;font-weight:600;color:#475569;margin-bottom:.25rem}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;border-radius:.6rem;font-weight:600;font-size:.8rem;padding:.55rem .9rem;transition:.15s;cursor:pointer}
+.b-pri{background:#4338ca;color:#fff}.b-pri:hover{background:#3730a3}
+.b-ok{background:#059669;color:#fff}.b-ok:hover{background:#047857}
+.b-gh{background:#f1f5f9;color:#334155}.b-gh:hover{background:#e2e8f0}
+.b-rd{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}.b-rd:hover{background:#ffe4e6}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:50;display:none;align-items:center;justify-content:center;padding:1rem}
+.modal.open{display:flex}
+.sheet{background:#fff;border-radius:1rem;width:100%;max-height:92vh;overflow-y:auto;padding:1.25rem;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.badge{display:inline-block;padding:.1rem .55rem;border-radius:999px;font-size:.68rem;font-weight:700}
+.nav a{display:flex;gap:.6rem;align-items:center;padding:.6rem .8rem;border-radius:.6rem;color:#c7d2fe;font-size:.85rem}
+.nav a:hover{background:rgba(255,255,255,.08)}.nav a.on{background:#4338ca;color:#fff;font-weight:600}
+table.rt th{padding:.65rem .6rem;font-size:.7rem;font-weight:700;color:#475569;text-align:left;white-space:nowrap}
+table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
+@media(max-width:767px){
+ table.rt thead{display:none}
+ table.rt,table.rt tbody{display:block}
+ table.rt tr{display:block;margin:.6rem;border:1px solid #e2e8f0;border-radius:.8rem;padding:.4rem .7rem;background:#fff}
+ table.rt td{display:flex;justify-content:space-between;gap:1rem;border:0;padding:.3rem 0;text-align:right}
+ table.rt td::before{content:attr(data-l);color:#94a3b8;font-weight:600;text-align:left}
+ table.rt td.nl::before{content:none}
+}
+@media print{
+ body *{visibility:hidden!important}
+ #ledgerModal,#ledgerModal *{visibility:visible!important}
+ #ledgerModal{position:absolute!important;left:0;top:0;width:100%;background:#fff!important;display:block!important;padding:0!important}
+ #ledgerSheet{box-shadow:none!important;max-height:none!important;max-width:100%!important}
+ .no-print{display:none!important}
+}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800" onload="initFeePage()">
+
+<div id="loadingOverlay" class="fixed inset-0 bg-slate-900/50 z-[70] hidden flex-col items-center justify-center text-white">
+  <div class="animate-spin rounded-full h-11 w-11 border-4 border-white border-t-transparent mb-3"></div>
+  <p id="loadingText" class="text-sm font-semibold">Processing...</p>
+</div>
+
+<div id="alertModal" class="modal no-print" style="z-index:80"><div class="sheet max-w-sm text-center space-y-4">
+  <p id="alertMsg" class="text-sm font-medium text-slate-700" style="white-space:pre-line"></p>
+  <button onclick="closeAlert()" class="btn b-pri w-full">OK</button></div></div>
+
+<div id="confirmModal" class="modal no-print" style="z-index:90"><div class="sheet max-w-sm text-center space-y-4">
+  <p id="confirmMsg" class="text-sm font-medium text-slate-700" style="white-space:pre-line"></p>
+  <div class="flex gap-2"><button id="confirmNo" class="btn b-gh flex-1">Cancel</button><button id="confirmYes" class="btn b-ok flex-1">Proceed</button></div></div></div>
+
+<!-- Mobile top bar -->
+<div class="md:flex min-h-screen">
+  <aside id="appNav"></aside>
+
+  <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
+    <div class="no-print page-hero p-5 md:p-7 rounded-2xl">
+      <div class="page-kicker mb-2">Shibra Campus · Fee management</div><h2 class="text-xl md:text-2xl font-extrabold text-indigo-950">Fee Vouchers</h2>
+      <p class="text-xs md:text-sm text-slate-500">Generate vouchers linked with increments and record payments</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Vouchers</div><div id="stCount" class="text-lg font-extrabold text-slate-900">0</div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Total payable</div><div id="stPayable" class="text-lg font-extrabold text-slate-900">0</div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Collected</div><div id="stPaid" class="text-lg font-extrabold text-emerald-600">0</div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Pending</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div></div>
+    </div>
+
+    <div id="afBanner" class="hidden no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3"></div>
+
+    <!-- Generate -->
+    <section class="bg-white rounded-xl border overflow-hidden no-print">
+      <button onclick="toggleGen()" class="w-full px-4 py-3 flex justify-between items-center text-sm font-semibold text-indigo-800 bg-indigo-50/60">
+        <span>⚡ Generate fee vouchers</span><span id="genArrow">▼</span></button>
+      <div id="genBox" class="hidden p-4 border-t space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label class="lbl">Period / month</label>
+            <select id="voucherPeriod" class="inp" onchange="renderPicker()"></select></div>
+          <div><label class="lbl">Class</label>
+            <select id="voucherClassSelect" class="inp" onchange="selStu.clear();renderPicker()"><option value="ALL">All classes</option></select></div>
+        </div>
+        <div id="stuPanel" class="hidden rounded-xl border bg-slate-50 p-3 space-y-2">
+          <div class="flex flex-wrap items-center gap-2"><div class="lbl" style="margin:0">Students (optional: nothing selected = whole class)</div><span id="stuCount" class="badge bg-indigo-50 text-indigo-700"></span></div>
+          <div class="flex flex-wrap gap-2">
+            <input id="stuSearch" oninput="renderPicker()" class="inp flex-1" style="min-width:140px" placeholder="Search student...">
+            <button type="button" class="btn b-gh" onclick="pickStu('all')">All</button>
+            <button type="button" class="btn b-gh" onclick="pickStu('missing')">Missing voucher only</button>
+            <button type="button" class="btn b-gh" onclick="pickStu('none')">Clear</button>
+          </div>
+          <div id="stuList" class="max-h-56 overflow-y-auto bg-white border rounded-lg divide-y"></div>
+          <p class="text-xs text-slate-500">"Create / Update selected": missing vouchers are created, unpaid vouchers are updated to the current increment fee, and paid vouchers are not touched (delete the payment from Accounts first).</p>
+        </div>
+        <div class="rounded-xl border bg-slate-50 p-3 space-y-3">
+          <div class="lbl" style="margin:0">Voucher numbering</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label class="flex items-start gap-2 border rounded-lg p-2.5 bg-white cursor-pointer text-sm"><input type="radio" name="vidMode" value="auto" checked onchange="vidModeChange()" class="mt-1"><span><b>Auto</b><br><span class="text-xs text-slate-500">Random unique numbers</span></span></label>
+            <label class="flex items-start gap-2 border rounded-lg p-2.5 bg-white cursor-pointer text-sm"><input type="radio" name="vidMode" value="manual" onchange="vidModeChange()" class="mt-1"><span><b>Manual start</b><br><span class="text-xs text-slate-500">Sequential from your number</span></span></label>
+          </div>
+          <div id="manualBox" class="hidden">
+            <label class="lbl">Starting number (e.g. V-586545 or 586545)</label>
+            <input id="vidStart" class="inp font-mono" placeholder="V-586545" oninput="updateVidHint()">
+            <p id="vidHint" class="text-xs text-slate-500 mt-1"></p>
+          </div>
+        </div>
+        <div id="warnBox" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 space-y-1"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button onclick="generateVouchers()" class="btn b-pri">Generate vouchers</button>
+          <button onclick="generateVouchers(true)" class="btn b-ok">Create / Update selected</button>
+          <button onclick="generateAnnualFund()" class="btn b-gh sm:col-span-2">🎁 Create annual fund vouchers (from Bulk Updation)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- List -->
+    <section class="bg-white rounded-xl border overflow-hidden">
+      <div class="p-3 md:p-4 border-b space-y-3 no-print">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="font-bold text-indigo-900 text-sm md:text-base">Generated vouchers</h3>
+          <div class="flex gap-2 flex-wrap justify-end">
+            <button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
+            <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
+            <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
+            <button onclick="downloadArrearsReconciliation()" class="btn b-gh">🧾 2025 arrears check</button>
+            <button onclick="downloadVouchersCsv()" class="btn b-gh">⬇️ CSV</button>
+            <button onclick="deleteSelectedVouchers()" class="btn b-rd">🗑️ Delete</button>
+            <button onclick="initFeePage()" class="btn b-gh">🔄 Refresh</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <input id="searchInput" oninput="filterVouchers()" placeholder="Search ID or name..." class="inp col-span-2">
+          <select id="filterPeriod" onchange="filterVouchers()" class="inp"><option value="ALL">All periods</option></select>
+          <select id="filterStatus" onchange="filterVouchers()" class="inp">
+            <option value="ALL">All status</option><option>Unpaid</option><option>Partial</option><option>Paid</option></select>
+          <select id="filterItem" onchange="filterVouchers()" class="inp"><option value="ALL">All fee items</option></select>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
+          <div><label class="lbl">From month</label><select id="fromMonth" class="inp" onchange="filterVouchers()"></select></div>
+          <div><label class="lbl">To month</label><select id="toMonth" class="inp" onchange="filterVouchers()"></select></div>
+          <button onclick="resetRange()" class="btn b-gh col-span-2 md:col-span-1">Reset (Jan to current month)</button>
+        </div>
+        <label class="md:hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" onchange="toggleSelectAll(this)"> Select all</label>
+      </div>
+      <div id="voucherView" class="overflow-x-auto md:max-h-[70vh]">
+        <table class="rt w-full border-collapse">
+          <thead class="bg-slate-50 sticky top-0"><tr>
+            <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
+            <th>Sr</th><th>Voucher ID</th><th>Admis No</th><th>Student</th><th>Siblings</th><th>Items</th><th>Period</th>
+            <th>Payable</th><th>Paid</th><th>Balance</th><th>Class</th><th>Status</th><th>Date(s)</th><th>Action</th></tr></thead>
+          <tbody id="feesTableBody"><tr><td colspan="15" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
+        </table>
+      </div>
+      <div id="summaryView" class="hidden overflow-x-auto md:max-h-[70vh]">
+        <table class="rt w-full border-collapse"><thead id="sumHead" class="bg-slate-50 sticky top-0"></thead><tbody id="sumBody"></tbody></table>
+      </div>
+      <div id="feesTableFooter" class="no-print border-t bg-slate-50 p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Ledger -->
+<div id="ledgerModal" class="modal"><div id="ledgerSheet" class="sheet max-w-4xl">
+  <div class="flex justify-between items-start border-b pb-3 mb-3 gap-2">
+    <div><h3 class="font-bold text-indigo-950">Concept School - Student Fee Ledger</h3><p id="ledgerStudentInfo" class="text-xs text-slate-500 mt-0.5"></p></div>
+    <div class="flex gap-2 no-print"><button onclick="window.print()" class="btn b-pri">🖨️ Print</button><button onclick="closeLedgerModal()" class="btn b-gh">✕</button></div>
+  </div>
+  <div id="ledgerApplied" class="overflow-x-auto"></div>
+  <div class="font-bold text-xs text-indigo-950 mb-1">Transaction statement</div>
+  <div class="overflow-x-auto mb-3"><table class="w-full text-xs text-left">
+    <thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr></thead>
+    <tbody id="ledgerTableBody"></tbody></table></div>
+  <div class="bg-slate-50 p-3 rounded-xl border flex flex-wrap justify-between gap-2 text-xs font-semibold">
+    <div>Total charges: <span id="ledgerTotalPayable" class="text-indigo-900"></span></div>
+    <div>Paid: <span id="ledgerTotalPaid" class="text-emerald-600"></span></div>
+    <div>Balance: <span id="ledgerTotalBalance" class="text-rose-600"></span></div>
+ <div id="ledgerDue" class="w-full text-[11px] font-normal text-slate-500"></div></div>
+</div></div>
+
+<!-- Bulk pay -->
+<div id="bulkPayModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">⚡ Bulk pay (FIFO)</h3>
+  <div><label class="lbl">Total filtered unpaid dues</label><input id="bulkTotalDues" readonly class="inp font-bold text-rose-600"></div>
+  <div><label class="lbl">Received amount</label><input type="number" id="bulkReceivedAmount" class="inp font-bold text-emerald-600"></div>
+  <div><label class="lbl">Deposit to</label><select id="bulkAccount" class="inp"><option value="cash">Cash</option></select></div>
+  <div><label class="lbl">Payment date</label><input type="date" id="bulkPayDate" class="inp"></div>
+  <div><label class="lbl">Remarks</label><input id="bulkPayRemarks" placeholder="Bulk payment via FIFO" class="inp"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeBulkPayModal()" class="btn b-gh">Cancel</button><button onclick="submitBulkFifoPayment()" class="btn b-ok">Save & distribute</button></div>
+</div></div>
+
+<!-- Pay -->
+<div id="payModal" class="modal no-print"><div class="sheet max-w-lg">
+  <h3 class="font-bold text-indigo-800 mb-3">💳 Fee payment receipt</h3>
+  <form onsubmit="submitPayment(event)" class="space-y-3">
+    <div class="grid grid-cols-2 gap-2">
+      <div><label class="lbl">Voucher ID</label><input id="payVoucherId" readonly class="inp font-mono"></div>
+      <div><label class="lbl">Student</label><input id="payStudentName" readonly class="inp font-semibold"></div></div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div><label class="lbl">From account (fee type)</label><input id="payFromAccount" readonly class="inp"></div>
+      <div><label class="lbl">Deposit to</label><select id="payToAccount" class="inp"><option value="cash">Cash</option></select></div></div>
+    <div class="grid grid-cols-3 gap-2">
+      <div><label class="lbl">Payable</label><input type="number" id="payPayable" readonly class="inp font-bold"></div>
+      <div><label class="lbl">Amount</label><input type="number" id="payAmountIn" required class="inp font-bold text-emerald-600"></div>
+      <div><label class="lbl">Date</label><input type="date" id="payDate" required class="inp"></div></div>
+    <div><label class="lbl">Remarks</label><input id="payRemarks" placeholder="Optional" class="inp"></div>
+    <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closePayModal()" class="btn b-gh">Cancel</button><button type="submit" class="btn b-ok">Save receipt</button></div>
+  </form>
+</div></div>
+
+<div id="importModal" class="modal no-print"><div class="sheet max-w-4xl space-y-3">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">📥 Import paid fees (Excel / CSV)</h3>
+  <p class="text-xs text-slate-500">Columns: voucher_id (Admission No), from_account (name), to_account, amount_in, date, remarks (class). Each payment goes to the tuition voucher of the month of its received date, and that same date is saved in Accounts.</p>
+  <input type="file" id="importFile" accept=".xlsx,.xls,.csv" class="inp">
+  <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="importFixYear" checked> Set the year of all dates to the configured school year</label>
+  <button onclick="readImport()" class="btn b-gh w-full">Read file & preview</button>
+  <div id="importPreview" class="text-xs"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeModal('importModal')" class="btn b-gh">Close</button><button id="importConfirm" onclick="confirmImport()" class="btn b-ok hidden">Confirm & import</button></div>
+</div></div>
+
+<div id="syncModal" class="modal no-print"><div class="sheet max-w-4xl space-y-3">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">🔁 Sync vouchers with increments, DOJ & left date</h3>
+  <p class="text-xs text-slate-500">Checks the vouchers in the current filter. Updates on unpaid vouchers are ticked by default; paid vouchers and deletions are not, tick them yourself.</p>
+  <div id="syncList" class="text-xs overflow-auto max-h-[55vh] border rounded-lg"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeModal('syncModal')" class="btn b-gh">Close</button><span id="syncCount" class="text-xs text-slate-500 mr-auto self-center"></span><button onclick="applySync()" class="btn b-pri">Apply selected</button></div>
+</div></div>
+
+<div id="addItemModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
+ <h3 class="font-bold text-indigo-800 border-b pb-2">➕ Add a fee to this voucher</h3>
+ <div class="grid grid-cols-2 gap-2"><div><label class="lbl">Voucher ID</label><input id="aiVid" readonly class="inp font-mono"></div><div><label class="lbl">Student / month</label><input id="aiStudent" readonly class="inp"></div></div>
+ <p id="aiExisting" class="text-xs text-slate-500"></p>
+ <div><label class="lbl">Fee name</label><input id="aiType" list="aiTypes" placeholder="e.g. annual fund" class="inp"><datalist id="aiTypes"><option value="annual fund"><option value="registration fee"><option value="admission fee"><option value="exam fee"><option value="late fee"><option value="lamination"><option value="stationery"><option value="other"></datalist></div>
+ <div class="grid grid-cols-2 gap-2"><div><label class="lbl">Amount (PKR)</label><input id="aiAmt" type="number" min="1" class="inp font-bold"></div><div><label class="lbl">Discount (optional)</label><input id="aiDisc" type="number" min="0" class="inp text-indigo-700"></div></div>
+ <div><label class="lbl">Remarks (required if discount)</label><input id="aiRemarks" class="inp"></div>
+ <p class="text-xs text-slate-500">It is saved as its own row, but under the same voucher number.</p>
+ <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="document.getElementById('addItemModal').classList.remove('open')" class="btn b-gh">Cancel</button><button onclick="saveAddItem()" class="btn b-pri">Add to voucher</button></div>
+</div></div>
+
+<div id="discountModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">% Voucher discount</h3>
+  <div id="dcItemWrap" class="hidden"><label class="lbl">Fee item</label><select id="dcItem" onchange="dcPick()" class="inp"></select></div>
+ <div class="grid grid-cols-2 gap-2">
+ <div><label class="lbl">Voucher ID</label><input id="dcVid" readonly class="inp font-mono"></div>
+    <div><label class="lbl">Student</label><input id="dcStudent" readonly class="inp"></div></div>
+  <div class="grid grid-cols-2 gap-2">
+    <div><label class="lbl">Payable</label><input id="dcPayable" readonly class="inp font-bold"></div>
+    <div><label class="lbl">Discount amount (0 = remove)</label><input type="number" id="dcAmt" min="0" class="inp font-bold text-indigo-700"></div></div>
+  <div><label class="lbl">Remarks (required)</label><input id="dcRemarks" placeholder="Reason for relief" class="inp"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Save discount</button></div>
+</div></div>
+
+<script src="js/pages/fees.js?v=20261029-1"></script>
+</body>
+</html>

@@ -6,10 +6,11 @@
     <title>Business Reports - Shibra Campus</title>
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <link rel="stylesheet" href="theme.css?v=1">
-    <script src="config.js?v=20261028-1"></script>
-    <script src="db.js?v=20261026-1"></script>
-    <script src="nav.js?v=20261028-1"></script>
+    <link rel="stylesheet" href="css/theme.css?v=20261029-1">
+    <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/db.js?v=20261029-1"></script>
+    <script src="js/core/nav.js?v=20261029-1"></script>
+    <script src="js/core/ui.js?v=20261029-1"></script>
     <style>
         .report-table{width:100%;border-collapse:collapse}
         .report-table th,.report-table td{padding:.6rem .75rem;border-bottom:1px solid #e2e8f0;text-align:left;font-size:.8rem}
@@ -31,8 +32,8 @@
 <div class="min-h-screen flex flex-col md:flex-row">
     <aside id="appNav"></aside>
     <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
-        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div><h1 class="text-xl md:text-2xl font-extrabold text-indigo-950">Business Reports</h1><p class="text-sm text-slate-500">School-wide operational and financial overview</p></div>
+        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 page-hero p-5 md:p-7 rounded-2xl">
+            <div><div class="page-kicker mb-2">Shibra Campus · Insights</div><h1 class="text-xl md:text-2xl font-extrabold text-indigo-950">Business Reports</h1><p class="text-sm text-slate-500">School-wide operational and financial overview</p></div>
             <div class="flex flex-wrap gap-2 no-print"><button id="expandAllReports" class="px-3 py-2 rounded-xl border bg-white text-sm font-semibold">Expand all</button><button id="collapseAllReports" class="px-3 py-2 rounded-xl border bg-white text-sm font-semibold">Collapse all</button><button id="printReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Print</button><button id="exportReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Export CSV</button><button id="refreshReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Refresh</button></div>
         </header>
         <section class="report-filters bg-white p-3 md:p-4 rounded-2xl border border-slate-200 no-print">
@@ -46,204 +47,43 @@
         <p id="periodLabel" class="text-xs text-slate-500"></p>
         <section id="kpis" class="grid grid-cols-2 gap-3"></section>
         <section class="report-grid">
+            <div class="report-group pt-2"><h2 class="text-sm font-extrabold uppercase tracking-wider text-indigo-950">People</h2><p class="text-xs text-slate-500">Enrolment and fee structure</p></div>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="classContent">Students by class</button><div id="classContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active students</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="classContent">Students by class</button><div id="classContent" class="report-card-content overflow-x-auto"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">How many students are enrolled in each class, and how many have left.</p><table class="report-table"><thead><tr><th>Class</th><th>Total students</th><th>Left students</th><th>Net active students</th></tr></thead><tbody id="classRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>All classes total</td><td id="classTotal">0</td><td id="classLeftTotal">0</td><td id="classNetTotal">0</td></tr></tfoot></table></div>
             </article>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="tuitionContent">Students by monthly tuition fee</button>
-                <div id="tuitionContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Monthly tuition fee</th><th>Students</th></tr></thead><tbody id="tuitionRows"></tbody>
+                <div id="tuitionContent" class="report-card-content overflow-x-auto"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">Active students at each monthly tuition amount: your fee structure at a glance.</p><table class="report-table"><thead><tr><th>Monthly tuition fee</th><th>Students</th></tr></thead><tbody id="tuitionRows"></tbody>
                     <tfoot><tr class="font-bold bg-indigo-50"><td>Average tuition fee</td><td id="averageTuitionFee">Rs 0</td></tr></tfoot></table></div>
             </article>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="feeContent">Fees by type</button><div id="feeContent" class="report-card-content overflow-x-auto"><table class="report-table min-w-[1200px]"><thead><tr><th rowspan="2">Fee type</th><th colspan="4" class="text-center">Active students</th><th colspan="4" class="text-center">Left students</th><th colspan="4" class="text-center">All records</th></tr><tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr></thead><tbody id="feeRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="feeContent">Fees by type</button><div id="feeContent" class="report-card-content overflow-x-auto"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">Active and left students for every fee type.</p><table class="report-table min-w-[1200px]"><thead><tr><th rowspan="2">Fee type</th><th colspan="4" class="text-center">Active students</th><th colspan="4" class="text-center">Left students</th><th colspan="4" class="text-center">All records</th></tr><tr><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Count</th><th>Gross</th><th>Discount</th><th>Net</th><th>Rows</th><th>Gross</th><th>Discount</th><th>Net</th></tr></thead><tbody id="feeRows"></tbody><tfoot><tr class="font-bold bg-indigo-50"><td>Total</td><td id="feeActiveCountTotal"></td><td id="feeActiveGrossTotal"></td><td id="feeActiveDiscountTotal"></td><td id="feeActiveNetTotal"></td><td id="feeLeftCountTotal"></td><td id="feeLeftGrossTotal"></td><td id="feeLeftDiscountTotal"></td><td id="feeLeftNetTotal"></td><td id="feeAllCountTotal"></td><td id="feeAllGrossTotal"></td><td id="feeAllDiscountTotal"></td><td id="feeAllNetTotal"></td></tr></tfoot></table></div>
+            </article>
+            <div class="report-group pt-2"><h2 class="text-sm font-extrabold uppercase tracking-wider text-indigo-950">Money in &amp; out</h2><p class="text-xs text-slate-500">Everything recorded in Accounts</p></div>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="accountContent">Account activity</button><div id="accountContent" class="report-card-content overflow-x-auto"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">Money received and money paid for each account head, within the selected dates.</p><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
+            </article>
+            <div class="report-group pt-2"><h2 class="text-sm font-extrabold uppercase tracking-wider text-indigo-950">Money still to collect</h2><p class="text-xs text-slate-500">Fees billed but not yet received</p></div>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="tuitionReceivableContent">Account Receivable · Tuition Fee</button><div id="tuitionReceivableContent" class="report-card-content overflow-x-auto"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">Tuition fee that has been billed but is not yet fully collected.</p><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="tuitionReceivableRows"></tbody></table></div>
             </article>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="accountContent">Account activity</button><div id="accountContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="accountRows"></tbody></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="annualFundContent">Account Receivable · Annual Fund</button><div id="annualFundContent" class="report-card-content overflow-x-auto"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">Annual fund that has been billed but is not yet fully collected.</p><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="annualFundRows"></tbody></table></div>
+            </article>
+            <div class="report-group pt-2"><h2 class="text-sm font-extrabold uppercase tracking-wider text-indigo-950">Staff &amp; follow-up</h2><p class="text-xs text-slate-500">Attendance, calls and promises</p></div>
+            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="attendanceContent">Staff attendance</button><div id="attendanceContent" class="report-card-content overflow-x-auto"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">Staff attendance marks recorded in the selected dates.</p><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
             </article>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="tuitionReceivableContent">Account Receivable · Tuition Fee</button><div id="tuitionReceivableContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="tuitionReceivableRows"></tbody></table></div>
-            </article>
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="annualFundContent">Account Receivable · Annual Fund</button><div id="annualFundContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Account / category</th><th>In</th><th>Out</th></tr></thead><tbody id="annualFundRows"></tbody></table></div>
-            </article>
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="attendanceContent">Staff attendance</button><div id="attendanceContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Status</th><th>Marks</th></tr></thead><tbody id="attendanceRows"></tbody></table></div>
-            </article>
-            <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="followupContent">Follow-up outcomes</button><div id="followupContent" class="report-card-content overflow-x-auto"><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 p-4 border-b text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="followupContent">Follow-up outcomes</button><div id="followupContent" class="report-card-content overflow-x-auto"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">Outcome of fee follow-up calls made in the selected dates.</p><table class="report-table"><thead><tr><th>Outcome</th><th>Calls</th></tr></thead><tbody id="followupRows"></tbody></table></div>
             </article>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2">
-                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="booksContent">Books & increments</button><div id="booksContent" class="report-card-content space-y-2"><div id="booksSummary" class="text-sm text-slate-600"></div><div id="incrementSummary" class="text-sm text-slate-600"></div></div>
+                <button type="button" class="report-card-toggle flex w-full cursor-pointer items-center justify-between gap-3 text-left font-bold text-indigo-900" aria-expanded="true" aria-controls="booksContent">Books & increments</button><div id="booksContent" class="report-card-content space-y-2"><p class="px-4 pt-3 pb-1 text-[12px] text-slate-500">Book Store activity and salary increments in the selected dates.</p><div id="booksSummary" class="text-sm text-slate-600"></div><div id="incrementSummary" class="text-sm text-slate-600"></div></div>
             </article>
         </section>
         <p class="text-[11px] text-slate-500">Generated from saved records. Student/staff counts and monthly tuition-fee distribution are current snapshots; monthly fee and payroll records are included when their month overlaps the selected range. Account inflow/outflow uses all dated account entries in range. Books without a saved date cannot be period-filtered.</p>
     </main>
 </div>
-<script>
-const $ = id => document.getElementById(id);
-const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-const n = value => Number(value) || 0;
-const fmt = value => n(value).toLocaleString(undefined, {maximumFractionDigits: 2});
-const iso = date => date.toISOString().slice(0, 10);
-let reportData = null, reportRequestId = 0, reportFilterTimer = null;
-function periodDates(preset) {
-    const today = todayYmd().split('-').map(Number), y = today[0], m = today[1], d = today[2];
-    const utc = (year, month, day) => new Date(Date.UTC(year, month - 1, day));
-    if (preset === 'today') return [iso(utc(y, m, d)), iso(utc(y, m, d))];
-    if (preset === 'last_month') return [iso(utc(y, m - 1, 1)), iso(utc(y, m, 0))];
-    if (preset === 'year') return [iso(utc(y, 1, 1)), iso(utc(y, 12, 31))];
-    if (preset === 'last_year') return [iso(utc(y - 1, 1, 1)), iso(utc(y - 1, 12, 31))];
-    return [iso(utc(y, m, 1)), iso(utc(y, m, d))];
-}
-function setPreset(value) { const dates = periodDates(value); $('fromDate').value = dates[0]; $('toDate').value = dates[1]; }
-function status(message, ok) {
-    const box = $('reportStatus'); box.textContent = message;
-    box.className = `rounded-xl border px-4 py-3 text-sm ${ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`;
-    box.classList.toggle('hidden', !message);
-}
-function rows(id, data, columns) {
-    const list = Array.isArray(data) ? data : [];
-    $(id).innerHTML = list.length ? list.map(row => `<tr>${columns.map(col => `<td>${esc(col(row))}</td>`).join('')}</tr>`).join('')
-        : `<tr><td colspan="${columns.length}" class="text-slate-500">No records for this period</td></tr>`;
-}
-function renderAccountRows(data) {
-    const list = Array.isArray(data) ? data : [];
-    const tuitionRows = list.filter(row => /(tuition|tution)\s*fee/i.test(String(row.label || '')));
-    const annualFundRows = list.filter(row => /annual\s*fund/i.test(String(row.label || '')));
-    const receivableRows = [...tuitionRows, ...annualFundRows];
-    const otherRows = list.filter(row => !receivableRows.includes(row));
-    const rowMarkup = row => `<tr><td>${esc(row.label)}</td><td>${fmt(row.money_in)}</td><td>${fmt(row.money_out)}</td></tr>`;
-    $('accountRows').innerHTML = otherRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No other account activity for this period</td></tr>';
-    $('tuitionReceivableRows').innerHTML = tuitionRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No tuition-fee account activity for this period</td></tr>';
-    $('annualFundRows').innerHTML = annualFundRows.map(rowMarkup).join('') || '<tr><td colspan="3" class="text-slate-500">No annual-fund account activity for this period</td></tr>';
-}
-function card(label, value, note) {
-    return `<article class="report-kpi bg-white p-4 rounded-2xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500">${esc(label)}</p><p class="text-xl font-extrabold text-indigo-950 mt-1 break-words">${esc(value)}</p><p class="text-[11px] text-slate-400 mt-1">${esc(note || '')}</p></article>`;
-}
-function render(data) {
-    reportData = data;
-    const st = data.students || {}, fees = data.fees || {}, accounts = data.accounts || {}, staff = data.staff || {}, followups = data.followups || {};
-    $('periodLabel').textContent = `Activity from ${data.from} through ${data.to} · generated ${new Date(data.generated_at).toLocaleString()}`;
-    $('kpis').innerHTML = [
-        card('Students enrolled', fmt(st.total), `${fmt(st.active)} active now`),
-        card('Net fees payable', `Rs ${fmt(fees.payable)}`, `${fmt(fees.fee_rows)} fee rows · discounts Rs ${fmt(fees.discounts)} · collected Rs ${fmt(fees.collected_to_selected_vouchers)} · outstanding est. Rs ${fmt(fees.estimated_outstanding)}`),
-        card('Account inflow', `Rs ${fmt(accounts.money_in)}`, `${fmt(accounts.entries)} account entries`),
-        card('Account outflow', `Rs ${fmt(accounts.money_out)}`, 'All recorded account outflow'),
-        card('Staff', fmt(staff.total), `${fmt(staff.active)} active now`),
-        card('Payroll paid', `Rs ${fmt(staff.payroll_paid)}`, `${fmt(staff.payroll_rows)} payroll rows in period`),
-        card('Payroll unpaid', `Rs ${fmt(staff.payroll_unpaid)}`, 'Saved payroll marked unpaid'),
-        card('Follow-up calls', fmt(followups.calls), `Promises logged at those calls: Rs ${fmt(followups.promised_amount)}`)
-    ].join('');
-    rows('classRows', st.by_class, [row => row.label, row => fmt(row.count), row => fmt(row.left_count), row => fmt(row.net_count)]);
-    $('classTotal').textContent = fmt(st.total);
-    $('classLeftTotal').textContent = fmt(st.left);
-    $('classNetTotal').textContent = fmt(st.active);
-    rows('tuitionRows', st.by_tuition_fee, [row => `Rs ${fmt(row.label)}`, row => fmt(row.count)]);
-    $('averageTuitionFee').textContent = `Rs ${fmt(st.average_tuition_fee)}`;
-    const feeTypes = Array.isArray(fees.by_type) ? fees.by_type : [];
-    rows('feeRows', feeTypes, [
-        row => row.label,
-        row => fmt(row.active_count), row => `Rs ${fmt(row.active_payable)}`, row => `Rs ${fmt(row.active_discount)}`, row => `Rs ${fmt(row.active_net_payable)}`,
-        row => fmt(row.left_count), row => `Rs ${fmt(row.left_payable)}`, row => `Rs ${fmt(row.left_discount)}`, row => `Rs ${fmt(row.left_net_payable)}`,
-        row => fmt(row.count), row => `Rs ${fmt(row.payable)}`, row => `Rs ${fmt(row.discount)}`, row => `Rs ${fmt(row.net_payable)}`
-    ]);
-    const feeTotals = feeTypes.reduce((totals, row) => {
-        ['active_count','active_payable','active_discount','active_net_payable','left_count','left_payable','left_discount','left_net_payable','count','payable','discount','net_payable'].forEach(key => {
-            totals[key] += n(row[key]);
-        });
-        return totals;
-    }, {active_count:0,active_payable:0,active_discount:0,active_net_payable:0,left_count:0,left_payable:0,left_discount:0,left_net_payable:0,count:0,payable:0,discount:0,net_payable:0});
-    [
-        ['feeActiveCountTotal', feeTotals.active_count, false], ['feeActiveGrossTotal', feeTotals.active_payable, true],
-        ['feeActiveDiscountTotal', feeTotals.active_discount, true], ['feeActiveNetTotal', feeTotals.active_net_payable, true],
-        ['feeLeftCountTotal', feeTotals.left_count, false], ['feeLeftGrossTotal', feeTotals.left_payable, true],
-        ['feeLeftDiscountTotal', feeTotals.left_discount, true], ['feeLeftNetTotal', feeTotals.left_net_payable, true],
-        ['feeAllCountTotal', feeTotals.count, false], ['feeAllGrossTotal', feeTotals.payable, true],
-        ['feeAllDiscountTotal', feeTotals.discount, true], ['feeAllNetTotal', feeTotals.net_payable, true]
-    ].forEach(([id, value, currency]) => { $(id).textContent = currency ? `Rs ${fmt(value)}` : fmt(value); });
-    renderAccountRows(accounts.by_account);
-    rows('attendanceRows', staff.attendance, [row => row.label, row => fmt(row.count)]);
-    rows('followupRows', followups.by_outcome, [row => row.label, row => fmt(row.count)]);
-    $('booksSummary').textContent = `Books: ${fmt(data.books && data.books.records)} saved records · ${fmt(data.books && data.books.transactions)} dated transactions in period · ${fmt(data.books && data.books.units)} units`;
-    $('incrementSummary').textContent = `Increments (all saved records): ${fmt(data.increments && data.increments.records)} · Rs ${fmt(data.increments && data.increments.amount)} in the selected period`;
-}
-function exportReport() {
-    if (!flag('export')) { deny('Export permission is required to download reports.'); return; }
-    if (!reportData) { status('Load a report before exporting.', false); return; }
-    const result = reportData, flat = [];
-    const add = (section, label, value) => flat.push({period_from:result.from, period_to:result.to, section, label, value});
-    ['students','fees','accounts','books','staff','followups','increments'].forEach(section => {
-        const values = result[section] || {};
-        Object.entries(values).forEach(([key, value]) => {
-            if (Array.isArray(value)) value.forEach(row => add(section + ':' + key, row.label || 'Unspecified', JSON.stringify(row)));
-            else if (value === null || ['string','number','boolean'].includes(typeof value)) add(section, key, value);
-        });
-    });
-    const columns = ['period_from','period_to','section','label','value'];
-    const quote = value => {
-        let text = String(value == null ? '' : value);
-        if (/^[\s]*[=+\-@]/.test(text)) text = "'" + text;
-        return `"${text.replace(/"/g, '""')}"`;
-    };
-    const content = [columns.map(quote).join(','), ...flat.map(row => columns.map(key => quote(row[key])).join(','))].join('\r\n');
-    const url = URL.createObjectURL(new Blob([content], {type:'text/csv;charset=utf-8'}));
-    const link = document.createElement('a'); link.href = url; link.download = `school_reports_${result.from}_${result.to}.csv`; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-async function load() {
-    const requestId = ++reportRequestId;
-    reportData = null;
-    const from = $('fromDate').value, to = $('toDate').value;
-    if (!from || !to || from > to) {
-        $('applyReport').disabled = $('refreshReport').disabled = false;
-        status('Choose a valid date range; From must be on or before To.', false);
-        return;
-    }
-    $('applyReport').disabled = $('refreshReport').disabled = true; status('', true);
-    try {
-        const response = await fetch(`${SB_URL}/rest/v1/rpc/app_business_reports`, {
-            method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({p_from: from, p_to: to})
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || data.details || `Request failed (${response.status})`);
-        if (!data || !data.students || !data.fees) throw new Error('The report service returned an unexpected response.');
-        if (requestId !== reportRequestId) return;
-        render(data);
-    } catch (error) {
-        if (requestId !== reportRequestId) return;
-        status(`Could not load business reports: ${error.message}`, false);
-        console.error('Could not load business reports:', error);
-    } finally {
-        if (requestId === reportRequestId) $('applyReport').disabled = $('refreshReport').disabled = false;
-    }
-}
-function applyReportFiltersSoon() {
-    clearTimeout(reportFilterTimer);
-    reportFilterTimer = setTimeout(load, 250);
-}
-$('preset').onchange = () => {
-    if ($('preset').value !== 'custom') setPreset($('preset').value);
-    applyReportFiltersSoon();
-};
-['fromDate','toDate'].forEach(id => $(id).onchange = () => { $('preset').value = 'custom'; applyReportFiltersSoon(); });
-$('applyReport').onclick = load; $('refreshReport').onclick = load; $('printReport').onclick = () => window.print(); $('exportReport').onclick = exportReport;
-const reportCards = () => Array.from(document.querySelectorAll('.report-card'));
-const setReportCardExpanded = (button, expanded) => {
-    button.setAttribute('aria-expanded', String(expanded));
-    const content = document.getElementById(button.getAttribute('aria-controls'));
-    if (content) content.hidden = !expanded;
-};
-document.querySelectorAll('.report-card-toggle').forEach(button => {
-    button.onclick = () => setReportCardExpanded(button, button.getAttribute('aria-expanded') !== 'true');
-});
-$('expandAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), true));
-$('collapseAllReports').onclick = () => reportCards().forEach(card => setReportCardExpanded(card.querySelector('.report-card-toggle'), false));
-if (!flag('export')) $('exportReport').disabled = true;
-window.addEventListener('DOMContentLoaded', () => {
-    setPreset('month');
-    load();
-});
-</script>
+<script src="js/pages/reports.js?v=20261029-1"></script>
 </body>
 </html>

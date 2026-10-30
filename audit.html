@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Trail - Shibra Campus</title>
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <link rel="stylesheet" href="css/theme.css?v=20261029-1">
+    <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/db.js?v=20261029-1"></script>
+    <script src="js/core/nav.js?v=20261029-1"></script>
+    <script src="js/core/ui.js?v=20261029-1"></script>
+    <style>
+        .audit-wrap{overflow:auto}
+        .audit-table{width:100%;border-collapse:collapse;min-width:850px}
+        .audit-table th,.audit-table td{padding:.6rem .7rem;border-bottom:1px solid #e2e8f0;text-align:left;font-size:.75rem;vertical-align:top}
+        .audit-table th{font-size:.68rem;color:#64748b;text-transform:uppercase;white-space:nowrap}
+        .audit-table pre{max-width:460px;max-height:280px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#f8fafc;padding:.6rem;border-radius:.5rem}
+        .audit-action{display:inline-block;border-radius:999px;padding:.15rem .5rem;font-size:.65rem;font-weight:700;background:#e0f2fe;color:#075985}
+        .audit-action.UPDATE{background:#fef3c7;color:#92400e}.audit-action.DELETE{background:#ffe4e6;color:#9f1239}
+        .audit-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;align-items:end}
+        .audit-search{grid-column:1/-1}
+        @media(min-width:1100px){.audit-filters{grid-template-columns:repeat(4,minmax(0,1fr))}}
+        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print{display:none!important}.audit-table{min-width:0}.audit-table pre{max-height:none}}
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans">
+<div class="min-h-screen flex flex-col md:flex-row">
+    <aside id="appNav"></aside>
+    <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
+        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 page-hero p-5 md:p-7 rounded-2xl">
+            <div><div class="page-kicker mb-2">Shibra Campus · Control & compliance</div><h1 class="text-xl md:text-2xl font-extrabold text-indigo-950">Audit Trail</h1><p class="text-sm text-slate-500">Daily, monthly, and yearly record of school data changes</p></div>
+            <div class="flex gap-2 no-print"><button id="printAudit" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Print</button><button id="exportAudit" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Export visible CSV</button></div>
+        </header>
+        <section class="audit-filters bg-white p-3 md:p-4 rounded-2xl border border-slate-200 no-print">
+            <div><label for="period" class="block text-xs font-semibold text-slate-600 mb-1">Period</label><select id="period" class="w-full border rounded-lg p-2 text-sm"><option value="today">Today</option><option value="month">This month</option><option value="last_month">Last month</option><option value="year">This year</option><option value="last_year">Last year</option><option value="custom">Custom</option></select></div>
+            <div><label for="fromDate" class="block text-xs font-semibold text-slate-600 mb-1">From</label><input id="fromDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
+            <div><label for="toDate" class="block text-xs font-semibold text-slate-600 mb-1">To</label><input id="toDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
+            <div><label for="tableFilter" class="block text-xs font-semibold text-slate-600 mb-1">Table</label><select id="tableFilter" class="w-full border rounded-lg p-2 text-sm"><option value="">All audited tables</option></select></div>
+            <div><label for="operationFilter" class="block text-xs font-semibold text-slate-600 mb-1">Action</label><select id="operationFilter" class="w-full border rounded-lg p-2 text-sm"><option value="">All actions</option><option>INSERT</option><option>UPDATE</option><option>DELETE</option></select></div>
+            <div><label for="actorFilter" class="block text-xs font-semibold text-slate-600 mb-1">User email</label><input id="actorFilter" type="search" class="w-full border rounded-lg p-2 text-sm" autocomplete="off"></div>
+            <div class="audit-search"><label for="searchFilter" class="block text-xs font-semibold text-slate-600 mb-1">Search changed values or row key</label><input id="searchFilter" type="search" class="w-full border rounded-lg p-2 text-sm" autocomplete="off" placeholder="Student number, amount, field name..."></div>
+            <button id="applyAudit" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Apply filters</button>
+        </section>
+        <div id="auditStatus" class="hidden rounded-xl border px-4 py-3 text-sm" role="status"></div>
+        <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b flex flex-wrap justify-between gap-2"><b id="auditCount" class="text-sm text-indigo-950">No events loaded</b><span class="text-[11px] text-slate-500">New changes are tracked after the SQL migration is installed.</span></div>
+            <div class="audit-wrap"><table class="audit-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Table</th><th>Record</th><th>Before / after</th></tr></thead><tbody id="auditRows"></tbody></table></div>
+            <div class="p-3 flex justify-center items-center gap-3 no-print"><button id="previousAudit" class="px-3 py-2 rounded-lg border text-sm" disabled>Previous</button><span id="pageNumber" class="text-xs text-slate-500">Page 1</span><button id="nextAudit" class="px-3 py-2 rounded-lg border text-sm" disabled>Next</button></div>
+        </section>
+        <p class="text-[11px] text-slate-500">The audit log records changed fields and their before/after values. Only roles with Audit Trail → View can read it. The migration does not backfill changes made before installation.</p>
+    </main>
+</div>
+<script src="js/pages/audit.js?v=20261029-1"></script>
+</body>
+</html>

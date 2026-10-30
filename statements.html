@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Statements - Shibra Campus</title>
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <link rel="stylesheet" href="css/theme.css?v=20261029-1">
+    <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/db.js?v=20261029-1"></script>
+    <script src="js/core/nav.js?v=20261029-1"></script>
+    <script src="js/core/ui.js?v=20261029-1"></script>
+    <style>
+        .st-wrap{display:grid;gap:16px}
+        .st-card{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:16px}
+        .st-card h3{margin:0 0 2px;font-size:14px;font-weight:800;color:var(--ink)}
+        .st-card .st-sub{font-size:12px;color:var(--muted);margin:0 0 10px}
+        .st-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+        .st-filters label{display:block;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+        .st-btn{padding:9px 14px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:13px;font-weight:700;color:var(--text);cursor:pointer}
+        .st-btn.pri{background:var(--action);border-color:var(--action);color:#fff}
+        .st-tabs{display:flex;gap:4px;padding:5px;border-radius:14px;background:#e8edf6;border:1px solid #dbe3ef;overflow-x:auto}
+        .st-tab{flex:0 0 auto;padding:10px 16px;border:0;border-radius:10px;background:transparent;color:#53627a;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+        .st-tab.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(11,31,63,.12)}
+        .st-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+        .st-kpi{background:#fff;border:1px solid var(--line);border-top:3px solid var(--action);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+        .st-kpi small{display:block;font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+        .st-kpi b{display:block;font-size:20px;font-weight:800;margin-top:4px;color:var(--ink)}
+        .st-kpi i{display:block;font-style:normal;font-size:11px;color:var(--faint);margin-top:2px}
+        .st-kpi.good{border-top-color:var(--ok)}.st-kpi.bad{border-top-color:var(--bad)}.st-kpi.warn{border-top-color:var(--brass)}
+        .st-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+        @media(max-width:900px){.st-cols{grid-template-columns:1fr}}
+        table.st{width:100%;border-collapse:collapse;font-size:13px}
+        table.st th{background:#f1f4fa;color:#4b5b78;font-size:11px;letter-spacing:.04em;text-transform:uppercase;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+        table.st td{padding:9px 12px;border-bottom:1px solid var(--line-2)}
+        table.st .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+        table.st tr.tot td{font-weight:800;background:#f7f9fd;border-top:2px solid var(--line)}
+        table.st tr.sec td{font-weight:800;color:var(--ink);background:#f1f4fa;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+        .st-scroll{overflow-x:auto}
+        .st-note{font-size:12px;color:var(--muted);line-height:1.5}
+        .st-pos{color:var(--ok)}.st-neg{color:var(--bad)}
+        .st-chk{display:flex;gap:12px;align-items:flex-start;padding:12px 4px;border-bottom:1px solid var(--line-2)}
+        .st-chk .ic{flex:0 0 26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px}
+        .st-chk.ok .ic{background:#dcfce7;color:#15803d}.st-chk.warn .ic{background:#fef3c7;color:#b45309}
+        .st-chk b{display:block;font-size:13px}.st-chk span{font-size:12px;color:var(--muted)}
+        .st-pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700}
+        .st-input{padding:9px 12px;border:1px solid #d5ddea;border-radius:10px;font-size:13px;min-width:140px}
+        #stPrintHead{display:none}
+        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print{display:none!important}#stPrintHead{display:block;margin-bottom:10px}.st-card{box-shadow:none}}
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans">
+<div class="min-h-screen flex flex-col md:flex-row">
+    <aside id="appNav"></aside>
+    <main class="flex-1 min-w-0 p-3 md:p-8">
+        <div class="st-wrap">
+            <div class="page-hero no-print" style="padding:24px 26px;border-radius:20px">
+                <div class="page-kicker">Shibra Campus · Finance</div>
+                <h2 style="margin:6px 0 4px;font-size:28px">Financial Statements</h2>
+                <p id="stContext" style="font-size:14px;margin:0">Income &amp; expenditure, financial position, fees outstanding and a books health check, all built from your Accounts, Fees and Book Store records.</p>
+            </div>
+
+            <div class="st-card no-print">
+                <div class="st-filters">
+                    <div><label for="stPeriod">Period</label>
+                        <select id="stPeriod" class="st-input">
+                            <option value="month" selected>This month</option><option value="lastmonth">Last month</option><option value="year">This year</option>
+                            <option value="all">All time</option><option value="custom">Custom…</option></select></div>
+                    <div><label for="stFrom">From</label><input id="stFrom" type="date" class="st-input"></div>
+                    <div><label for="stTo">To</label><input id="stTo" type="date" class="st-input"></div>
+                    <button id="stRefresh" class="st-btn">🔄 Refresh</button>
+                    <button id="stPrint" class="st-btn">🖨️ Print</button>
+                    <button id="stCsv" class="st-btn pri">⬇️ Export CSV</button>
+                </div>
+            </div>
+
+            <div class="st-tabs no-print" role="tablist">
+                <button class="st-tab on" data-tab="ie">📊 Income &amp; Expenditure</button>
+                <button class="st-tab" data-tab="pos">🏛️ Financial Position</button>
+                <button class="st-tab" data-tab="aging">🧾 Fees Outstanding</button>
+                <button class="st-tab" data-tab="check">✅ Books Check</button>
+            </div>
+
+            <div id="stPrintHead"><h2 style="margin:0;font-size:18px">Concept School – Shibra Campus</h2><p id="stPrintTitle" style="margin:2px 0 0;font-size:13px"></p></div>
+            <div id="stStatus" class="st-note"></div>
+            <section id="st-ie" class="st-wrap"></section>
+            <section id="st-pos" class="st-wrap" hidden></section>
+            <section id="st-aging" class="st-wrap" hidden></section>
+            <section id="st-check" class="st-wrap" hidden></section>
+        </div>
+    </main>
+</div>
+<script src="js/pages/statements.js?v=20261029-1"></script>
+</body>
+</html>

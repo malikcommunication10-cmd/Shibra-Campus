@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept School Shibra Campus - Book Store & Inventory</title>
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <link rel="stylesheet" href="css/theme.css?v=20261029-1">
+    <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/db.js?v=20261029-1"></script>
+    <script src="js/core/nav.js?v=20261029-1"></script>
+    <script src="js/core/ui.js?v=20261029-1"></script>
+    <style>
+        .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
+        .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
+        .tab-off:hover { background:#f1f5f9; }
+        .tx-modal-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; }
+        .tx-modal-layout > aside { border-top:1px solid #e2e8f0; }
+        #tab-transactions .tx-table-wrap { overflow-x:hidden; }
+        #tab-transactions table { width:100%; table-layout:fixed; }
+        #tab-transactions th, #tab-transactions td { padding:.4rem .3rem; overflow:hidden; }
+        #tab-transactions .tx-cell-truncate { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        @media (max-width:767px) { .tx-modal-layout { grid-template-columns:1fr; } }
+        @media (min-width:768px) { .tx-modal-layout > aside { border-top:0; border-left:1px solid #e2e8f0; } }
+        #printHeader { display:none; }
+        @media print {
+            aside, .no-print, #txModal, #settingsModal, #confirmModal, #toast, #loadingOverlay, #fab, #mobileBar { display:none !important; }
+            #printHeader { display:block !important; margin-bottom:10px; }
+            body { background:#fff !important; }
+            main { padding:0 !important; }
+            .print-card { box-shadow:none !important; border:1px solid #cbd5e1 !important; }
+            .scroll-area { max-height:none !important; overflow:visible !important; }
+            .md-table { display:block !important; } .mobile-cards { display:none !important; }
+            table { font-size:10px !important; }
+        }
+    </style>
+<style>
+ #bookActionHub .act-card{background:#f7f9fd;border:1px solid #e1e7f0;border-radius:14px;padding:12px}
+ #bookActionHub .act-title{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#13305c}
+ #bookActionHub .act-hint{font-size:11px;color:#5b6b85 !important;margin:3px 0 9px;line-height:1.35;min-height:30px}
+ #bookActionHub .act-btns{display:flex;flex-direction:column;gap:6px}
+ #bookActionHub .act-btns button{color:#fff;border-radius:10px;padding:8px 10px;font-size:12.5px;font-weight:700;text-align:left}
+ #bookActionHub .act-btns small{font-weight:500;opacity:.85}
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans" onload="initBooks()">
+
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/40 z-[90] hidden flex flex-col items-center justify-center text-white">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-3"></div>
+        <p id="loadingText" class="text-sm font-semibold">Loading...</p>
+    </div>
+    <div id="toast" class="fixed top-4 right-4 left-4 sm:left-auto z-[100] hidden max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium"></div>
+
+    <!-- CONFIRM -->
+    <div id="confirmModal" class="fixed inset-0 bg-black/60 z-[80] hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
+            <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto text-xl">❓</div>
+            <p id="confirmMessage" class="text-sm font-medium text-slate-700 text-center whitespace-pre-line"></p>
+            <div class="flex space-x-2 pt-1">
+                <button id="confirmCancelBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold transition">Cancel</button>
+                <button id="confirmOkBtn" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl text-sm font-semibold transition">Yes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MOBILE TOP BAR -->
+    
+
+    <div class="min-h-screen flex flex-col md:flex-row">
+        <!-- SIDEBAR -->
+        <aside id="appNav"></aside>
+
+        <!-- MAIN -->
+        <main class="flex-1 p-4 md:p-8 min-w-0 pb-24 md:pb-8">
+            <div class="mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print page-hero p-5 md:p-7 rounded-2xl">
+                <div>
+                    <div class="page-kicker mb-2">Shibra Campus · Book store</div><h2 class="text-2xl font-extrabold text-indigo-950">Book Store & Inventory</h2>
+                    <p class="text-sm text-slate-500">Sales, purchases, returns, stock and profit — all in one place</p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto md:min-w-[640px]" id="bookActionHub">
+                    <div class="act-card">
+                        <div class="act-title">Selling</div>
+                        <p class="act-hint">One item, or many items to one student in a single receipt.</p>
+                        <div class="act-btns">
+                            <button onclick="openTx('sale')" class="bg-emerald-600 hover:bg-emerald-700 text-white">🛒 Single sale</button>
+                            <button onclick="openStudentSale()" class="bg-teal-600 hover:bg-teal-700 text-white">🎓 Student sale <small>(many items)</small></button>
+                        </div>
+                    </div>
+                    <div class="act-card">
+                        <div class="act-title">Buying from vendor</div>
+                        <p class="act-hint">One item, or a full vendor bill with many items — one bill, one payable.</p>
+                        <div class="act-btns">
+                            <button onclick="openTx('purchase')" class="bg-indigo-600 hover:bg-indigo-700 text-white">📥 Single purchase</button>
+                            <button onclick="openPurchaseInvoice()" class="bg-violet-600 hover:bg-violet-700 text-white">🧾 Vendor bill <small>(many items)</small></button>
+                        </div>
+                    </div>
+                    <div class="act-card">
+                        <div class="act-title">Bulk &amp; corrections</div>
+                        <p class="act-hint">Many rows from Excel, or a customer / vendor return. Inside forms use <b>Save &amp; add another</b>.</p>
+                        <div class="act-btns">
+                            <button onclick="openImport()" class="bg-slate-700 hover:bg-slate-800 text-white">⬆️ Import from Excel</button>
+                            <button onclick="openTx('sale_return')" class="bg-amber-500 hover:bg-amber-600 text-white">↩️ Return</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- UPGRADE BANNER -->
+            <div id="setupBanner" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-5 mb-4 no-print">
+                <h3 class="font-bold text-amber-900 mb-1">Optional upgrade: enable dates, item details, invoice numbers and Accounts sync</h3>
+                <p class="text-sm text-amber-800 mb-3">Multi-item supplier invoices need the invoice_no column. Run this once in Supabase → SQL Editor, then refresh.</p>
+                <pre id="setupSql" class="bg-white border border-amber-200 rounded-xl p-3 text-xs overflow-x-auto whitespace-pre"></pre>
+                <div class="flex gap-2 mt-3">
+                    <button onclick="copySetupSql()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">Copy SQL</button>
+                    <button onclick="dismissBanner()" class="bg-white border border-amber-300 text-amber-800 px-4 py-2 rounded-xl text-sm font-semibold transition">Hide</button>
+                </div>
+            </div>
+
+            <!-- GLOBAL FILTER -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-[11px] font-medium text-slate-500 mb-1">Period</label>
+                        <select id="gPeriod" onchange="onPeriodChange()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                            <option value="today">Today</option>
+                            <option value="yesterday">Yesterday</option>
+                            <option value="last7">Last 7 days</option>
+                            <option value="month" selected>This month</option>
+                            <option value="lastmonth">Last month</option>
+                            <option value="year">This year</option>
+                            <option value="all">All time</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-[11px] font-medium text-slate-500 mb-1">From</label><input id="gFrom" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
+                    <div><label class="block text-[11px] font-medium text-slate-500 mb-1">To</label><input id="gTo" type="date" onchange="onCustomDate()" class="border rounded-lg px-2 py-2 text-sm bg-slate-50 outline-none"></div>
+                    <button onclick="initBooks()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
+                    <p class="text-[11px] text-slate-400 basis-full sm:basis-auto sm:ml-auto">Stock figures are always current; sales, purchases and profit follow the selected period.</p>
+                </div>
+            </div>
+
+            <!-- TABS -->
+            <div class="flex gap-2 mb-4 no-print overflow-x-auto whitespace-nowrap pb-1">
+                <button data-tab="overview" onclick="showTab('overview')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-on">📊 Overview</button>
+                <button data-tab="inventory" onclick="showTab('inventory')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">📦 Inventory</button>
+                <button data-tab="transactions" onclick="showTab('transactions')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">🧾 Transactions</button>
+                <button data-tab="parties" onclick="showTab('parties')" class="tabbtn px-4 py-2 rounded-xl text-sm font-semibold border transition tab-off">👥 Students & Vendors</button>
+            </div>
+
+            <div id="printHeader">
+                <h2 class="text-lg font-bold">Concept School - Shibra Campus</h2>
+                <p id="printTitle" class="text-sm"></p>
+            </div>
+
+            <!-- OVERVIEW -->
+            <section id="tab-overview" class="space-y-4">
+                <div id="kpiCards" class="grid grid-cols-2 lg:grid-cols-6 gap-3"></div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 xl:col-span-2 print-card">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-sm font-bold text-indigo-900">Monthly Sales vs Purchases</h3>
+                            <div class="flex gap-3 text-[11px] text-slate-500"><span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500 mr-1"></span>Sales</span><span><span class="inline-block w-2.5 h-2.5 rounded-sm bg-indigo-500 mr-1"></span>Purchases</span></div>
+                        </div>
+                        <div id="monthChart" class="overflow-x-auto"></div>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
+                        <h3 class="text-sm font-bold text-indigo-900 mb-3">Top Selling Books</h3>
+                        <div id="topSellers" class="space-y-3"></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
+                        <h3 class="text-sm font-bold text-rose-700 mb-3">Stock Alerts</h3>
+                        <div id="stockAlerts" class="space-y-2"></div>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 print-card">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-sm font-bold text-indigo-900">Recent Transactions</h3>
+                            <button onclick="showTab('transactions')" class="text-xs text-indigo-600 hover:underline no-print">View all</button>
+                        </div>
+                        <div id="recentList" class="divide-y"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- INVENTORY -->
+            <section id="tab-inventory" class="hidden space-y-4">
+                <div id="invCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input id="invSearch" oninput="renderInventory()" type="text" placeholder="Search book title..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[180px]">
+                        <select id="invStatus" onchange="renderInventory()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                            <option value="ALL">All stock</option>
+                            <option value="attn">Low + Out of stock</option>
+                            <option value="low">Low stock</option>
+                            <option value="out">Out of stock</option>
+                            <option value="ok">In stock</option>
+                        </select>
+                        <label class="flex items-center gap-2 text-xs text-slate-600">Low stock at ≤ <input id="lowThreshold" type="number" min="0" onchange="onThresholdChange()" class="w-16 border rounded-lg px-2 py-1.5 text-sm bg-slate-50 outline-none"></label>
+                        <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
+                        <button onclick="exportInventoryCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
+                    </div>
+                    <p id="invCount" class="text-xs text-slate-500 mt-2"></p>
+                </div>
+                <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
+                            <tr id="invHead"></tr>
+                        </thead>
+                        <tbody id="invBody"></tbody>
+                        <tfoot id="invFoot" class="sticky bottom-0 bg-slate-100 font-bold"></tfoot>
+                    </table>
+                </div>
+                <div id="invCards2" class="mobile-cards md:hidden space-y-2"></div>
+            </section>
+
+            <!-- TRANSACTIONS -->
+            <section id="tab-transactions" class="hidden space-y-4">
+                <div id="txCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input id="txSearch" oninput="renderTransactions()" type="text" placeholder="Search name, book, voucher..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[180px]">
+                        <select id="txType" onchange="renderTransactions()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                            <option value="ALL">All types</option>
+                            <option value="sale">Sales</option>
+                            <option value="purchase">Purchases</option>
+                            <option value="sale_return">Sale returns</option>
+                            <option value="purchase_return">Purchase returns</option>
+                        </select>
+                        <div class="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Transaction date order">
+                            <button id="txNewestBtn" type="button" aria-pressed="true" class="px-2.5 py-1.5 rounded-md text-xs font-semibold">Newest</button>
+                            <button id="txOldestBtn" type="button" aria-pressed="false" class="px-2.5 py-1.5 rounded-md text-xs font-semibold">Oldest</button>
+                        </div>
+                        <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
+                        <button onclick="exportTxCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
+                    </div>
+                    <p id="txCount" class="text-xs text-slate-500 mt-2"></p>
+                    <div id="txSelectionBar" class="hidden mt-3 pt-3 border-t flex flex-wrap items-center justify-between gap-2">
+                        <label class="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                            <input id="txSelectAll" type="checkbox" onchange="toggleAllTx(this.checked)" class="w-4 h-4 rounded">
+                            Select all shown transactions
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <span id="txSelectedCount" class="text-xs text-slate-500"></span>
+                            <button id="txDeleteSelected" onclick="deleteSelectedTx()" class="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed" disabled>Delete selected</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="md-table hidden xl:block bg-white rounded-2xl border border-slate-200 shadow-sm tx-table-wrap print-card scroll-area max-h-[640px]">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
+                            <tr id="txHead"></tr>
+                        </thead>
+                        <tbody id="txBody"></tbody>
+                    </table>
+                </div>
+                <div id="txCards2" class="mobile-cards xl:hidden space-y-2"></div>
+                <div id="txMore" class="text-center no-print"></div>
+            </section>
+
+            <!-- PARTIES -->
+            <section id="tab-parties" class="hidden space-y-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm no-print flex flex-wrap gap-2 items-center">
+                    <input id="pSearch" oninput="renderParties()" type="text" placeholder="Search student / vendor..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[180px]">
+                    <select id="pRole" onchange="renderParties()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                        <option value="ALL">Students & Vendors</option>
+                        <option value="customer">Students / Customers</option>
+                        <option value="vendor">Vendors / Suppliers</option>
+                    </select>
+                    <label class="flex items-center gap-1 text-xs text-slate-600"><input id="pPending" type="checkbox" onchange="renderParties()"> Only pending</label>
+                    <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">🖨️ Print</button>
+                </div>
+                <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
+                            <tr><th class="p-2.5">Name</th><th class="p-2.5">Role</th><th class="p-2.5 text-right">Net amount</th><th class="p-2.5 text-right">To receive</th><th class="p-2.5 text-right">To pay</th><th class="p-2.5">Promise date</th><th class="p-2.5">Last activity</th><th class="p-2.5 no-print"></th></tr>
+                        </thead>
+                        <tbody id="pBody"></tbody>
+                    </table>
+                </div>
+                <div id="pCards" class="mobile-cards md:hidden space-y-2"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- FLOATING ACTION BUTTON (mobile) -->
+    <button id="fab" onclick="openTx('sale')" class="md:hidden fixed bottom-5 right-5 z-40 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full w-14 h-14 text-2xl shadow-xl no-print" aria-label="New sale">🛒</button>
+
+    <!-- TRANSACTION MODAL -->
+    <div id="txModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-3xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-start sticky top-0 bg-white z-10">
+                <div>
+                    <h3 id="mTitle" class="text-lg font-bold text-indigo-950">New transaction</h3>
+                    <p id="mHint" class="text-xs text-slate-400"></p>
+                </div>
+                <button onclick="closeTx()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="tx-modal-layout" data-enter-nav data-enter-submit="mSaveBtn" onkeydown="advanceEntryOnEnter(event)">
+            <div class="p-4 sm:p-5 space-y-3">
+                <div id="mTypeTabs" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-semibold"></div>
+
+                <div id="mDateWrap">
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Date</label>
+                    <input id="mDate" type="date" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                </div>
+                <div id="mInvoiceWrap">
+                    <label for="mInvoiceNo" class="block text-xs font-medium text-slate-700 mb-1">Invoice / voucher number</label>
+                    <input id="mInvoiceNo" type="text" maxlength="80" autocomplete="off" oninput="invoiceNumberManual=true" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    <p class="text-[11px] text-slate-500 mt-1">Auto-generated by default. You can edit it; the RV-, PV- or BK- prefix is kept for Accounts matching.</p>
+                </div>
+                <div>
+                    <label id="mPartyLabel" class="block text-xs font-medium text-slate-700 mb-1">Student / Customer name</label>
+                    <input id="mParty" list="partyList" type="text" placeholder="Name" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    <datalist id="partyList"></datalist>
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-1"><label class="block text-xs font-medium text-slate-700">Book / Item title</label><button id="mNewItemBtn" type="button" onclick="openNewItem()" class="hidden text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg">➕ New item</button></div>
+                    <input id="mTitleIn" list="bookList" type="text" oninput="onTitleInput()" placeholder="Book title" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    <datalist id="bookList"></datalist>
+                    <p id="mStock" class="text-xs mt-1 text-slate-500"></p>
+                </div>
+                    <div id="mItemExtra" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div><label class="block text-xs font-medium text-slate-700 mb-1">Class (course)</label><select id="mItemClass" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select></div>
+                        <div><label class="block text-xs font-medium text-slate-700 mb-1">Category</label><select id="mItemCat" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select></div>
+                        <div><label class="block text-xs font-medium text-slate-700 mb-1">Sale price (fixed)</label><input id="mSalePrice" type="number" min="0" placeholder="PKR" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                    </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Quantity</label>
+                        <input id="mQty" type="number" min="1" value="1" oninput="calcNet()" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Unit price (PKR)</label>
+                        <input id="mPrice" type="number" min="0" placeholder="0" oninput="calcNet()" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
+                    <div>
+                        <label class="block text-xs font-medium text-indigo-900 mb-1">Discount type</label>
+                        <select id="mDiscType" onchange="calcNet()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none">
+                            <option value="percentage">Percentage (%)</option>
+                            <option value="fixed">Fixed (PKR)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-indigo-900 mb-1">Discount value</label>
+                        <input id="mDiscVal" type="number" min="0" value="0" oninput="calcNet()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none">
+                    </div>
+                </div>
+                <div class="flex justify-between items-center bg-slate-50 border rounded-xl px-4 py-3">
+                    <div class="text-xs text-slate-500">Gross <b id="mGross" class="text-slate-700">0</b> · Discount <b id="mDisc" class="text-slate-700">0</b></div>
+                    <div class="text-right"><div class="text-[11px] text-slate-500">Net total</div><div id="mNet" class="text-xl font-extrabold text-indigo-700">PKR 0</div></div>
+                </div>
+
+                <div id="mExtWrap" class="space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Payment account</label>
+                            <select id="mWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none">
+                                <option value="cash">💵 Cash in Hand</option>
+                                <option value="bank">🏦 Bank</option>
+                                <option value="online">📱 Online / JazzCash</option>
+                            </select>
+                        </div>
+                        <label class="flex items-center gap-2 text-sm text-slate-700 sm:mt-6"><input id="mPostAcc" type="checkbox" checked onchange="refreshAutoInvoiceNumber()" class="w-4 h-4"> Record in Accounts</label>
+                    <div class="sm:col-span-3"><label class="block text-xs font-medium text-slate-700 mb-1">Paid now (only if "Record in Accounts" is unticked): the rest stays pending</label><input id="mPaidNow" type="number" min="0" placeholder="0" class="w-full sm:w-48 border rounded-lg p-2.5 text-sm outline-none"></div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label>
+                        <input id="mNotes" type="text" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    </div>
+                    <p id="mEditAccountingHint" class="hidden text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2"></p>
+                </div>
+            </div>
+            <aside class="bg-slate-50/70 p-4">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <h4 id="mRecentTitle" class="text-sm font-bold text-slate-800">Recent transactions</h4>
+                    <span id="mRecentCount" class="text-[10px] text-slate-400"></span>
+                </div>
+                <p class="text-[11px] text-slate-500 mb-2">Latest entries · edit a transaction</p>
+                <div id="mRecentList" class="space-y-2 max-h-72 overflow-y-auto"></div>
+                <button id="mViewAllTx" type="button" onclick="viewAllRecentTx(txKind)" class="mt-3 w-full text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg">View all</button>
+            </aside>
+            </div>
+            <div class="p-4 border-t flex flex-wrap justify-end gap-2 sticky bottom-0 bg-white">
+                <button onclick="closeTx()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button id="mAddAnotherBtn" onclick="saveTx(true)" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-sm">Save & add another</button>
+                <button id="mSaveBtn" onclick="saveTx(false)" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS -->
+    
+
+<script src="js/pages/books.js?v=20261029-1"></script>
+
+<div id="itemLedgerModal" class="fixed inset-0 bg-black/60 z-[70] hidden flex items-center justify-center p-3" role="dialog" aria-modal="true" aria-labelledby="itemLedgerTitle" onclick="if(event.target===this)closeItemLedger()">
+ <div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl max-h-[94vh] flex flex-col">
+  <div class="p-4 sm:p-5 border-b flex justify-between items-start gap-3">
+   <div><p class="text-[11px] uppercase tracking-wide text-indigo-600 font-semibold">Item stock ledger</p><h3 id="itemLedgerTitle" class="text-lg sm:text-xl font-bold text-indigo-950 mt-0.5"></h3><p class="text-xs text-slate-500 mt-1">Date-wise stock in/out and running quantity balance</p></div>
+   <button type="button" onclick="closeItemLedger()" aria-label="Close item ledger" class="text-slate-400 hover:text-slate-700 text-lg font-bold px-2">✕</button>
+  </div>
+  <div class="p-4 sm:p-5 overflow-y-auto space-y-3">
+   <div id="itemLedgerSummary" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+   <div class="overflow-auto border rounded-xl max-h-[58vh]">
+    <table class="w-full min-w-[760px] text-left border-collapse text-xs">
+     <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th><th class="p-2.5">Voucher</th><th class="p-2.5">Movement</th><th class="p-2.5">Vendor / Student</th><th class="p-2.5 text-right">In</th><th class="p-2.5 text-right">Out</th><th class="p-2.5 text-right">Running balance</th><th class="p-2.5 text-right">Amount</th></tr></thead>
+     <tbody id="itemLedgerBody"></tbody>
+    </table>
+   </div>
+   <p class="text-[11px] text-slate-500">Purchase and sale-return quantities increase stock. Sales and purchase-return quantities reduce stock. Running balance starts at 0 and follows recorded transaction history.</p>
+  </div>
+  <div class="p-3 border-t flex justify-end"><button type="button" onclick="closeItemLedger()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold">Close</button></div>
+ </div>
+</div>
+
+<div id="studentSaleModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[94vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center"><h3 class="font-bold text-teal-700">🎓 Student Sale (class-wise course)</h3><button onclick="closeSS()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+  <div class="p-4 space-y-3" data-enter-nav data-enter-submit="ssSaveBtn" onkeydown="advanceEntryOnEnter(event)">
+   <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+    <div class="sm:col-span-2"><label class="block text-xs font-medium text-slate-700 mb-1">Student (type name or admission no)</label><input id="ssStudent" list="ssStudentList" oninput="ssPick()" class="w-full border rounded-lg p-2.5 text-sm outline-none"><datalist id="ssStudentList"></datalist><p id="ssInfo" class="text-xs mt-1"></p></div>
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Date</label><input id="ssDate" type="date" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+   </div>
+   <div id="ssRows" class="space-y-2"></div>
+   <div class="flex gap-2"><input id="ssOther" list="ssOtherList" placeholder="Add another item to this bill..." class="flex-1 border rounded-lg p-2 text-sm outline-none"><datalist id="ssOtherList"></datalist><button type="button" onclick="ssAddOther()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold">+ Add</button></div>
+   <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Discount type</label><select id="ssDiscType" onchange="renderSS()" class="w-full border rounded-lg p-2 text-sm bg-white"><option value="percentage">Percent %</option><option value="amount">Amount</option></select></div>
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Discount</label><input id="ssDiscVal" type="number" min="0" value="0" oninput="renderSS()" class="w-full border rounded-lg p-2 text-sm"></div>
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Deposit to</label><select id="ssWallet" class="w-full border rounded-lg p-2 text-sm bg-white">
+                                <option value="cash">💵 Cash in Hand</option>
+                                <option value="bank">🏦 Bank</option>
+                                <option value="online">📱 Online / JazzCash</option>
+                            </select></div>
+    <label class="flex items-end gap-2 text-xs pb-2"><input id="ssPost" type="checkbox" checked> Record in Accounts</label>
+    <div class="col-span-2"><label class="block text-xs font-medium text-slate-700 mb-1">Paid now (if unticked): the rest stays pending</label><input id="ssPaidNow" type="number" min="0" placeholder="0" class="w-full border rounded-lg p-2 text-sm"></div>
+   </div>
+   <input id="ssNotes" placeholder="Notes (optional)" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+   <div class="bg-slate-50 rounded-xl p-3 text-sm flex flex-wrap justify-between gap-2"><span>Gross: <b id="ssGross">0</b></span><span>Discount: <b id="ssDisc">0</b></span><span>Net: <b id="ssNet" class="text-emerald-700">PKR 0</b></span></div>
+  </div>
+  <div class="p-4 border-t flex justify-end gap-2"><button onclick="closeSS()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button id="ssSaveBtn" onclick="saveStudentSale()" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg text-sm">Save sale</button></div>
+ </div></div>
+
+<div id="importModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[94vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center"><h3 class="font-bold text-slate-800">⬆️ Import items (Excel / CSV)</h3><button onclick="document.getElementById('importModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+  <div class="p-4 space-y-3 text-sm" data-enter-nav data-enter-submit="impGo" onkeydown="advanceEntryOnEnter(event)">
+   <p class="text-xs text-slate-500">Each row is saved as a Purchase: it creates the item (class, category, fixed sale price) or adds to its stock. Columns: title, class, category, qty, purchase_price, sale_price, vendor, date, discount_percent. Use class <b>All</b> for items every student buys.</p>
+   <button onclick="downloadTemplate()" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold">⬇️ Download template (CSV)</button>
+   <div class="flex items-center gap-2">
+     <input id="impFile" type="file" accept=".xlsx,.xls,.csv" class="w-full border rounded-lg p-2 text-sm">
+     <button type="button" onclick="clearImpFile()" title="Clear selected file" class="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700">✕</button>
+   </div>
+   <button onclick="readImp()" class="w-full px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-semibold">Read file & preview</button>
+   <div id="impPreview" class="text-xs"></div>
+   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end rounded-xl bg-slate-50 p-3">
+    <div><label for="impSettle" class="block text-xs font-semibold text-slate-700 mb-1">Purchase payment handling</label><select id="impSettle" onchange="setImpSettleMode()" class="w-full border rounded-lg p-2 text-sm bg-white">
+     <option value="payable">Vendor Payable (pay later)</option>
+     <option value="paid">Paid now from an account</option>
+    </select></div>
+    <div id="impWalletWrap" class="hidden"><label for="impWallet" class="block text-xs font-semibold text-slate-700 mb-1">Paid from</label><select id="impWallet" class="w-full border rounded-lg p-2 text-sm bg-white">
+     <option value="cash">💵 Cash in Hand</option>
+     <option value="bank">🏦 Bank</option>
+     <option value="online">📱 Online / JazzCash</option>
+    </select></div>
+    <p class="sm:col-span-2 text-[11px] text-slate-500">Unpaid purchases are added to the named vendor’s Payable balance. If paid now, the payment is recorded from the selected account and matched to each purchase.</p>
+   </div>
+  </div>
+  <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('importModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button><button id="impGo" onclick="saveImp()" class="hidden px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Import valid rows</button></div>
+ </div></div>
+
+<div id="purchaseInvoiceModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-[1400px] rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10"><div><h3 id="purchaseInvoiceTitle" class="font-bold text-violet-800">New purchase invoice</h3><p class="text-xs text-slate-500 mt-1">Add all items from one supplier invoice, then save them together.</p></div><button type="button" onclick="closePurchaseInvoice()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+  <div class="p-4 space-y-3" data-enter-nav data-enter-submit="piSaveBtn" onkeydown="advanceEntryOnEnter(event)">
+   <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div><label for="piDate" class="block text-xs font-semibold text-slate-700 mb-1">Invoice date</label><input id="piDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div>
+    <div><label for="piNumber" class="block text-xs font-semibold text-slate-700 mb-1">Supplier invoice number</label><input id="piNumber" maxlength="100" class="w-full border rounded-lg p-2.5 text-sm" placeholder="Auto-generated; editable"></div>
+    <div><label for="piVendor" class="block text-xs font-semibold text-slate-700 mb-1">Vendor / supplier</label><input id="piVendor" list="purchaseVendorList" class="w-full border rounded-lg p-2.5 text-sm" placeholder="Supplier name"><datalist id="purchaseVendorList"></datalist></div>
+   </div>
+   <div id="piRows" class="w-full overflow-x-auto border border-slate-200 rounded-lg"></div>
+   <button type="button" onclick="addPurchaseInvoiceLine()" class="px-3 py-2 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 text-sm font-semibold">+ Add another item</button>
+   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50 border p-3">
+    <div><label for="piWallet" class="block text-xs font-semibold text-slate-700 mb-1">Paid from (if recorded in Accounts)</label><select id="piWallet" class="w-full border rounded-lg p-2 text-sm bg-white"><option value="cash">💵 Cash in Hand</option><option value="bank">🏦 Bank</option><option value="online">📱 Online / JazzCash</option></select></div>
+    <label class="flex items-center gap-2 text-sm text-slate-700 sm:mt-6"><input id="piPostAcc" type="checkbox"> Mark invoice as paid and record in Accounts</label>
+    <label class="sm:col-span-2 text-xs text-slate-600">Notes (optional)<input id="piNotes" class="w-full mt-1 border rounded-lg p-2 text-sm" placeholder="Invoice notes"></label>
+   </div>
+   <div class="flex flex-wrap justify-end gap-x-5 gap-y-1 text-sm"><span>Subtotal: <b id="piSubtotal">PKR 0</b></span><span>Discount: <b id="piDiscountTotal">PKR 0</b></span><span id="piTotal" class="font-bold text-violet-800">Invoice total: PKR 0</span></div>
+  </div>
+  <div class="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-white"><button type="button" onclick="closePurchaseInvoice()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button type="button" id="piSaveBtn" onclick="savePurchaseInvoice()" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm">Save complete invoice</button></div>
+ </div>
+</div>
+
+<div id="editPurchaseInvoiceModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl">
+  <div class="p-4 border-b"><h3 class="font-bold text-indigo-900">Edit purchase invoice details</h3><p class="text-xs text-slate-500 mt-1">Updates the date and invoice number for every item in this invoice.</p></div>
+  <div class="p-4 space-y-3" data-enter-nav data-enter-submit="epiSaveBtn" onkeydown="advanceEntryOnEnter(event)"><div><label for="epiDate" class="block text-xs font-semibold text-slate-700 mb-1">Invoice date</label><input id="epiDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div><div><label for="epiNumber" class="block text-xs font-semibold text-slate-700 mb-1">Supplier invoice number</label><input id="epiNumber" maxlength="100" class="w-full border rounded-lg p-2.5 text-sm"></div><p id="epiCount" class="text-xs text-slate-500"></p></div>
+  <div class="p-4 border-t flex justify-end gap-2"><button type="button" onclick="closeEditPurchaseInvoice()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button type="button" id="epiSaveBtn" onclick="saveEditPurchaseInvoice()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save changes</button></div>
+ </div>
+</div>
+
+<div id="newItemModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center"><h3 class="font-bold text-emerald-700">➕ New item</h3><button onclick="closeNewItem()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button></div>
+  <div class="p-4 space-y-3" data-enter-nav data-enter-submit="niSaveBtn" onkeydown="advanceEntryOnEnter(event)">
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Item title</label><input id="niTitle" type="text" placeholder="e.g. Math - Class Five" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+   <div class="grid grid-cols-2 gap-2">
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Class (course)</label><select id="niClass" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select></div>
+    <div><label class="block text-xs font-medium text-slate-700 mb-1">Category</label><select id="niCat" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select></div>
+   </div>
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Sale price (optional, can be set in the purchase)</label><input id="niPrice" type="number" min="0" placeholder="PKR" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+   <div class="rounded-xl border bg-slate-50 p-2 text-xs max-h-40 overflow-y-auto"><div class="font-semibold text-slate-600 mb-1">Items added from here</div><div id="niList"></div></div>
+  </div>
+  <div class="p-4 border-t flex justify-end gap-2"><button onclick="closeNewItem()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button id="niSaveBtn" onclick="saveNewItem()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save item</button></div>
+ </div></div>
+
+<style>@media print{body.print-stmt *{visibility:hidden!important}body.print-stmt #stmtModal,body.print-stmt #stmtModal *{visibility:visible!important}body.print-stmt #stmtModal{position:absolute!important;left:0;top:0;width:100%;background:#fff!important;display:block!important}body.print-stmt #stmtBox{max-height:none!important;box-shadow:none!important}}</style>
+<div id="settleModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+  <div class="p-4 border-b flex justify-between items-center"><h3 id="sdTitle" class="font-bold text-indigo-900"></h3><button onclick="document.getElementById('settleModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">&#10005;</button></div>
+  <div class="p-4 space-y-3"><input type="hidden" id="sdKind"><input type="hidden" id="sdKey">
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Name</label><input id="sdParty" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 font-semibold"></div>
+   <div class="grid grid-cols-2 gap-2"><div><label class="block text-xs font-medium text-slate-700 mb-1">Pending</label><input id="sdPending" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 font-bold text-rose-600"></div>
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Amount</label><input id="sdAmount" type="number" min="1" class="w-full border rounded-lg p-2.5 text-sm font-bold"></div></div>
+   <div class="grid grid-cols-2 gap-2"><div><label class="block text-xs font-medium text-slate-700 mb-1">Date</label><input id="sdDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div>
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Account</label><select id="sdWallet" class="w-full border rounded-lg p-2.5 text-sm bg-white">
+                                <option value="cash">💵 Cash in Hand</option>
+                                <option value="bank">🏦 Bank</option>
+                                <option value="online">📱 Online / JazzCash</option>
+                            </select></div></div>
+   <div><label class="block text-xs font-medium text-slate-700 mb-1">Notes (optional)</label><input id="sdNotes" class="w-full border rounded-lg p-2.5 text-sm"></div>
+   <p class="text-xs text-slate-500">It is recorded in Accounts against the oldest pending bills (same voucher number as the bill).</p></div>
+  <div class="p-4 border-t flex justify-end gap-2"><button onclick="document.getElementById('settleModal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="saveSettle()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Save</button></div>
+ </div></div>
+<div id="stmtModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div id="stmtBox" class="bg-white w-full max-w-6xl rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto p-5">
+  <div class="flex justify-between items-start border-b pb-3 mb-2 gap-2"><div><h3 class="font-bold text-indigo-950">Concept School - Book Store Statement</h3><p id="stmtName" class="text-sm font-semibold text-slate-700"></p> <a id="stmtAcctLink" href="#" class="no-print text-[11px] font-semibold text-indigo-600 hover:underline">Open in Accounts ledger ↗</a></div>
+  <div class="flex flex-wrap items-center gap-2 no-print"><input id="stmtPartyKey" type="hidden"><div class="flex gap-1" role="group" aria-label="Statement grouping"><button id="stmtViewDate" type="button" onclick="setStatementView('date')" class="px-3 py-1.5 rounded-lg text-xs font-semibold">Date-wise</button><button id="stmtViewBill" type="button" onclick="setStatementView('bill')" class="px-3 py-1.5 rounded-lg text-xs font-semibold">Bill-wise</button></div><button onclick="printStatement()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">Print</button><button onclick="document.getElementById('stmtModal').classList.add('hidden')" class="bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">&#10005;</button></div></div>
+  <div id="stmtBody"></div></div></div>
+<div id="promiseModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+ <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3"><h3 class="font-bold text-amber-700">Promise to pay</h3><input type="hidden" id="prKey"><p id="prParty" class="text-sm font-semibold"></p>
+  <div><label class="block text-xs font-medium text-slate-700 mb-1">Promise date</label><input id="prDate" type="date" class="w-full border rounded-lg p-2.5 text-sm"></div>
+  <div><label class="block text-xs font-medium text-slate-700 mb-1">Promised amount (optional)</label><input id="prAmt" type="number" min="0" class="w-full border rounded-lg p-2.5 text-sm"></div>
+  <div><label class="block text-xs font-medium text-slate-700 mb-1">Note (optional)</label><input id="prNote" class="w-full border rounded-lg p-2.5 text-sm"></div>
+  <div class="flex justify-between gap-2 pt-1"><button onclick="savePromise(true)" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Remove</button><div class="flex gap-2"><button onclick="document.getElementById('promiseModal').classList.add('hidden')" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="savePromise(false)" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg text-sm">Save</button></div></div>
+ </div></div>
+<script src="books-group.js?v=20261024-2"></script>
+</body>
+</html>
