@@ -1,4 +1,4 @@
-const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000, SB_DATA_CACHE_STALE = 5 * 60 * 1000;
+const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 60000, SB_DATA_CACHE_STALE = 12 * 60 * 60 * 1000;   // fresh for 1 min; instantly usable for 12 h while it refreshes in the background
 const SB_DATA_DB_NAME = 'shibra_data_cache_v1', SB_DATA_DB_STORE = 'responses';
 const _sbDataMemory = new Map(), _sbDataPending = new Map();
 let _sbDataDbPromise = null;

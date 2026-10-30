@@ -46,6 +46,7 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
         if (!Array.isArray(rows)) return { ok: false, status: response.status, json: async () => rows, text: async () => '' };
         if (sbDataRevision(table) !== revision) return { ok: true, status: response.status, json: async () => rows, text: async () => '' };
         const value = JSON.stringify(rows), expires = Date.now() + SB_DATA_CACHE_TTL, staleUntil = expires + SB_DATA_CACHE_STALE;
+        const previous = _sbDataMemory.get(key), changed = !previous || previous.packed !== value;
         _sbDataMemory.set(key, { revision, expires, staleUntil, packed: value });
         sbWritePersistentData({ key, revision, expires, staleUntil, rows })
             .catch(error => console.warn(`Could not persist cached ${table} data:`, error));
@@ -58,7 +59,7 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
             _settingListsRevision = '';
             try { sessionStorage.removeItem('sb_settings_v2'); } catch (e) {}
         }
-        if (background) window.dispatchEvent(new CustomEvent('sb:data-cache-updated', { detail: { table, query } }));
+        if (background && changed) window.dispatchEvent(new CustomEvent('sb:data-cache-updated', { detail: { table, query } }));   // only when the data really changed
         return { ok: true, status: response.status, json: async () => rows, text: async () => '' };
     })();
     let tracked;
@@ -69,7 +70,7 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
     _sbDataPending.set(key, { revision, promise: tracked });
     return tracked;
 }
-async function sbFetchAll(table, query) {
+async function sbFetchAllDirect(table, query) {
     query = query || 'select=*';
     const key = sbDataCacheKey(table, query), revision = sbDataRevision(table), now = Date.now();
     for (const [cacheKey, entry] of _sbDataMemory)
@@ -118,6 +119,102 @@ async function sbFetchAll(table, query) {
     }
     return sbFetchAllNetwork(table, query, key, revision);
 }
+
+// ====================================================================================
+// SHARED TABLE CACHE – every page used to download the same big table in a different shape.
+// A "column subset" query (select=a,b,c) is now served from ONE cached copy of the table, so the
+// first page pays the download and every other page opens from memory.
+// If the full copy cannot be read (e.g. permissions), the original query is used instead.
+// ====================================================================================
+const SB_SHARED_TABLES = new Set(['students', 'fees', 'accounts', 'books', 'staff', 'payroll', 'staff_salary_increments', 'staff_security_ledger', 'increments', 'settings']);
+const SB_CANON_QUERY = { accounts: 'select=*&order=date.asc,voucher_id.asc' };
+const _sbCanonFailed = new Set();
+const SB_PERF = (() => { try { return /[?&]perf\b/.test(location.search) || localStorage.getItem('sb_debug_perf') === '1'; } catch (e) { return false; } })();
+function sbShareable(table, query) {
+    if (!SB_SHARED_TABLES.has(table) || _sbCanonFailed.has(table)) return null;
+    const m = String(query || 'select=*').match(/^select=([A-Za-z0-9_,*]+)(&voucher_id=like\.V-\*)?$/);
+    if (!m || (m[2] && table !== 'accounts')) return null;
+    const canon = SB_CANON_QUERY[table] || 'select=*';
+    if (query === canon) return null;
+    return { canon, cols: m[1] === '*' ? null : m[1].split(','), vOnly: !!m[2] };
+}
+async function sbFetchAll(table, query) {
+    query = query || 'select=*';
+    const t0 = performance.now(), share = sbShareable(table, query);
+    let result = null, via = 'direct';
+    if (share) {
+        const full = await sbFetchAllDirect(table, share.canon);
+        if (full.ok) {
+            const all = await full.json();
+            if (Array.isArray(all)) {
+                let rows = all;
+                if (share.vOnly) rows = rows.filter(r => String(r.voucher_id || '').startsWith('V-'));
+                if (share.cols) rows = rows.map(r => { const o = {}; for (const c of share.cols) if (c in r) o[c] = r[c]; return o; });
+                result = { ok: true, status: 200, json: async () => rows, text: async () => JSON.stringify(rows) };
+                via = 'shared';
+            }
+        } else if (full.status === 401 || full.status === 403 || full.status === 400) _sbCanonFailed.add(table);
+    }
+    if (!result) result = await sbFetchAllDirect(table, query);
+    if (SB_PERF) console.log(`[perf] ${table} ${query.slice(0, 60)} → ${via}, ${Math.round(performance.now() - t0)} ms`);
+    return result;
+}
+
+// Schema probes ("does this column exist?") only need to succeed once a day, not on every page load
+function sbProbe(url) {
+    const key = 'sb_probe_' + String(url).replace(/^.*\/rest\/v1\//, '');
+    try { if (Date.now() - Number(localStorage.getItem(key) || 0) < 24 * 60 * 60 * 1000) return Promise.resolve({ ok: true, status: 200 }); } catch (e) {}
+    return fetch(url, { headers: sbHeaders() }).then(r => { if (r.ok) { try { localStorage.setItem(key, String(Date.now())); } catch (e) {} } return r; });
+}
+
+// Server functions that assemble big result sets (e.g. the Follow-up list) are cached the same way as tables:
+// shown instantly from the saved copy, refreshed in the background, invalidated when the tables they read change.
+async function sbRpcCached(name, tables) {
+    const url = `${getSupabaseConfig().url}/rest/v1/rpc/${name}`, now = Date.now();
+    const revision = (tables || []).map(sbDataRevision).join('~'), key = `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_rpc_${name}`;
+    const wrap = text => ({ ok: true, status: 200, json: async () => JSON.parse(text), text: async () => text });
+    const network = async background => {
+        const r = await fetch(url, { headers: sbHeaders() });
+        if (!r.ok) return r;
+        const text = await r.text(), prev = _sbDataMemory.get(key);
+        const entry = { revision, expires: Date.now() + SB_DATA_CACHE_TTL, staleUntil: Date.now() + SB_DATA_CACHE_STALE, packed: text };
+        _sbDataMemory.set(key, entry);
+        sbWritePersistentData(Object.assign({ key }, entry)).catch(() => {});
+        if (background && (!prev || prev.packed !== text)) window.dispatchEvent(new CustomEvent('sb:data-cache-updated', { detail: { table: 'rpc:' + name } }));
+        return wrap(text);
+    };
+    let cached = _sbDataMemory.get(key);
+    if (!cached || cached.revision !== revision) {
+        cached = null;
+        try { const saved = await sbReadPersistentData(key); if (saved && saved.revision === revision && saved.staleUntil > now && typeof saved.packed === 'string') { cached = saved; _sbDataMemory.set(key, saved); } } catch (e) {}
+    }
+    if (cached && cached.staleUntil > now) {
+        if (cached.expires <= now) network(true).catch(() => {});
+        return wrap(cached.packed);
+    }
+    return network(false);
+}
+
+// When fresh data arrives in the background and it is different, redraw the page quietly
+// (no loading wheel). It waits while a form/dialog is open, rows are ticked, or the user is typing.
+let _sbSilentTimer = 0, _sbSilentTries = 0;
+function sbSilentRefresh() {
+    const code = (document.body && document.body.getAttribute('onload')) || '';
+    if (!code || /^\s*initDashboard/.test(code) || document.visibilityState === 'hidden') return;
+    const modalOpen = [...document.querySelectorAll('.fixed.inset-0, .ui-back, .modal, [role="dialog"]')]
+        .some(el => el.id !== 'loadingOverlay' && el.id !== 'appBackdrop' && el.id !== 'toast' && !el.hidden && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden');
+    const ticked = document.querySelector('tbody input[type="checkbox"]:checked');
+    const ae = document.activeElement, typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.closest('form, [id$="Modal"]');
+    if (modalOpen || ticked || typing) { if (_sbSilentTries++ < 8) _sbSilentTimer = setTimeout(sbSilentRefresh, 5000); return; }
+    _sbSilentTries = 0;
+    const realShow = window.showLoading; window.showLoading = () => {};
+    let run; try { run = new Function('return (' + code.replace(/;\s*$/, '') + ')')(); } catch (e) { window.showLoading = realShow; return; }
+    Promise.resolve(run).catch(() => {}).finally(() => { window.showLoading = realShow; });
+}
+window.addEventListener('sb:data-cache-updated', () => {
+    if (!document.body || !document.body.getAttribute('onload')) return;
+    clearTimeout(_sbSilentTimer); _sbSilentTimer = setTimeout(sbSilentRefresh, 700);
+});
 
 // Dropdown lists + rules maintained on the System Settings page (with sensible defaults)
 const SETTING_DEFAULTS = {

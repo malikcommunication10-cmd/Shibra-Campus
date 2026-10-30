@@ -100,7 +100,7 @@ async function initFollowups() {
     try {
         let c = getSupabaseConfig();
         const logsPromise = loadLogs(false);
-        let dataResponse = await fetch(`${c.url}/rest/v1/rpc/app_followup_data`, { headers: sbHeaders() });
+        let dataResponse = await sbRpcCached('app_followup_data', ['students', 'fees', 'accounts', 'call_logs', 'followup_assignments']);
         if(!dataResponse.ok) {
             let detail = await dataResponse.text();
             if(dataResponse.status === 404) throw new Error('Restricted Follow-up access is not installed. Ask the administrator to run supabase_followups_access.sql.');

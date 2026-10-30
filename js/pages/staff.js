@@ -480,9 +480,9 @@ async function initStaff() {
             settingsPromise,
             ERP.db.request('staff', 'select=*'),
             ERP.db.request('payroll', 'select=*'),
-            fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days,security_deduction&limit=1`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`, { headers: sbHeaders() }),
+            sbProbe(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`),
+            sbProbe(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days,security_deduction&limit=1`),
+            sbProbe(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`),
             ERP.db.request('staff_security_ledger', 'select=*'),
             ERP.db.request('staff_salary_increments', 'select=*')
         ]);
@@ -1380,7 +1380,7 @@ function deleteStaff(key) {
         try {
             let c = getSupabaseConfig();
             if(attendanceOk) {
-                let a = await fetch(`${c.url}/rest/v1/staff_attendance?select=id&staff_id=eq.${encodeURIComponent(s.staffId)}&limit=1`, { headers: sbHeaders() });
+                let a = await sbProbe(`${c.url}/rest/v1/staff_attendance?select=id&staff_id=eq.${encodeURIComponent(s.staffId)}&limit=1`);
                 if(!a.ok) { hideLoading(); toast('Could not check attendance history: ' + await a.text(), false); return; }
                 let attendance = await a.json();
                 if(Array.isArray(attendance) && attendance.length) {

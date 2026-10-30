@@ -113,9 +113,9 @@ async function initBooks() {
             Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]),
             Promise.all([
                 ERP.db.request('books', 'select=*'),
-                fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() }),
-                fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() }),
-                fetch(`${c.url}/rest/v1/books?select=invoice_no&limit=1`, { headers: sbHeaders() })
+                sbProbe(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`),
+                sbProbe(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`),
+                sbProbe(`${c.url}/rest/v1/books?select=invoice_no&limit=1`)
             ])
         ]);
         try { await fillPaySelects(['mWallet', 'ssWallet', 'sdWallet', 'impWallet', 'piWallet']); } catch (e) {}

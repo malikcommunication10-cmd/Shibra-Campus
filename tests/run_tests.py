@@ -99,6 +99,43 @@ def main():
             pg.evaluate("()=>{UI.confirm('Delete the role X?').then(v=>window.__r.c=v)}"); pg.wait_for_timeout(80); pg.click('.ui-btn.danger'); pg.wait_for_timeout(80)
             check('prompt returns typed value', pg.evaluate('window.__r.p') == '2026-11'); check('confirm returns true on Yes, delete', pg.evaluate('window.__r.c') is True)
             check('UI.words(10250) = Ten Thousand Two Hundred Fifty', pg.evaluate('UI.words(10250)') == 'Ten Thousand Two Hundred Fifty'); pg.close()
+            print('6. Speed: shared table cache and silent refresh')
+            errs = []; pg = new_page(b, errs, 'students')
+            out = pg.evaluate("""async()=>{
+              sbCacheClear(); _sbDataMemory.clear(); let calls=0;
+              const rows=[{id:1,admis_no:'1',student_name:'A',class:'5',status:'Active'},{id:2,admis_no:'2',student_name:'B',class:'3',status:'Left'}];
+              window.sbFetchAllUncached=async(t,q)=>{calls++;return {ok:true,status:200,json:async()=>rows,text:async()=>''}};
+              const a=await (await sbFetchAll('students','select=admis_no,student_name')).json();
+              const b=await (await sbFetchAll('students','select=*')).json();
+              const c=await (await sbFetchAll('students','select=class')).json();
+              return {calls, a:JSON.stringify(a), c:JSON.stringify(c), full:b.length};}""")
+            check('3 different column queries = 1 download', out['calls'] == 1, out)
+            check('column subset is projected correctly', out['a'] == '[{"admis_no":"1","student_name":"A"},{"admis_no":"2","student_name":"B"}]' and out['c'] == '[{"class":"5"},{"class":"3"}]', out)
+            out = pg.evaluate("""async()=>{
+              sbCacheClear(); _sbDataMemory.clear(); _sbCanonFailed.clear();
+              window.sbFetchAllUncached=async(t,q)=>q==='select=*'?{ok:false,status:403,json:async()=>({}),text:async()=>''}:{ok:true,status:200,json:async()=>[{x:1}],text:async()=>''};
+              const r=await (await sbFetchAll('fees','select=x')).json(); return {len:r.length,failed:_sbCanonFailed.has('fees')};}""")
+            check('falls back to the original query when the full table is not allowed', out['len'] == 1 and out['failed'], out)
+            out = pg.evaluate("""async()=>{
+              document.body.setAttribute('onload','window.__n=(window.__n||0)+1'); window.__n=0;
+              window.dispatchEvent(new CustomEvent('sb:data-cache-updated',{detail:{table:'students'}}));
+              await new Promise(r=>setTimeout(r,1200)); const first=window.__n;
+              const m=document.createElement('div'); m.className='fixed inset-0'; m.id='probeModal'; document.body.appendChild(m);
+              window.dispatchEvent(new CustomEvent('sb:data-cache-updated',{detail:{table:'students'}}));
+              await new Promise(r=>setTimeout(r,1200)); m.remove(); return {first, withModal: window.__n};}""")
+            check('background change redraws the page once, quietly', out['first'] == 1, out)
+            check('redraw waits while a dialog is open', out['withModal'] == 1, out)
+            out = pg.evaluate("""async()=>{
+              window.sbHeaders=()=>({}); let n=0; localStorage.clear(); sbCacheClear(); _sbDataMemory.clear();
+              window.fetch=async(u)=>{n++; return {ok:true,status:200,text:async()=>JSON.stringify({v:n}),json:async()=>({v:n})}};
+              await sbProbe('https://x.supabase.co/rest/v1/books?select=a&limit=1'); await sbProbe('https://x.supabase.co/rest/v1/books?select=a&limit=1');
+              const probeCalls=n; n=0;
+              const r1=await (await sbRpcCached('app_followup_data',['students'])).json(); const r2=await (await sbRpcCached('app_followup_data',['students'])).json();
+              return {probeCalls, rpcCalls:n, same:JSON.stringify(r1)===JSON.stringify(r2)};}""")
+            check('schema probe runs once, not on every load', out['probeCalls'] == 1, out)
+            check('server function result is reused (1 call for 2 loads)', out['rpcCalls'] == 1 and out['same'], out)
+            check('no errors', not errs, errs); pg.close()
+
             b.close()
     finally:
         srv.terminate()

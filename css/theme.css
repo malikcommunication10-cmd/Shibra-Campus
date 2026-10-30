@@ -4,7 +4,6 @@
    Sirf design: koi JS / ID / logic change nahi.
    Palette: Ink #0b1f3f · Brass #d4a24c · Action #1d4ed8 · Canvas #f4f6fa
    ===================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 :root{
   --ink:#0b1f3f; --ink-2:#13305c; --ink-3:#1c4178;
   --brass:#d4a24c; --brass-soft:#f6e7c8;
@@ -18,7 +17,7 @@
 }
 html{scroll-behavior:smooth}
 body{
-  font-family:'Plus Jakarta Sans','Segoe UI',system-ui,-apple-system,'Noto Sans',Roboto,Arial,sans-serif !important;
+  font-family:'Segoe UI',system-ui,-apple-system,'Noto Sans',Roboto,Arial,sans-serif !important;
   background:var(--canvas) !important;color:var(--text) !important;
   -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
 }
