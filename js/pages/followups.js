@@ -232,6 +232,7 @@ function buildFamilies() {
         let key = childKey(f.admis_no, f.student_name);
         let ch = addChild(key, { adm: f.admis_no || '', name: f.student_name || '', cls: f.class || '', sibRaw: String(f[SIBLINGS_COL] ?? '').trim() });
         if(!ch.sibRaw && f[SIBLINGS_COL]) ch.sibRaw = String(f[SIBLINGS_COL]).trim();
+        (ch.vids = ch.vids || new Set()).add(String(f.voucher_id || '').trim());   // every voucher of this child, for the last-payment lookup
         if(isFutureV(f)) { ch.net -= f._paid; ch.paidFuture = (ch.paidFuture || 0) + f._paid; return; }
         ch.vouchers.push({ period: f.period, type: f.type, payable: f._payable, paid: f._paid, balance: f._balance, voucher_id: f.voucher_id, ord: rowOrder(f) });
         ch.net += f._balance;
@@ -265,6 +266,23 @@ function buildFamilies() {
         f.logs.sort((a, b) => new Date(b.call_date) - new Date(a.call_date));
         f.lastLog = f.logs[0] || null;
         f.promiseDate = f.lastLog && f.lastLog.promise_date ? String(f.lastLog.promise_date).slice(0, 10) : '';
+        // LPD / LPA: the newest receipt received for ANY child of this family (one bulk receipt counts once, not per voucher)
+        f.lastPay = null;
+        {
+            const seen = new Set(), receipts = new Map();
+            f.kids.forEach(k => [...(k.vids || [])].forEach(vid => {
+                if(seen.has(vid)) return; seen.add(vid);
+                (txMap[vid] || []).forEach(t => {
+                    const amt = parseFloat(t.amount_in) || 0, date = String(t.date || '').slice(0, 10);
+                    if(amt <= 0 || !date) return;
+                    const rest = String(t.voucher_id || '').trim().split('-').slice(2).join('-');
+                    const key = date + '|' + (((rest.match(/^(\d{10,})/) || [])[1]) || t.voucher_id);
+                    const r = receipts.get(key) || { date, amount: 0 }; r.amount += amt; receipts.set(key, r);
+                });
+            }));
+            const best = [...receipts.values()].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount)[0];
+            if(best) f.lastPay = { date: best.date, amount: Math.round(best.amount * 100) / 100 };
+        }
         f.paidSince = 0;
         if(f.lastLog && f.lastLog.pending_at_call !== null && f.lastLog.pending_at_call !== undefined) {
             let diff = (parseFloat(f.lastLog.pending_at_call) || 0) - f.pending;
@@ -491,6 +509,10 @@ function famCardHtml(f) {
                 <div class="text-right">
                     <div class="text-xs text-slate-500">Total due</div>
                     <div class="text-xl font-extrabold ${pendingCls}">${pendingTxt}</div>
+                    <div class="mt-1 text-[11px] leading-snug text-slate-500" title="LPD = Last Payment Date, LPA = Last Payment Amount">
+                        <div>LPD: <b class="text-slate-700">${f.lastPay ? fmtDate(f.lastPay.date) : '—'}</b></div>
+                        <div>LPA: <b class="text-emerald-700">${f.lastPay ? 'PKR ' + fmt(f.lastPay.amount) : '—'}</b></div>
+                    </div>
                 </div>
             </div>
             <div class="flex flex-wrap gap-1.5 mt-3">${contactsHtml(f, false)}</div>
