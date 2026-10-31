@@ -65,10 +65,11 @@
             ['day_close', 'select=*&order=closed_date.desc']
         ]
     };
+
     function prefetchPageData(file) {
-        if (typeof PAGE_FILE === 'undefined') return;
+        if (typeof PAGE_FILE === 'undefined' || !PAGE_FILE[file]) return;
         const pageKey = PAGE_FILE[file];
-        if (!pageKey || typeof sbFetchAll !== 'function' || typeof can !== 'function' || !can(pageKey, 'v')) return;
+        if (typeof can === 'function' && !can(pageKey, 'v')) return;
         const connection = navigator.connection;
         if (connection && (connection.saveData || ['slow-2g', '2g'].includes(connection.effectiveType))) return;
         const queries = pageData[file] || [];
@@ -79,14 +80,14 @@
     }
 
     function prefetchAllWindowsData() {
-        if (typeof sbFetchAll !== 'function' || typeof can !== 'function' || typeof PAGE_FILE === 'undefined') return;
+        if (typeof sbFetchAll !== 'function' || typeof PAGE_FILE === 'undefined') return;
         const connection = navigator.connection;
         if (connection && (connection.saveData || ['slow-2g', '2g'].includes(connection.effectiveType))) return;
         const allPages = Object.keys(pageData);
         setTimeout(() => {
             allPages.forEach((file, index) => {
                 const pageKey = PAGE_FILE[file];
-                if (pageKey && can(pageKey, 'v')) {
+                if (!pageKey || (typeof can === 'function' && can(pageKey, 'v'))) {
                     const queries = pageData[file] || [];
                     setTimeout(() => {
                         queries.forEach(async ([table, query]) => {
@@ -104,16 +105,24 @@
         const aside = document.getElementById('appNav');
         if (!aside) return;
         const me = (typeof ME !== 'undefined') ? ME : null;
-        const shown = links.filter(l => !me || !me.perms || (typeof PAGE_FILE !== 'undefined' && typeof can === 'function' && can(PAGE_FILE[l[0]], 'v')));
+        
+        // Safe link filtering jo kabhi bhi saare tabs ko gayab nahi hone degi
+        const shown = links.filter(l => {
+            if (!me || !me.perms || typeof PAGE_FILE === 'undefined' || typeof can !== 'function') return true;
+            const pKey = PAGE_FILE[l[0]];
+            return !pKey || can(pKey, 'v');
+        });
+
         const reportLinks = shown.filter(l => ['reports.html', 'statements.html', 'audit.html'].includes(l[0]));
         const mainLinks = shown.filter(l => !['reports.html', 'statements.html', 'audit.html'].includes(l[0]));
         const reportActive = reportLinks.some(l => l[0] === page);
+        
         const reportMenu = reportLinks.length ? `<details class="app-report-group rounded-xl ${reportActive ? 'bg-white/5' : ''}" ${reportActive ? 'open' : ''}>
             <summary class="app-report-summary flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-indigo-100 hover:bg-white/10"><span>📊 Reports &amp; Audit</span><span aria-hidden="true">⌄</span></summary>
             <div class="space-y-1 pb-1 pl-3">${reportLinks.map(l => `<a href="${l[0]}" class="flex gap-2.5 items-center px-3 py-2 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}</div>
         </details>` : '';
         
-        // Sidebar styling: Mobile par fixed off-screen, Desktop par sticky
+        // Sidebar styling: By default off-screen on mobile, visible on desktop
         aside.className = 'no-print fixed md:sticky top-0 left-0 h-screen w-64 shrink-0 z-50 bg-indigo-950 text-white flex flex-col transition-transform -translate-x-full md:translate-x-0 shadow-2xl';
         
         const accountActions = me && me.email ? `<div class="flex gap-2 p-3 border-b border-white/10"><button id="appPwBtn" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Password</button><button onclick="sbLogout()" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Logout</button></div>` : '';
@@ -154,15 +163,17 @@
             menuButton.setAttribute('aria-expanded', String(open));
         };
 
-        menuButton.onclick = () => {
-            const isOpen = aside.classList.contains('-translate-x-full');
-            setMenuOpen(isOpen);
-        };
+        if (menuButton) {
+            menuButton.onclick = () => {
+                const isOpen = aside.classList.contains('-translate-x-full');
+                setMenuOpen(isOpen);
+            };
+        }
 
         if (closeButton) closeButton.onclick = () => setMenuOpen(false);
-        backdrop.onclick = () => setMenuOpen(false);
+        if (backdrop) backdrop.onclick = () => setMenuOpen(false);
 
-        // Desktop par by default open rahegi, mobile par hidden rahegi
+        // Desktop par sidebar by default open rahegi
         if (window.matchMedia('(min-width: 768px)').matches) {
             aside.classList.remove('-translate-x-full');
         }
@@ -201,15 +212,15 @@
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && window.matchMedia('(max-width: 767px)').matches) {
                 setMenuOpen(false);
-                menuButton.focus();
+                if (menuButton) menuButton.focus();
             }
         });
 
         window.addEventListener('resize', () => {
             if (!window.matchMedia('(max-width: 767px)').matches) {
-                backdrop.classList.add('hidden');
+                if (backdrop) backdrop.classList.add('hidden');
                 aside.classList.remove('-translate-x-full');
-                menuButton.setAttribute('aria-expanded', 'false');
+                if (menuButton) menuButton.setAttribute('aria-expanded', 'false');
                 document.body.classList.remove('overflow-hidden');
             }
         });
@@ -217,14 +228,16 @@
         const pm = document.getElementById('appPwModal'), msg = document.getElementById('appPwMsg');
         const showMsg = (t, ok) => { msg.textContent = t; msg.className = 'text-xs ' + (ok ? 'text-emerald-600' : 'text-rose-600'); };
         if (document.getElementById('appPwBtn')) document.getElementById('appPwBtn').onclick = () => { document.getElementById('appPw1').value = ''; document.getElementById('appPw2').value = ''; msg.className = 'hidden'; pm.classList.remove('hidden'); pm.classList.add('flex'); };
-        document.getElementById('appPwCancel').onclick = () => { pm.classList.add('hidden'); pm.classList.remove('flex'); };
-        document.getElementById('appPwSave').onclick = async () => {
-            const a = document.getElementById('appPw1').value, b = document.getElementById('appPw2').value;
-            if (a.length < 6) return showMsg('Use at least 6 characters.');
-            if (a !== b) return showMsg('The two passwords are not the same.');
-            const err = await sbChangePassword(a); if (err) return showMsg(err);
-            showMsg('Password changed.', true); setTimeout(() => { pm.classList.add('hidden'); pm.classList.remove('flex'); }, 900);
-        };
+        if (document.getElementById('appPwCancel')) document.getElementById('appPwCancel').onclick = () => { pm.classList.add('hidden'); pm.classList.remove('flex'); };
+        if (document.getElementById('appPwSave')) {
+            document.getElementById('appPwSave').onclick = async () => {
+                const a = document.getElementById('appPw1').value, b = document.getElementById('appPw2').value;
+                if (a.length < 6) return showMsg('Use at least 6 characters.');
+                if (a !== b) return showMsg('The two passwords are not the same.');
+                const err = await sbChangePassword(a); if (err) return showMsg(err);
+                showMsg('Password changed.', true); setTimeout(() => { pm.classList.add('hidden'); pm.classList.remove('flex'); }, 900);
+            };
+        }
         setupDayClose();
         prefetchAllWindowsData();
     }
@@ -238,6 +251,7 @@
         const error = document.getElementById('appDayError');
         const controls = document.getElementById('appDayControls');
         const doneRow = document.getElementById('appDayDoneRow');
+        if (!button || !modal) return;
         let lastClose = null;
         let pending = false;
         const pkDate = offset => {
