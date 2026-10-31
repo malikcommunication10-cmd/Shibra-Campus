@@ -272,7 +272,7 @@ function buildFamilies() {
             const seen = new Set(), receipts = new Map();
             f.kids.forEach(k => [...(k.vids || [])].forEach(vid => {
                 if(seen.has(vid)) return; seen.add(vid);
-                (txMap[vid] || []).forEach(t => {
+                (txMap[vid.split('-').slice(0, 2).join('-')] || []).forEach(t => {
                     const amt = parseFloat(t.amount_in) || 0, date = String(t.date || '').slice(0, 10);
                     if(amt <= 0 || !date) return;
                     const rest = String(t.voucher_id || '').trim().split('-').slice(2).join('-');

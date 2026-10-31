@@ -253,3 +253,12 @@ button.ui-kpi{cursor:pointer;transition:transform .15s,box-shadow .15s}button.ui
 @media (min-width:768px){ #appNav{left:auto !important} }   /* sticky only vertically, never pinned over content when the page scrolls sideways */
 main{min-width:0 !important;max-width:100%}                  /* a wide table inside must scroll in its own box, not widen the page */
 .ui-page,.st-wrap{grid-template-columns:minmax(0,1fr)}
+
+/* ---------- Deterministic desktop layout: sidebar beside content, never over it ---------- */
+@media (min-width:768px){
+  .min-h-screen.flex, div:has(> #appNav){display:flex !important;flex-direction:row !important;align-items:stretch}
+  #appNav{position:sticky !important;top:0 !important;left:auto !important;height:100vh !important;flex:0 0 17rem !important;width:17rem !important;
+          transform:none !important;align-self:flex-start;overflow-y:auto}
+  #appNav + main, .min-h-screen.flex > main{flex:1 1 0% !important;min-width:0 !important}
+  #appBackdrop{display:none !important}
+}
