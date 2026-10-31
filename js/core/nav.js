@@ -101,23 +101,6 @@
         }, 1500); 
     }
 
-    // Global foolproof toggle functions
-    window.openShibraSidebar = function() {
-        const aside = document.getElementById('appNav');
-        const backdrop = document.getElementById('appBackdrop');
-        if (aside) aside.classList.remove('-translate-x-full');
-        if (backdrop) backdrop.classList.remove('hidden');
-        document.body.classList.add('overflow-hidden');
-    };
-
-    window.hideShibraSidebar = function() {
-        const aside = document.getElementById('appNav');
-        const backdrop = document.getElementById('appBackdrop');
-        if (aside) aside.classList.add('-translate-x-full');
-        if (backdrop) backdrop.classList.add('hidden');
-        document.body.classList.remove('overflow-hidden');
-    };
-
     function build() {
         const aside = document.getElementById('appNav');
         if (!aside) return;
@@ -142,29 +125,44 @@
         const accountActions = me && me.email ? `<div class="flex gap-2 p-3 border-b border-white/10"><button id="appPwBtn" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Password</button><button onclick="sbLogout()" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Logout</button></div>` : '';
         const who = me && me.email ? `<div class="px-3 py-2 border-b border-white/10"><div class="min-w-0"><div class="text-sm font-semibold truncate">👤 ${esc(me.name || me.email)}</div><div class="text-[11px] text-indigo-300 truncate">${esc(me.role || '')} · ${esc(me.email)}</div>${me.closedThrough ? `<div class="text-[11px] text-amber-300 mt-0.5">🔒 Closed up to ${esc(me.closedThrough)}</div>` : ''}</div></div>` : '';
         
-        // Direct inline onclick handler taake click miss na ho
-        const sidebarHeader = `<div class="flex items-center justify-between p-5 border-b border-white/15"><div><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div><button type="button" onclick="window.hideShibraSidebar()" class="text-indigo-200 hover:text-white bg-white/10 px-2.5 py-1 rounded-lg text-sm font-bold cursor-pointer">✕ Hide</button></div>`;
-
-        aside.innerHTML = `${accountActions}${sidebarHeader}${who}
+        aside.innerHTML = `${accountActions}<div class="p-5 border-b border-white/10"><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div>${who}
             <nav class="flex-1 p-3 space-y-1 overflow-y-auto">${mainLinks.map(l => `<a href="${l[0]}" data-prefetch-page="${l[0]}" class="flex gap-2.5 items-center px-3 py-2.5 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}${reportMenu}</nav>`;
+        
+        document.body.insertAdjacentHTML('afterbegin',
+            `<header id="appTop" class="md:hidden sticky top-0 z-40 bg-indigo-950 text-white flex items-center justify-between px-4 py-3 no-print"><div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus</div></div><button id="appMenuBtn" class="text-2xl px-2 min-h-11 min-w-11" aria-label="Open navigation menu" aria-controls="appNav" aria-expanded="false">☰</button></header>
+             <div id="appBackdrop" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden"></div>
+             <button id="appDayBtn" type="button" class="fixed bottom-4 right-4 z-[80] hidden rounded-full bg-rose-600 px-4 py-3 text-sm font-bold text-white shadow-lg hover:bg-rose-700 no-print">🔒 Day close</button>
+             <div id="appDayModal" class="fixed inset-0 z-[95] hidden items-center justify-center bg-black/60 p-4 no-print"><div class="w-full max-w-sm space-y-4 rounded-2xl bg-white p-5 text-slate-800 shadow-2xl">
+                <div class="flex items-start justify-between gap-3"><div><h3 class="font-bold text-indigo-950">Day close</h3><p id="appDayMessage" class="text-xs text-slate-500"></p></div><button id="appDayCancelTop" type="button" class="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100" aria-label="Close">✕</button></div>
+                <p class="rounded-xl border bg-slate-50 p-3 text-sm">Closed through: <b id="appDayThrough" class="text-indigo-900">Checking…</b></p>
+                <p id="appDayError" class="hidden break-words rounded-lg bg-rose-50 p-2 text-xs text-rose-700"></p>
+                <div id="appDayControls" class="space-y-3">
+                    <div><label for="appDayDate" class="mb-1 block text-xs font-semibold text-slate-600">Close all dates through</label><input id="appDayDate" type="date" class="w-full rounded-lg border p-2.5 text-sm"></div>
+                    <div class="flex justify-end gap-2"><button id="appDayReopen" type="button" class="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Re-open last close</button><button id="appDaySave" type="button" class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white">Close days</button></div>
+                </div>
+                <div id="appDayDoneRow" class="flex justify-end"><button id="appDayCancel" type="button" class="rounded-lg bg-slate-100 px-4 py-2 text-sm">Done</button></div>
+             </div></div>
+             <div id="appPwModal" class="fixed inset-0 bg-black/60 z-[95] hidden items-center justify-center p-4 no-print"><div class="bg-white w-full max-w-xs rounded-2xl p-5 space-y-3 shadow-2xl text-slate-800"><h3 class="font-bold text-indigo-950">Change my password</h3><input id="appPw1" type="password" placeholder="New password (6+ characters)" class="w-full border rounded-lg p-2.5 text-sm outline-none"><input id="appPw2" type="password" placeholder="Type it again" class="w-full border rounded-lg p-2.5 text-sm outline-none"><p id="appPwMsg" class="text-xs text-rose-600 hidden"></p><div class="flex justify-end gap-2"><button id="appPwCancel" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button id="appPwSave" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">Save</button></div></div></div>
+             <style>.app-report-summary{list-style:none}.app-report-summary::-webkit-details-marker{display:none}.app-report-group[open] .app-report-summary{background:rgba(255,255,255,.08)}.app-report-summary span:last-child{display:inline-block;transition:transform .15s}.app-report-group[open] .app-report-summary span:last-child{transform:rotate(180deg)}@media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal{display:none!important}}</style>`);
         
         const menuButton = document.getElementById('appMenuBtn');
         const backdrop = document.getElementById('appBackdrop');
         
+        const setMenuOpen = open => {
+            aside.classList.toggle('-translate-x-full', !open);
+            backdrop.classList.toggle('hidden', !open);
+            document.body.classList.toggle('overflow-hidden', open && window.matchMedia('(max-width: 767px)').matches);
+            if (menuButton) menuButton.setAttribute('aria-expanded', String(open));
+        };
+
         if (menuButton) {
             menuButton.onclick = () => {
-                const isOpen = !aside.classList.contains('-translate-x-full');
-                if (isOpen) {
-                    window.hideShibraSidebar();
-                } else {
-                    window.openShibraSidebar();
-                }
+                const isOpen = aside.classList.contains('-translate-x-full');
+                setMenuOpen(isOpen);
             };
         }
 
-        if (backdrop) {
-            backdrop.onclick = () => window.hideShibraSidebar();
-        }
+        if (backdrop) backdrop.onclick = () => setMenuOpen(false);
 
         if (window.matchMedia('(min-width: 768px)').matches) {
             aside.classList.remove('-translate-x-full');
@@ -188,7 +186,7 @@
             });
             link.addEventListener('focus', warm);
             link.addEventListener('click', () => {
-                if (window.matchMedia('(max-width: 767px)').matches) window.hideShibraSidebar();
+                if (window.matchMedia('(max-width: 767px)').matches) setMenuOpen(false);
             });
         });
 
@@ -196,12 +194,142 @@
             if (!window.matchMedia('(max-width: 767px)').matches) {
                 if (backdrop) backdrop.classList.add('hidden');
                 aside.classList.remove('-translate-x-full');
+                if (menuButton) menuButton.setAttribute('aria-expanded', 'false');
                 document.body.classList.remove('overflow-hidden');
             }
         });
 
+        const pm = document.getElementById('appPwModal'), msg = document.getElementById('appPwMsg');
+        const showMsg = (t, ok) => { msg.textContent = t; msg.className = 'text-xs ' + (ok ? 'text-emerald-600' : 'text-rose-600'); };
+        if (document.getElementById('appPwBtn')) document.getElementById('appPwBtn').onclick = () => { document.getElementById('appPw1').value = ''; document.getElementById('appPw2').value = ''; msg.className = 'hidden'; pm.classList.remove('hidden'); pm.classList.add('flex'); };
+        if (document.getElementById('appPwCancel')) document.getElementById('appPwCancel').onclick = () => { pm.classList.add('hidden'); pm.classList.remove('flex'); };
+        if (document.getElementById('appPwSave')) {
+            document.getElementById('appPwSave').onclick = async () => {
+                const a = document.getElementById('appPw1').value, b = document.getElementById('appPw2').value;
+                if (a.length < 6) return showMsg('Use at least 6 characters.');
+                if (a !== b) return showMsg('The two passwords are not the same.');
+                const err = await sbChangePassword(a); if (err) return showMsg(err);
+                showMsg('Password changed.', true); setTimeout(() => { pm.classList.add('hidden'); pm.classList.remove('flex'); }, 900);
+            };
+        }
+        setupDayClose();
         prefetchAllWindowsData();
     }
 
+    function setupDayClose() {
+        const modal = document.getElementById('appDayModal');
+        const button = document.getElementById('appDayBtn');
+        const dateInput = document.getElementById('appDayDate');
+        const through = document.getElementById('appDayThrough');
+        const message = document.getElementById('appDayMessage');
+        const error = document.getElementById('appDayError');
+        const controls = document.getElementById('appDayControls');
+        const doneRow = document.getElementById('appDayDoneRow');
+        if (!button || !modal) return;
+        let lastClose = null;
+        let pending = false;
+        const pkDate = offset => {
+            const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+            const get = key => Number(parts.find(p => p.type === key).value);
+            return new Date(Date.UTC(get('year'), get('month') - 1, get('day') + (offset || 0))).toISOString().slice(0, 10);
+        };
+        const hasFlag = key => typeof flag === 'function' && flag(key);
+        const showError = text => { error.textContent = text; error.classList.remove('hidden'); };
+        const openModal = async () => {
+            error.classList.add('hidden');
+            modal.classList.remove('hidden'); modal.classList.add('flex');
+            await refresh();
+        };
+        const hideModal = () => {
+            if (pending) return showError(`Close all previous days through ${pkDate(-1)} before working today.`);
+            modal.classList.add('hidden'); modal.classList.remove('flex');
+        };
+        const refresh = async () => {
+            const allowed = hasFlag('closeday') || hasFlag('requiredayclose');
+            button.classList.toggle('hidden', !allowed);
+            controls.classList.toggle('hidden', !hasFlag('closeday'));
+            doneRow.classList.toggle('hidden', pending);
+            if (!allowed) { modal.classList.add('hidden'); modal.classList.remove('flex'); return false; }
+            try {
+                const response = await fetch(`${SB_URL}/rest/v1/day_close?select=id,closed_date&order=closed_date.desc,created_at.desc&limit=1`);
+                if (!response.ok) throw new Error(await response.text());
+                const rows = await response.json();
+                lastClose = rows[0] || null;
+                const closedThrough = lastClose ? lastClose.closed_date : '';
+                if (typeof ME !== 'undefined' && ME) {
+                    ME.closedThrough = closedThrough;
+                    sbSaveMe(ME);
+                }
+                pending = hasFlag('requiredayclose') && closedThrough < pkDate(-1);
+                through.textContent = closedThrough || 'No date closed yet';
+                message.textContent = pending
+                    ? `Work is paused until all previous days are closed through ${pkDate(-1)}.`
+                    : 'Close the day after completing its work. Dates use Pakistan time.';
+                dateInput.value = pending ? pkDate(-1) : pkDate(0);
+                dateInput.max = pending ? pkDate(-1) : pkDate(0);
+                document.getElementById('appDaySave').textContent = pending ? 'Close previous days' : 'Close days';
+                document.getElementById('appDayReopen').classList.toggle('hidden', !lastClose);
+                doneRow.classList.toggle('hidden', pending);
+                if (typeof sbUpdateDayCloseDateLimits === 'function') sbUpdateDayCloseDateLimits();
+                if (pending) {
+                    error.classList.add('hidden');
+                    modal.classList.remove('hidden'); modal.classList.add('flex');
+                }
+                return true;
+            } catch (e) {
+                through.textContent = 'Could not load';
+                pending = hasFlag('requiredayclose') && typeof sbDayClosePending === 'function' && sbDayClosePending();
+                doneRow.classList.toggle('hidden', pending);
+                if (pending) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+                showError('Could not check the day-close status. Refresh the page and try again.');
+                console.error('Could not load day-close status:', e);
+                return false;
+            }
+        };
+        button.onclick = openModal;
+        document.getElementById('appDayCancel').onclick = hideModal;
+        document.getElementById('appDayCancelTop').onclick = hideModal;
+        modal.addEventListener('click', event => { if (event.target === modal && !pending) hideModal(); });
+        document.addEventListener('keydown', event => { if (event.key === 'Escape' && !modal.classList.contains('hidden') && !pending) hideModal(); });
+        document.getElementById('appDaySave').onclick = async () => {
+            const date = dateInput.value, maxDate = pending ? pkDate(-1) : pkDate(0);
+            if (!date || date > maxDate) return showError(`Choose a date no later than ${maxDate}.`);
+            if (lastClose && date <= lastClose.closed_date) return showError(`Dates through ${lastClose.closed_date} are already closed.`);
+            if (!confirm(`Close all dates through ${date}? Entries through this date will be locked for ordinary roles.`)) return;
+            const save = document.getElementById('appDaySave');
+            save.disabled = true;
+            try {
+                const response = await fetch(`${SB_URL}/rest/v1/day_close`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                    body: JSON.stringify({ closed_date: date, closed_by: (typeof ME !== 'undefined' && ME && ME.email) || 'Administrator' })
+                });
+                if (!response.ok) throw new Error(await response.text());
+                if (typeof ME !== 'undefined' && ME) { ME.closedThrough = date; sbSaveMe(ME); }
+                await refresh();
+                if (!pending) hideModal();
+            } catch (e) {
+                showError('Could not close the day: ' + e.message);
+                console.error('Could not close the day:', e);
+            } finally { save.disabled = false; }
+        };
+        document.getElementById('appDayReopen').onclick = async () => {
+            if (!lastData ? lastClose = null : lastClose) return;
+            if (!confirm(`Re-open the last close through ${lastClose.closed_date}?`)) return;
+            const reopen = document.getElementById('appDayReopen');
+            reopen.disabled = true;
+            try {
+                const response = await fetch(`${SB_URL}/rest/v1/day_close?id=eq.${encodeURIComponent(lastClose.id)}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error(await response.text());
+                if (typeof ME !== 'undefined' && ME) ME.closedThrough = '';
+                await refresh();
+            } catch (e) {
+                showError('Could not re-open the day: ' + e.message);
+                console.error('Could not re-open the day:', e);
+            } finally { reopen.disabled = false; }
+        };
+        window.shibraDayCloseRefresh = refresh;
+        refresh();
+    }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
 })();
