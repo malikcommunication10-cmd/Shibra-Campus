@@ -23,7 +23,7 @@
             ['settings', 'select=setting_key,setting_value']
         ],
         'fees.html': [
-            ...(typeof ERP !== 'undefined' && ERP.db && ERP.db.feeVoucherQueries ? ERP.db.feeVoucherQueries : []),
+            ...ERP.db.feeVoucherQueries,
             ['settings', 'select=setting_key,setting_value']
         ],
         'books.html': [
@@ -65,11 +65,9 @@
             ['day_close', 'select=*&order=closed_date.desc']
         ]
     };
-
     function prefetchPageData(file) {
-        if (typeof PAGE_FILE === 'undefined' || !PAGE_FILE[file] || typeof ERP === 'undefined' || !ERP.db) return;
         const pageKey = PAGE_FILE[file];
-        if (typeof can === 'function' && !can(pageKey, 'v')) return;
+        if (!pageKey || typeof sbFetchAll !== 'function' || typeof can !== 'function' || !can(pageKey, 'v')) return;
         const connection = navigator.connection;
         if (connection && (connection.saveData || ['slow-2g', '2g'].includes(connection.effectiveType))) return;
         const queries = pageData[file] || [];
@@ -79,15 +77,16 @@
         })).catch(error => console.warn(`Navigation data prefetch for ${file} failed:`, error));
     }
 
+    // Background prefetch for fast loading
     function prefetchAllWindowsData() {
-        if (typeof ERP === 'undefined' || !ERP.db || typeof PAGE_FILE === 'undefined') return;
+        if (typeof sbFetchAll !== 'function' || typeof can !== 'function' || typeof PAGE_FILE === 'undefined') return;
         const connection = navigator.connection;
         if (connection && (connection.saveData || ['slow-2g', '2g'].includes(connection.effectiveType))) return;
         const allPages = Object.keys(pageData);
         setTimeout(() => {
             allPages.forEach((file, index) => {
                 const pageKey = PAGE_FILE[file];
-                if (!pageKey || (typeof can === 'function' && can(pageKey, 'v'))) {
+                if (pageKey && can(pageKey, 'v')) {
                     const queries = pageData[file] || [];
                     setTimeout(() => {
                         queries.forEach(async ([table, query]) => {
@@ -105,22 +104,17 @@
         const aside = document.getElementById('appNav');
         if (!aside) return;
         const me = (typeof ME !== 'undefined') ? ME : null;
-        
-        const shown = links.filter(l => {
-            if (!me || !me.perms || typeof PAGE_FILE === 'undefined' || !PAGE_FILE[l[0]] || typeof can !== 'function') return true;
-            return can(PAGE_FILE[l[0]], 'v');
-        });
-
+        const shown = links.filter(l => !me || !me.perms || (typeof can === 'function' && can(PAGE_FILE[l[0]], 'v')));
         const reportLinks = shown.filter(l => ['reports.html', 'statements.html', 'audit.html'].includes(l[0]));
         const mainLinks = shown.filter(l => !['reports.html', 'statements.html', 'audit.html'].includes(l[0]));
         const reportActive = reportLinks.some(l => l[0] === page);
-        
         const reportMenu = reportLinks.length ? `<details class="app-report-group rounded-xl ${reportActive ? 'bg-white/5' : ''}" ${reportActive ? 'open' : ''}>
             <summary class="app-report-summary flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-indigo-100 hover:bg-white/10"><span>📊 Reports &amp; Audit</span><span aria-hidden="true">⌄</span></summary>
             <div class="space-y-1 pb-1 pl-3">${reportLinks.map(l => `<a href="${l[0]}" class="flex gap-2.5 items-center px-3 py-2 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}</div>
         </details>` : '';
         
-        aside.className = 'no-print fixed md:sticky top-0 left-0 h-screen w-64 shrink-0 z-50 bg-indigo-950 text-white flex flex-col transition-transform -translate-x-full md:translate-x-0 shadow-2xl';
+        // Original layout classes with proper mobile hiding (-translate-x-full)
+        aside.className = 'no-print fixed md:sticky top-0 left-0 h-screen w-64 shrink-0 z-50 bg-indigo-950 text-white flex flex-col -translate-x-full md:translate-x-0 transition-transform';
         
         const accountActions = me && me.email ? `<div class="flex gap-2 p-3 border-b border-white/10"><button id="appPwBtn" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Password</button><button onclick="sbLogout()" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Logout</button></div>` : '';
         const who = me && me.email ? `<div class="px-3 py-2 border-b border-white/10"><div class="min-w-0"><div class="text-sm font-semibold truncate">👤 ${esc(me.name || me.email)}</div><div class="text-[11px] text-indigo-300 truncate">${esc(me.role || '')} · ${esc(me.email)}</div>${me.closedThrough ? `<div class="text-[11px] text-amber-300 mt-0.5">🔒 Closed up to ${esc(me.closedThrough)}</div>` : ''}</div></div>` : '';
@@ -146,27 +140,19 @@
              <style>.app-report-summary{list-style:none}.app-report-summary::-webkit-details-marker{display:none}.app-report-group[open] .app-report-summary{background:rgba(255,255,255,.08)}.app-report-summary span:last-child{display:inline-block;transition:transform .15s}.app-report-group[open] .app-report-summary span:last-child{transform:rotate(180deg)}@media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal{display:none!important}}</style>`);
         
         const menuButton = document.getElementById('appMenuBtn');
+        aside.insertAdjacentHTML('beforeend', '<div id="shibra-build" style="padding:6px 20px 12px;font-size:10px;color:#6f86ad">Build 20261031-1</div>');
         const backdrop = document.getElementById('appBackdrop');
         
         const setMenuOpen = open => {
             aside.classList.toggle('-translate-x-full', !open);
             backdrop.classList.toggle('hidden', !open);
+            menuButton.setAttribute('aria-expanded', String(open));
+            menuButton.setAttribute('aria-label', open ? 'Close navigation menu' : 'Open navigation menu');
             document.body.classList.toggle('overflow-hidden', open && window.matchMedia('(max-width: 767px)').matches);
-            if (menuButton) menuButton.setAttribute('aria-expanded', String(open));
         };
 
-        if (menuButton) {
-            menuButton.onclick = () => {
-                const isOpen = aside.classList.contains('-translate-x-full');
-                setMenuOpen(isOpen);
-            };
-        }
-
-        if (backdrop) backdrop.onclick = () => setMenuOpen(false);
-
-        if (window.matchMedia('(min-width: 768px)').matches) {
-            aside.classList.remove('-translate-x-full');
-        }
+        menuButton.onclick = () => setMenuOpen(menuButton.getAttribute('aria-expanded') !== 'true');
+        backdrop.onclick = () => setMenuOpen(false);
 
         aside.querySelectorAll('nav a').forEach(link => {
             let prefetchTimer = null;
@@ -176,6 +162,15 @@
                     prefetchTimer = null;
                     link.dataset.prefetched = 'true';
                     prefetchPageData(link.dataset.prefetchPage);
+                    const target = new URL(link.href, location.href);
+                    const alreadyPrefetched = [...document.querySelectorAll('link[rel="prefetch"]')].some(hint => hint.href === target.href);
+                    if (target.origin === location.origin && !alreadyPrefetched) {
+                        const hint = document.createElement('link');
+                        hint.rel = 'prefetch';
+                        hint.href = target.href;
+                        hint.as = 'document';
+                        document.head.appendChild(hint);
+                    }
                 }, 350);
             };
             link.addEventListener('pointerenter', event => {
@@ -185,16 +180,20 @@
                 if (prefetchTimer) { clearTimeout(prefetchTimer); prefetchTimer = null; }
             });
             link.addEventListener('focus', warm);
-            link.addEventListener('click', () => {
-                if (window.matchMedia('(max-width: 767px)').matches) setMenuOpen(false);
-            });
+            link.addEventListener('click', () => setMenuOpen(false));
+        });
+
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && menuButton.getAttribute('aria-expanded') === 'true') {
+                setMenuOpen(false);
+                menuButton.focus();
+            }
         });
 
         window.addEventListener('resize', () => {
             if (!window.matchMedia('(max-width: 767px)').matches) {
-                if (backdrop) backdrop.classList.add('hidden');
-                aside.classList.remove('-translate-x-full');
-                if (menuButton) menuButton.setAttribute('aria-expanded', 'false');
+                backdrop.classList.add('hidden');
+                menuButton.setAttribute('aria-expanded', 'false');
                 document.body.classList.remove('overflow-hidden');
             }
         });
@@ -202,16 +201,14 @@
         const pm = document.getElementById('appPwModal'), msg = document.getElementById('appPwMsg');
         const showMsg = (t, ok) => { msg.textContent = t; msg.className = 'text-xs ' + (ok ? 'text-emerald-600' : 'text-rose-600'); };
         if (document.getElementById('appPwBtn')) document.getElementById('appPwBtn').onclick = () => { document.getElementById('appPw1').value = ''; document.getElementById('appPw2').value = ''; msg.className = 'hidden'; pm.classList.remove('hidden'); pm.classList.add('flex'); };
-        if (document.getElementById('appPwCancel')) document.getElementById('appPwCancel').onclick = () => { pm.classList.add('hidden'); pm.classList.remove('flex'); };
-        if (document.getElementById('appPwSave')) {
-            document.getElementById('appPwSave').onclick = async () => {
-                const a = document.getElementById('appPw1').value, b = document.getElementById('appPw2').value;
-                if (a.length < 6) return showMsg('Use at least 6 characters.');
-                if (a !== b) return showMsg('The two passwords are not the same.');
-                const err = await sbChangePassword(a); if (err) return showMsg(err);
-                showMsg('Password changed.', true); setTimeout(() => { pm.classList.add('hidden'); pm.classList.remove('flex'); }, 900);
-            };
-        }
+        document.getElementById('appPwCancel').onclick = () => { pm.classList.add('hidden'); pm.classList.remove('flex'); };
+        document.getElementById('appPwSave').onclick = async () => {
+            const a = document.getElementById('appPw1').value, b = document.getElementById('appPw2').value;
+            if (a.length < 6) return showMsg('Use at least 6 characters.');
+            if (a !== b) return showMsg('The two passwords are not the same.');
+            const err = await sbChangePassword(a); if (err) return showMsg(err);
+            showMsg('Password changed.', true); setTimeout(() => { pm.classList.add('hidden'); pm.classList.remove('flex'); }, 900);
+        };
         setupDayClose();
         prefetchAllWindowsData();
     }
@@ -225,7 +222,6 @@
         const error = document.getElementById('appDayError');
         const controls = document.getElementById('appDayControls');
         const doneRow = document.getElementById('appDayDoneRow');
-        if (!button || !modal) return;
         let lastClose = null;
         let pending = false;
         const pkDate = offset => {
@@ -314,7 +310,7 @@
             } finally { save.disabled = false; }
         };
         document.getElementById('appDayReopen').onclick = async () => {
-            if (!lastData ? lastClose = null : lastClose) return;
+            if (!lastClose) return showError('There is no close to re-open.');
             if (!confirm(`Re-open the last close through ${lastClose.closed_date}?`)) return;
             const reopen = document.getElementById('appDayReopen');
             reopen.disabled = true;
