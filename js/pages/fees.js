@@ -280,7 +280,7 @@ function buildGroups(rows){
 function renderFeesTable(rowsIn){
   const groups=buildGroups(rowsIn);currentGroups=groups;
   const tb=$('feesTableBody'),tf=$('feesTableFooter');$('selectAllCheckbox').checked=false;
-  if(!groups.length){tb.innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
+  if(!groups.length){tb.innerHTML=`<tr><td colspan="9" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
    ['stCount','stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');return}
   let sp=0,sd=0,sb=0,html='';
   groups.forEach((g,i)=>{
@@ -293,20 +293,14 @@ function renderFeesTable(rowsIn){
     const chips=g.rows.map(r=>`<span class="inline-block mr-1 mb-1 px-2 py-0.5 rounded-md border text-[11px] ${isArr(r)?'bg-rose-50 border-rose-200 text-rose-700':(/annual/i.test(r.type||'')?'bg-amber-50 border-amber-300 text-amber-800':'bg-slate-50 border-slate-200 text-slate-700')}">${esc(itemName(r))} <b>${fmt(r.net??r.payable)}</b></span>`).join('');
     html+=`<tr class="${onlyArr?'bg-rose-50/60':'hover:bg-slate-50'} ${g._out?'opacity-50':''}">
  <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(g.vid)}"></td>
- <td data-l="Sr">${i+1}</td>
- <td data-l="Voucher" class="font-mono text-indigo-900">${esc(g.vid)||'-'}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</td>
- <td data-l="Admis No" class="font-mono">${esc(g.adm)||'-'}</td>
- <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(g.student||'')}'),decodeURIComponent('${encodeURIComponent(g.adm||'')}'))" class="text-indigo-600 underline">${esc(g.student)||'-'}</a></td>
- <td data-l="Siblings">${esc(g.sib)||'-'}</td>
- <td data-l="Items" class="min-w-[160px]">${chips}</td>
- <td data-l="Period" class="text-indigo-600 font-medium">${esc(g.period)||'-'}</td>
+ <td data-l="Voucher"><div class="font-mono text-indigo-900">${esc(g.vid)||'-'}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</div><div class="text-indigo-600 font-medium">${esc(g.period)||'-'}</div></td>
+ <td data-l="Student"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(g.student||'')}'),decodeURIComponent('${encodeURIComponent(g.adm||'')}'))" class="text-indigo-600 underline font-semibold">${esc(g.student)||'-'}</a><div class="text-[11px] text-slate-500">Adm ${esc(g.adm)||'-'} · Class ${esc(g.cls)||'-'}</div>${g.sib?`<div class="text-[11px] text-slate-400">Family ${esc(g.sib)}</div>`:''}</td>
+ <td data-l="Items">${chips}</td>
  <td data-l="Payable" class="font-bold">PKR ${fmt(g.payable)}${g.discount>0?`<div class="text-[10px] text-indigo-600 font-semibold">Discount -${fmt(g.discount)}</div>`:''}</td>
- <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(g.paid)}</td>
+ <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(g.paid)}${g.dates?`<div class="font-mono font-normal text-[10px] text-indigo-700">${esc(g.dates)}</div>`:''}</td>
  <td data-l="Balance" class="${bc}">${bt}</td>
- <td data-l="Class">${esc(g.cls)||'-'}</td>
  <td data-l="Status"><span class="badge ${badge}">${g.status}</span></td>
- <td data-l="Date(s)" class="font-mono text-indigo-700">${esc(g.dates)}</td>
- <td class="nl"><div class="flex gap-1 w-full md:w-auto"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok flex-1" style="padding:.35rem .5rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh flex-1" style="padding:.35rem .5rem" title="Add another fee to this voucher">➕ Item</button></div></td></tr>`;
+ <td class="nl"><div class="flex flex-wrap gap-1"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok" style="padding:.35rem .5rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh" style="padding:.35rem .5rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh" style="padding:.35rem .5rem" title="Add another fee to this voucher">➕ Item</button></div></td></tr>`;
   });
   tb.innerHTML=html;
   $('stCount').innerText=groups.filter(g=>!g._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
@@ -850,3 +844,53 @@ async function saveDiscount(){
   }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.open').forEach(m=>m.classList.remove('open'))});
+
+
+/* ---------- Bulk pay for ONE student: all dues up to today, oldest first ---------- */
+let SB=null;
+const sbToday=()=>(typeof todayYmd==='function'?todayYmd():today());
+function sbLabel(g){const tc=t=>String(t||'').replace(/\b\w/g,c=>c.toUpperCase());return g.rows.length>1?`Admission voucher (${g.rows.map(r=>tc(r.type)).join(' + ')}) - ${g.student||''}`:`${g.rows[0].type||'Tuition Fee'} (${g.period||''}) - ${g.student||''}`}
+function sbPlan(amount){
+  // oldest dues first; whatever is left becomes an advance on the next upcoming voucher (or the latest due one)
+  const out=[];let left=Math.round(amount*100)/100;
+  for(const g of SB.due){if(left<=0.004)break;const a=Math.round(Math.min(left,g.balance)*100)/100;if(a>0){out.push({g,amt:a,adv:false});left=Math.round((left-a)*100)/100}}
+  if(left>0.004){const target=SB.future[0]||SB.dueAll[SB.dueAll.length-1];if(target)out.push({g:target,amt:left,adv:true});else SB.noTarget=left}
+  return out;
+}
+function openStudentBulkPay(){
+  const vid=($('payVoucherId').value||'').trim(),row=allFeesCache.find(r=>(r.voucher_id||'').trim()===vid);if(!row)return;
+  const adm=normAdm(row.admis_no),nm=(row.student_name||'').trim().toLowerCase();
+  const groups=buildGroups(allFeesCache.filter(r=>adm?normAdm(r.admis_no)===adm:(r.student_name||'').trim().toLowerCase()===nm));
+  const t=sbToday(),ym=t.slice(0,7),key=g=>g.rows.every(isArr)?'0000-00':periodStart(g.period).slice(0,7);
+  groups.sort((a,b)=>key(a).localeCompare(key(b))||a.vid.localeCompare(b.vid));
+  const dueAll=groups.filter(g=>key(g)<=ym),future=groups.filter(g=>key(g)>ym&&g.balance>0.5);
+  const due=dueAll.filter(g=>g.balance>0.5),total=Math.round(due.reduce((s,g)=>s+g.balance,0)*100)/100;
+  SB={name:row.student_name||'',due,dueAll,future,total,noTarget:0};
+  $('sbName').innerText=SB.name+(row.admis_no?` (Adm ${row.admis_no})`:'');$('sbUpTo').innerText=new Date(t+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  $('sbDues').innerHTML=due.length?`<table class="w-full text-xs"><thead class="bg-slate-50 text-slate-600"><tr><th class="p-1.5 text-left">Month</th><th class="p-1.5 text-left">Voucher</th><th class="p-1.5 text-left">Fee</th><th class="p-1.5 text-right">Pending</th></tr></thead><tbody>${due.map(g=>`<tr class="border-b"><td class="p-1.5 text-indigo-600">${esc(g.period)||'-'}</td><td class="p-1.5 font-mono">${esc(g.vid)}</td><td class="p-1.5">${esc(g.rows.length>1?'Admission voucher':itemName(g.rows[0]))}</td><td class="p-1.5 text-right font-bold text-rose-600">PKR ${fmt(g.balance)}</td></tr>`).join('')}</tbody></table>`:'<p class="text-xs text-emerald-700 font-semibold">No dues up to today. Anything you enter will be saved as an advance.</p>';
+  $('sbTotal').value=`PKR ${fmt(total)}`;$('sbAmount').value=total>0?total:'';
+  $('sbAccount').innerHTML=$('payToAccount').innerHTML;$('sbAccount').value=$('payToAccount').value;
+  $('sbDate').value=t;$('sbRemarks').value='';
+  closePayModal();sbPreview();$('stuBulkModal').classList.add('open');
+}
+function sbPreview(){
+  if(!SB)return;const amt=parseFloat($('sbAmount').value)||0,box=$('sbPreview');
+  if(amt<=0){box.innerHTML='Enter the amount received to see how it will be applied.';return}
+  SB.noTarget=0;const plan=sbPlan(amt);
+  const lines=plan.map(p=>`<div>${p.adv?'➕ Advance →':'✔'} <b>${esc(p.g.period)||'-'}</b> <span class="font-mono">${esc(p.g.vid)}</span>: <b class="text-emerald-700">PKR ${fmt(p.amt)}</b>${p.adv?' <span class="text-amber-700">(advance)</span>':''}</div>`).join('');
+  const rest=Math.round((SB.total-Math.min(amt,SB.total))*100)/100;
+  box.innerHTML=`<div class="font-semibold text-slate-700 mb-1">How PKR ${fmt(amt)} will be applied</div>${lines}${SB.noTarget>0?`<div class="text-rose-600">PKR ${fmt(SB.noTarget)} cannot be placed: no voucher exists for this student.</div>`:''}<div class="mt-1 text-slate-500">${rest>0?`Dues still pending after this: PKR ${fmt(rest)}`:'All dues up to today will be cleared.'}</div>`;
+}
+const closeStuBulk=()=>$('stuBulkModal').classList.remove('open');
+function submitStuBulk(){
+  if(!SB)return;const amt=parseFloat($('sbAmount').value)||0,date=$('sbDate').value,rm=$('sbRemarks').value.trim()||'Bulk payment via FIFO';
+  if(amt<=0){showAlert('Please enter an amount greater than 0.');return}
+  if(!date){showAlert('Please choose the payment date.');return}
+  SB.noTarget=0;const plan=sbPlan(amt);
+  if(!plan.length||SB.noTarget>0){showAlert('No voucher found to apply this payment.');return}
+  showConfirm(`Receive PKR ${fmt(amt)} from ${SB.name} and apply it oldest-dues-first?`,async()=>{
+    const nonce=Date.now(),acct=$('sbAccount').value||'cash';
+    const pl=plan.map(p=>({voucher_id:`${p.g.vid}-${nonce}-${p.adv?'adv':Math.floor(Math.random()*1000)}`,from_account:sbLabel(p.g),to_account:acct,description:p.adv?rm+' (Advance)':rm,amount_in:p.amt,amount_out:0,date,remarks:p.adv?rm+' (Advance)':rm}));
+    if(await postAccounts(pl,'Bulk payment recorded successfully!','Applying payment...')){closeStuBulk();initFeePage()}
+  });
+}
