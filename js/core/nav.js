@@ -101,12 +101,28 @@
         }, 1500); 
     }
 
+    // Global foolproof toggle functions
+    window.openShibraSidebar = function() {
+        const aside = document.getElementById('appNav');
+        const backdrop = document.getElementById('appBackdrop');
+        if (aside) aside.classList.remove('-translate-x-full');
+        if (backdrop) backdrop.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+    };
+
+    window.hideShibraSidebar = function() {
+        const aside = document.getElementById('appNav');
+        const backdrop = document.getElementById('appBackdrop');
+        if (aside) aside.classList.add('-translate-x-full');
+        if (backdrop) backdrop.classList.add('hidden');
+        document.body.classList.remove('overflow-hidden');
+    };
+
     function build() {
         const aside = document.getElementById('appNav');
         if (!aside) return;
         const me = (typeof ME !== 'undefined') ? ME : null;
         
-        // Bulletproof filtering: Agar PAGE_FILE ya permission check ready na ho, toh tab hargiz gayab nahi hoga (default true)
         const shown = links.filter(l => {
             if (!me || !me.perms || typeof PAGE_FILE === 'undefined' || !PAGE_FILE[l[0]] || typeof can !== 'function') return true;
             return can(PAGE_FILE[l[0]], 'v');
@@ -126,37 +142,29 @@
         const accountActions = me && me.email ? `<div class="flex gap-2 p-3 border-b border-white/10"><button id="appPwBtn" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Password</button><button onclick="sbLogout()" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Logout</button></div>` : '';
         const who = me && me.email ? `<div class="px-3 py-2 border-b border-white/10"><div class="min-w-0"><div class="text-sm font-semibold truncate">👤 ${esc(me.name || me.email)}</div><div class="text-[11px] text-indigo-300 truncate">${esc(me.role || '')} · ${esc(me.email)}</div>${me.closedThrough ? `<div class="text-[11px] text-amber-300 mt-0.5">🔒 Closed up to ${esc(me.closedThrough)}</div>` : ''}</div></div>` : '';
         
-        const sidebarHeader = `<div class="flex items-center justify-between p-5 border-b border-white/15"><div><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div><button id="appCloseSidebar" class="text-indigo-200 hover:text-white p-1.5 rounded-lg hover:bg-white/10 text-xl font-bold cursor-pointer" aria-label="Close menu">✕</button></div>`;
+        // Direct inline onclick handler taake click miss na ho
+        const sidebarHeader = `<div class="flex items-center justify-between p-5 border-b border-white/15"><div><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div><button type="button" onclick="window.hideShibraSidebar()" class="text-indigo-200 hover:text-white bg-white/10 px-2.5 py-1 rounded-lg text-sm font-bold cursor-pointer">✕ Hide</button></div>`;
 
         aside.innerHTML = `${accountActions}${sidebarHeader}${who}
-            <nav class="flex-1 p-3 space-y-1 overflow-y-auto">${mainLinks.map(l => `<a href="${l[0]}" data-prefetch-page="${l[0]}" class="flex gap-2.5 items-center px-3 py-2.5 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}${reportMenu}`;
+            <nav class="flex-1 p-3 space-y-1 overflow-y-auto">${mainLinks.map(l => `<a href="${l[0]}" data-prefetch-page="${l[0]}" class="flex gap-2.5 items-center px-3 py-2.5 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}${reportMenu}</nav>`;
         
         const menuButton = document.getElementById('appMenuBtn');
-        const closeButton = document.getElementById('appCloseSidebar');
         const backdrop = document.getElementById('appBackdrop');
         
-        const setMenuOpen = open => {
-            aside.classList.toggle('-translate-x-full', !open);
-            if (backdrop) backdrop.classList.toggle('hidden', !open);
-            document.body.classList.toggle('overflow-hidden', open && window.matchMedia('(max-width: 767px)').matches);
-            if (menuButton) menuButton.setAttribute('aria-expanded', String(open));
-        };
-
         if (menuButton) {
             menuButton.onclick = () => {
-                const isOpen = aside.classList.contains('-translate-x-full');
-                setMenuOpen(isOpen);
+                const isOpen = !aside.classList.contains('-translate-x-full');
+                if (isOpen) {
+                    window.hideShibraSidebar();
+                } else {
+                    window.openShibraSidebar();
+                }
             };
         }
 
-        if (closeButton) {
-            closeButton.onclick = (e) => {
-                e.preventDefault();
-                setMenuOpen(false);
-            };
+        if (backdrop) {
+            backdrop.onclick = () => window.hideShibraSidebar();
         }
-
-        if (backdrop) backdrop.onclick = () => setMenuOpen(false);
 
         if (window.matchMedia('(min-width: 768px)').matches) {
             aside.classList.remove('-translate-x-full');
@@ -180,7 +188,7 @@
             });
             link.addEventListener('focus', warm);
             link.addEventListener('click', () => {
-                if (window.matchMedia('(max-width: 767px)').matches) setMenuOpen(false);
+                if (window.matchMedia('(max-width: 767px)').matches) window.hideShibraSidebar();
             });
         });
 
@@ -188,7 +196,6 @@
             if (!window.matchMedia('(max-width: 767px)').matches) {
                 if (backdrop) backdrop.classList.add('hidden');
                 aside.classList.remove('-translate-x-full');
-                if (menuButton) menuButton.setAttribute('aria-expanded', 'false');
                 document.body.classList.remove('overflow-hidden');
             }
         });
