@@ -4,7 +4,6 @@
    Sirf design: koi JS / ID / logic change nahi.
    Palette: Ink #0b1f3f · Brass #d4a24c · Action #1d4ed8 · Canvas #f4f6fa
    ===================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 :root{
   --ink:#0b1f3f; --ink-2:#13305c; --ink-3:#1c4178;
   --brass:#d4a24c; --brass-soft:#f6e7c8;
@@ -18,7 +17,7 @@
 }
 html{scroll-behavior:smooth}
 body{
-  font-family:'Plus Jakarta Sans','Segoe UI',system-ui,-apple-system,'Noto Sans',Roboto,Arial,sans-serif !important;
+  font-family:'Segoe UI',system-ui,-apple-system,'Noto Sans',Roboto,Arial,sans-serif !important;
   background:var(--canvas) !important;color:var(--text) !important;
   -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
 }
@@ -47,14 +46,6 @@ body{
   background:linear-gradient(180deg,var(--ink) 0%,#0a1a35 100%) !important;
   width:17rem !important;border-right:1px solid rgba(255,255,255,.06);
   box-shadow:6px 0 28px rgba(11,31,63,.14);
-}
-main{min-width:0}
-@media (min-width:768px){
-  #appNav{position:sticky !important;top:0;left:auto;flex:0 0 17rem;width:17rem !important;height:100vh;transform:none !important}
-}
-@media (max-width:767px){
-  #appNav{position:fixed !important;top:0;bottom:0;left:0;width:min(17rem,calc(100vw - 3rem)) !important;transform:translateX(-100%);z-index:50}
-  #appNav:not(.-translate-x-full){transform:translateX(0)}
 }
 #appNav > div.p-5{padding:22px 20px !important;border-color:rgba(255,255,255,.08) !important}
 #appNav > div.p-5 h1{font-size:17px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
@@ -257,3 +248,8 @@ button.ui-kpi{cursor:pointer;transition:transform .15s,box-shadow .15s}button.ui
 .page-hero h1{color:#fff !important;letter-spacing:-.03em}
 .page-hero{margin-bottom:16px}
 .page-hero button{box-shadow:none}
+
+/* ---------- Layout safety: the sidebar must never sit on top of page content ---------- */
+@media (min-width:768px){ #appNav{left:auto !important} }   /* sticky only vertically, never pinned over content when the page scrolls sideways */
+main{min-width:0 !important;max-width:100%}                  /* a wide table inside must scroll in its own box, not widen the page */
+.ui-page,.st-wrap{grid-template-columns:minmax(0,1fr)}
