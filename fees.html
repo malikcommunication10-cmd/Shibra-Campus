@@ -29,7 +29,8 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-se
 .nav a{display:flex;gap:.6rem;align-items:center;padding:.6rem .8rem;border-radius:.6rem;color:#c7d2fe;font-size:.85rem}
 .nav a:hover{background:rgba(255,255,255,.08)}.nav a.on{background:#4338ca;color:#fff;font-weight:600}
 table.rt th{padding:.65rem .6rem;font-size:.7rem;font-weight:700;color:#475569;text-align:left;white-space:nowrap}
-table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
+table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9;vertical-align:top;overflow-wrap:anywhere}
+table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Balance"],table.rt td[data-l="Status"],.badge{white-space:nowrap}
 @media(max-width:767px){
  table.rt thead{display:none}
  table.rt,table.rt tbody{display:block}
@@ -154,13 +155,12 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
         </div>
         <label class="md:hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" onchange="toggleSelectAll(this)"> Select all</label>
       </div>
-      <div id="voucherView" class="overflow-x-auto md:max-h-[70vh]">
+      <div id="voucherView" class="md:max-h-[70vh]" style="overflow-x:hidden;overflow-y:auto">
         <table class="rt w-full border-collapse">
           <thead class="bg-slate-50 sticky top-0"><tr>
             <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
-            <th>Sr</th><th>Voucher ID</th><th>Admis No</th><th>Student</th><th>Siblings</th><th>Items</th><th>Period</th>
-            <th>Payable</th><th>Paid</th><th>Balance</th><th>Class</th><th>Status</th><th>Date(s)</th><th>Action</th></tr></thead>
-          <tbody id="feesTableBody"><tr><td colspan="15" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
+            <th>Voucher</th><th>Student</th><th>Items</th><th>Payable</th><th>Paid</th><th>Balance</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="feesTableBody"><tr><td colspan="9" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
         </table>
       </div>
       <div id="summaryView" class="hidden overflow-x-auto md:max-h-[70vh]">
@@ -215,8 +215,25 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
       <div><label class="lbl">Amount</label><input type="number" id="payAmountIn" required class="inp font-bold text-emerald-600"></div>
       <div><label class="lbl">Date</label><input type="date" id="payDate" required class="inp"></div></div>
     <div><label class="lbl">Remarks</label><input id="payRemarks" placeholder="Optional" class="inp"></div>
-    <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closePayModal()" class="btn b-gh">Cancel</button><button type="submit" class="btn b-ok">Save receipt</button></div>
+    <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closePayModal()" class="btn b-gh">Cancel</button><button type="button" onclick="openStudentBulkPay()" class="btn b-pri" title="Pay all dues of this student up to today, oldest first">⚡ Bulk pay</button><button type="submit" class="btn b-ok">Save receipt</button></div>
   </form>
+</div></div>
+
+
+<!-- Student bulk pay: all dues of ONE student up to today, paid oldest-first -->
+<div id="stuBulkModal" class="modal no-print"><div class="sheet space-y-3" style="max-width:38rem">
+  <h3 class="font-bold text-indigo-800 border-b pb-2">⚡ Bulk pay · <span id="sbName"></span></h3>
+  <p class="text-xs text-slate-500">Dues up to <b id="sbUpTo"></b>. The amount you enter is applied to the oldest dues first (FIFO). Anything extra is saved as advance for the next month.</p>
+  <div id="sbDues" style="max-height:34vh;overflow-y:auto;overflow-x:hidden"></div>
+  <div class="grid grid-cols-2 gap-2">
+    <div><label class="lbl">Total dues up to today</label><input id="sbTotal" readonly class="inp font-bold text-rose-600"></div>
+    <div><label class="lbl">Amount received</label><input type="number" id="sbAmount" min="1" oninput="sbPreview()" class="inp font-bold text-emerald-600"></div>
+    <div><label class="lbl">Deposit to</label><select id="sbAccount" class="inp"></select></div>
+    <div><label class="lbl">Payment date</label><input type="date" id="sbDate" class="inp"></div>
+  </div>
+  <div><label class="lbl">Remarks</label><input id="sbRemarks" placeholder="Bulk payment via FIFO" class="inp"></div>
+  <div id="sbPreview" class="text-xs" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:.55rem .7rem"></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button type="button" onclick="closeStuBulk()" class="btn b-gh">Cancel</button><button type="button" onclick="submitStuBulk()" class="btn b-ok">Save &amp; distribute</button></div>
 </div></div>
 
 <div id="importModal" class="modal no-print"><div class="sheet max-w-4xl space-y-3">
@@ -260,6 +277,6 @@ table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9}
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Save discount</button></div>
 </div></div>
 
-<script src="js/pages/fees.js?v=20261031-1"></script>
+<script src="js/pages/fees.js?v=20261101-1"></script>
 </body>
 </html>
