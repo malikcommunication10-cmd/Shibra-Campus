@@ -202,6 +202,32 @@ def main():
             pg.click('#appMenuBtn'); pg.wait_for_timeout(300); pg.mouse.click(375, 400); pg.wait_for_timeout(400); check('mobile: tapping outside closes it', pg.evaluate(R, '#appNav')['vis'] == 'hidden')
             pg.click('#appMenuBtn'); pg.wait_for_timeout(300); pg.keyboard.press('Escape'); pg.wait_for_timeout(400); check('mobile: Esc closes it', pg.evaluate(R, '#appNav')['vis'] == 'hidden'); c.close()
 
+            print('10. Cold-start speed: paging, warm-up, loader')
+            errs = []; pg = new_page(b, errs, 'students')
+            SIM = """async([N,known])=>{
+              localStorage.clear(); let total=N,active=0,waves=0,reqs=0;
+              window.fetch=async(url,opt)=>{ if(active===0)waves++; active++; reqs++; await new Promise(r=>setTimeout(r,120));
+                const u=new URL(url), lim=+u.searchParams.get('limit'), off=+u.searchParams.get('offset'); const all=[]; const end=Math.min(off+lim,total);
+                for(let i=off;i<end;i++)all.push({id:i+1});
+                active--; return {ok:true,status:200,headers:{get:n=>n.toLowerCase()==='content-range'?(all.length?`${off}-${end-1}/${total}`:`*/${total}`):null},json:async()=>all}; };
+              const run=async()=>{waves=0;reqs=0;const r=await sbFetchAllUncached('accounts','select=*');const rows=await r.json();return {n:rows.length,ordered:rows.every((x,i)=>x.id===i+1),waves,reqs}};
+              const cold=await run(); total=known; const warm=await run(); return {cold,warm,saved:localStorage.getItem('sb_tot3_accounts')};}"""
+            out = pg.evaluate(SIM, [6338, 6338])
+            check('cold load returns all 6,338 rows in order', out['cold']['n'] == 6338 and out['cold']['ordered'], out['cold'])
+            check('cold load = 2 waits (first page, then the rest together)', out['cold']['waves'] == 2, out['cold'])
+            check('repeat load asks for every page at once = 1 wait', out['warm']['waves'] == 1 and out['warm']['n'] == 6338, out['warm'])
+            out = pg.evaluate(SIM, [6338, 3100]); check('table shrank: still correct (3,100 rows)', out['warm']['n'] == 3100 and out['warm']['ordered'] and out['saved'] == '3100', out)
+            out = pg.evaluate(SIM, [6338, 7500]); check('table grew: extra page fetched (7,500 rows)', out['warm']['n'] == 7500 and out['warm']['ordered'], out)
+            out = pg.evaluate("""()=>{ const keep=ME; const mk=pages=>({perms:{pages}});
+              ME=mk({students:'v',fees:'v',accounts:'v',books:'v',staff:'v',dashboard:'v',followups:'v'}); const all=sbWarmList().map(x=>x[0]);
+              ME=mk({fees:'v'}); const fees=sbWarmList().map(x=>x[0]); ME=keep; return {all,fees}; }""")
+            check('warm-up list follows permissions', out['all'] == ['students', 'fees', 'accounts', 'books', 'staff', 'payroll'] and out['fees'] == ['students', 'fees', 'accounts'], out)
+            out = pg.evaluate("""()=>{ const ov=document.getElementById('loadingOverlay'),tx=document.getElementById('loadingText'); tx.innerText='Loading Students Record...'; ov.classList.remove('hidden');
+              return new Promise(res=>setTimeout(()=>{const soft=ov.classList.contains('ui-soft'); tx.innerText='Saving...'; setTimeout(()=>res({soft,blocking:!ov.classList.contains('ui-soft')}),50)},50)); }""")
+            check('reading data shows a light chip, saving still blocks the screen', out['soft'] and out['blocking'], out)
+            check('database connection is opened early (preconnect)', pg.evaluate("[...document.querySelectorAll('link[rel=preconnect]')].some(l=>l.href.includes('supabase.co'))"))
+            check('no errors', not errs, errs); pg.close()
+
             b.close()
     finally:
         srv.terminate()

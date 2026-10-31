@@ -1,35 +1,46 @@
 // Supabase returns max 1000 rows per request. The first request also returns the total row count
 // (Content-Range), then ALL remaining pages are fetched in parallel. Behaves like a fetch Response.
 async function sbFetchAllUncached(table, query) {
+    // Pages are asked with limit/offset (no Range header: those answers may skip compression and error when the table shrinks).
+    // The sort column and the last row count are remembered, so a repeat load asks for ALL pages at once (1 round trip, not 2).
     query = query || 'select=*';
-    const c = getSupabaseConfig(), ordKey = 'sb_ord2_' + table;
-    const hdr = (f, t, count) => Object.assign({ apikey: c.key, Authorization: `Bearer ${c.key}`, Range: `${f}-${t}`, 'Range-Unit': 'items' }, count ? { Prefer: 'count=exact' } : {});
-    const get = (f, t, col, count) => fetch(`${c.url}/rest/v1/${table}?${query}${col ? '&order=' + col + '.asc' : ''}`, { headers: hdr(f, t, count) });
+    const c = getSupabaseConfig(), PAGE = 1000, ordKey = 'sb_ord3_' + table, totKey = 'sb_tot3_' + table;
+    const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+    const hdr = count => Object.assign({ apikey: c.key, Authorization: `Bearer ${c.key}` }, count ? { Prefer: 'count=exact' } : {});
+    const get = (offset, col, count) => fetch(`${c.url}/rest/v1/${table}?${query}${col ? '&order=' + col + '.asc' : ''}&limit=${PAGE}&offset=${offset}`, { headers: hdr(count) });
     const fail = r => ({ ok: false, status: r.status, json: async () => r.json().catch(() => ({})), text: async () => r.text().catch(() => '') });
-    // stable paging needs a sort column: use the first of id / seq / created_at that the table has (remembered per tab)
-    let col = null, r = null;
-    if (!/(^|&)order=/.test(query)) {
-        let cached = null; try { cached = sessionStorage.getItem(ordKey); } catch (e) {}
-        const cands = cached === '-' ? [] : (cached ? [cached] : ['id', 'seq', 'created_at']);
-        for (const cc of cands) { const x = await get(0, 999, cc, true); if (x.ok) { col = cc; r = x; break; } }
-        try { sessionStorage.setItem(ordKey, col || '-'); } catch (e) {}
+    const bad = { status: 500, json: async () => ({}), text: async () => '' };
+    let col = null, probed = null;
+    if (!/(^|&)order=/.test(query)) {                        // stable paging needs a sort column: the first of id / seq / created_at the table has
+        const saved = ls.get(ordKey);
+        if (saved) col = saved === '-' ? null : saved;
+        else {
+            for (const cc of ['id', 'seq', 'created_at']) { const x = await get(0, cc, true); if (x.ok) { col = cc; probed = x; break; } }
+            ls.set(ordKey, col || '-');
+        }
     }
-    if (!r) r = await get(0, 999, null, true);
-    if (!r.ok) return fail(r);
-    let rows = await r.json();
-    if (!Array.isArray(rows)) return { ok: false, status: 200, json: async () => rows, text: async () => '' };
-    const cr = r.headers.get('content-range') || '', total = cr.includes('/') ? parseInt(cr.split('/')[1], 10) : NaN, size = rows.length;
-    if (size && !isNaN(total) && total > size) {
-        const jobs = [];
-        for (let f = size; f < total; f += size) jobs.push(get(f, f + size - 1, col, false).then(x => x.ok ? x.json() : Promise.reject(x)));
-        try { (await Promise.all(jobs)).forEach(a => { rows = rows.concat(a); }); }
-        catch (x) { return fail(x && x.status ? x : { status: 500, json: async () => ({}), text: async () => '' }); }
-    } else if (size && isNaN(total)) {                       // header not available: fall back to sequential paging
-        for (let f = size; ; f += size) {
-            const x = await get(f, f + size - 1, col, false);
-            if (!x.ok) return fail(x);
+    const prevTotal = parseInt(ls.get(totKey) || '0', 10) || 0, guess = Math.max(1, Math.ceil(prevTotal / PAGE));
+    const reqs = [];
+    if (probed) reqs.push(Promise.resolve(probed));
+    for (let i = probed ? 1 : 0; i < guess; i++) reqs.push(get(i * PAGE, col, i === 0));
+    let rs;
+    try { rs = await Promise.all(reqs); } catch (e) { return fail(bad); }
+    const first = rs[0];
+    for (const r of rs) if (!r.ok) return fail(r);
+    let rows = [];
+    try { for (const r of rs) { const a = await r.json(); if (!Array.isArray(a)) return { ok: false, status: 200, json: async () => a, text: async () => '' }; rows = rows.concat(a); } }
+    catch (e) { return fail(bad); }
+    const cr = first.headers.get('content-range') || '', total = cr.includes('/') ? parseInt(cr.split('/')[1], 10) : NaN;
+    if (!isNaN(total)) {
+        const more = [];
+        for (let off = guess * PAGE; off < total; off += PAGE) more.push(get(off, col, false).then(x => x.ok ? x.json() : Promise.reject(x)));
+        if (more.length) { try { (await Promise.all(more)).forEach(a => { rows = rows.concat(a); }); } catch (x) { return fail(x && x.status ? x : bad); } }
+        ls.set(totKey, String(total));
+    } else if (rows.length && rows.length === guess * PAGE) {   // header not available: keep paging until a short page
+        for (let off = rows.length; ; off += PAGE) {
+            const x = await get(off, col, false); if (!x.ok) return fail(x);
             const a = await x.json(); if (!Array.isArray(a) || !a.length) break;
-            rows = rows.concat(a);
+            rows = rows.concat(a); if (a.length < PAGE) break;
         }
     }
     return { ok: true, status: 200, json: async () => rows, text: async () => '' };
@@ -114,7 +125,7 @@ async function sbFetchAllDirect(table, query) {
         if (cached.expires <= now)
             sbFetchAllNetwork(table, query, key, revision, true).then(response => {
                 if (!response.ok) console.warn(`Background refresh for ${table} failed with HTTP ${response.status}.`);
-            }).catch(error => console.warn(`Background refresh for ${table} failed:`, error));
+            }).catch(error => { console.warn(`Background refresh for ${table} failed:`, error); sbNoteRefreshFailure(); });
         return { ok: true, status: 200, json: async () => rows, text: async () => cached.packed };
     }
     return sbFetchAllNetwork(table, query, key, revision);
@@ -228,3 +239,10 @@ const SETTING_DEFAULTS = {
     'Payment Account': [],
     'Business Partner': []
 };
+
+let _sbLastRefreshFailToast = 0;
+function sbNoteRefreshFailure() {
+    if (typeof UI === 'undefined' || Date.now() - _sbLastRefreshFailToast < 90000) return;
+    _sbLastRefreshFailToast = Date.now();
+    UI.toast('Showing saved data. The server could not be reached to refresh it.', false);
+}

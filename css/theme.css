@@ -296,3 +296,8 @@ main{min-width:0 !important;max-width:100%}                  /* a wide table ins
 .page-actions button:first-child{color:#12332f;background:#a7f3d0;border-color:#a7f3d0}
 .page-actions button:first-child:hover{background:#6ee7b7}
 @media (max-width:767px){.page-actions button{flex:1 1 calc(50% - 8px)}}
+
+/* ---------- Loading chip: reading data must not block the page ---------- */
+#loadingOverlay.ui-soft{background:transparent !important;pointer-events:none !important;justify-content:flex-start !important;padding-top:84px}
+#loadingOverlay.ui-soft > div{width:20px;height:20px;border-width:3px;border-color:var(--action);border-top-color:transparent;margin:0}
+#loadingOverlay.ui-soft p{margin:8px 0 0;background:var(--ink);color:#fff;padding:6px 14px;border-radius:99px;font-size:12px;box-shadow:var(--shadow-up)}

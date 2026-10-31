@@ -51,3 +51,14 @@ Causes found in the code, and what was changed:
 
 Diagnose any page: open it with `?perf` at the end of the address (e.g. `fees.html?perf`) and look at the browser Console (F12):
 each table prints `shared / direct` and the milliseconds it took.
+
+## Cold-start round (first open of a page was slow, repeat opens were fast)
+Your tables are small (largest: audit_log 17,995, accounts 6,338, staff_attendance 5,970, books 3,205, fees 3,130), so the wait was
+not the amount of data but the *steps before it appears*. Changed:
+1. Paging uses `limit/offset` instead of a `Range` header (Range answers can skip compression and fail when a table shrinks).
+2. The sort column and last row count are remembered in the browser, so a repeat load asks for every page at once (1 wait, not 2).
+3. After the current page has loaded, the big tables the user can open next are downloaded quietly in the background (`sbWarmList`).
+4. Saved data stays usable for 7 days (shown instantly, refreshed in the background, page redraws only if something changed);
+   if the server cannot be reached a short notice says the saved copy is being shown.
+5. The connection to the database is opened at page start (`preconnect`).
+6. "Loading…" while only reading data is now a small floating chip; the page stays visible. Saving / deleting still blocks the screen.
