@@ -136,6 +136,72 @@ def main():
             check('server function result is reused (1 call for 2 loads)', out['rpcCalls'] == 1 and out['same'], out)
             check('no errors', not errs, errs); pg.close()
 
+            print('7. Follow-up cards (LPD / LPA) and layout')
+            errs = []; pg = new_page(b, errs, 'followups')
+            pg.evaluate("""()=>{
+              const st=(adm,n,sib)=>({admis_no:adm,student_name:n,class:'5',status:'Active',siblings:sib,monthly_tution_fee:4000,contact_no_father:'0300-1234567'});
+              const fee=(v,adm,n,per,sib)=>({voucher_id:v,admis_no:adm,student_name:n,class:'5',period:per,type:'tuition fee',payable:4000,discount:0,siblings:sib});
+              const R={school_year:2026,assignments:[],assignees:[],students:[st('1','Ali','F-9'),st('2','Sara','F-9'),st('3','Noor','F-7')],
+                fees:[fee('V-1','1','Ali','Aug','F-9'),fee('V-2','1','Ali','Sep','F-9'),fee('V-3','2','Sara','Oct','F-9'),fee('V-4','3','Noor','Oct','F-7')],
+                accounts:[{voucher_id:'V-1-1730000000000-1',date:'2026-10-05',amount_in:4000},{voucher_id:'V-2-1730000000000-2',date:'2026-10-05',amount_in:1000},{voucher_id:'V-3-1731111111111-1',date:'2026-09-20',amount_in:2000}]};
+              window.sbRpcCached=async()=>({ok:true,status:200,json:async()=>R,text:async()=>''}); window.loadLogs=async()=>{}; return initFollowups(); }"""); pg.wait_for_timeout(500)
+            cards = pg.eval_on_selector_all('.fam-card', 'els=>els.map(e=>e.innerText.replace(/\\s+/g," "))')
+            check('family with two children: LPD = latest receipt date', any('LPD: 05 Oct 2026' in c for c in cards), cards)
+            check('LPA counts one bulk receipt once (4,000 + 1,000 = 5,000)', any('LPA: PKR 5,000' in c for c in cards), cards)
+            check('family with no payment shows a dash', any('LPD: —' in c and 'LPA: —' in c for c in cards), cards)
+            check('no errors', not errs, errs); pg.close()
+            for n in PAGES:
+                pg = b.new_page(viewport={'width': 1280, 'height': 800}); pg.route('**/*', lambda r: r.continue_() if f'localhost:{PORT}' in r.request.url else r.abort())
+                pg.add_init_script("Object.defineProperty(window,'SB_NO_GUARD',{value:true,writable:true});"); pg.goto(f'http://localhost:{PORT}/{n}.html'); pg.wait_for_timeout(400)
+                over = pg.evaluate("document.documentElement.scrollWidth-document.documentElement.clientWidth")
+                check(f'{n}: no sideways page scroll at 1280px (sidebar cannot cover content)', over <= 1, over); pg.close()
+
+            print('8. Fee page: table fits the screen, student Bulk pay')
+            errs = []; pg = new_page(b, errs, 'fees'); pg.set_viewport_size({'width': 1280, 'height': 800})
+            out = pg.evaluate("""()=>{ SCHOOL_YEAR=2026;
+              const mk=(v,adm,n,per,paid)=>({voucher_id:v,student_name:n,admis_no:adm,class:'5',period:per,type:'tuition fee',payable:4000,net:4000,discount:0,totalPaid:paid,paymentDates:'2026-10-05'});
+              window.__rows=[mk('V-1','101','Muhammad Abdul Rehman Qureshi','Aug',1000),mk('V-2','101','Muhammad Abdul Rehman Qureshi','Sep',0),mk('V-3','101','Muhammad Abdul Rehman Qureshi','Oct',0),mk('V-4','101','Muhammad Abdul Rehman Qureshi','Nov',0)];
+              allFeesCache=window.__rows.slice(); for(let i=0;i<24;i++)allFeesCache.push(mk('V-9'+i,'2'+i,'Student Number '+i,'Oct',0));
+              renderFeesTable(allFeesCache);
+              const v=document.getElementById('voucherView'); return {sw:v.scrollWidth,cw:v.clientWidth,cols:document.querySelectorAll('#feesTableBody tr:first-child td').length};}""")
+            check('voucher table has 9 columns', out['cols'] == 9, out); check('no sideways scroll in the voucher table (1280px)', out['sw'] <= out['cw'] + 1, out)
+            out = pg.evaluate("""()=>{ window.__posted=null; window.postAccounts=async p=>{window.__posted=p;return true}; window.showConfirm=(m,cb)=>cb(); window.initFeePage=async()=>{};
+              $('payToAccount').innerHTML='<option value="cash">Cash</option>'; openPayModal('V-2'); openStudentBulkPay();
+              const total=$('sbTotal').value, lines=document.querySelectorAll('#sbDues tbody tr').length; $('sbAmount').value=15000; sbPreview();
+              const prev=document.getElementById('sbPreview').innerText.replace(/\\s+/g,' '); submitStuBulk(); return {total,lines,prev};}""")
+            pg.wait_for_timeout(200); posted = pg.evaluate('window.__posted')
+            check('dues up to today = Aug 3,000 + Sep 4,000 + Oct 4,000', out['total'] == 'PKR 11,000' and out['lines'] == 3, out)
+            check('preview shows an advance for November', 'advance' in out['prev'].lower() and 'V-4' in out['prev'], out['prev'])
+            check('4 payment rows: 3,000 / 4,000 / 4,000 / 4,000 (advance)', posted is not None and [x['amount_in'] for x in posted] == [3000, 4000, 4000, 4000], posted)
+            check('advance row goes to the Nov voucher', posted is not None and posted[-1]['voucher_id'].startswith('V-4-') and posted[-1]['voucher_id'].endswith('-adv'), posted)
+            check('receipt label keeps the "Type (Period) - Student" format', posted is not None and posted[0]['from_account'] == 'tuition fee (Aug) - Muhammad Abdul Rehman Qureshi', posted[0] if posted else None)
+            check('no errors', not errs, errs); pg.close()
+
+            print('9. Sidebar: hide button (desktop) and drawer (mobile)')
+            R = "s=>{const e=document.querySelector(s);if(!e)return null;const r=e.getBoundingClientRect(),c=getComputedStyle(e);return {l:Math.round(r.left),r:Math.round(r.right),disp:c.display,vis:c.visibility,sh:c.boxShadow}}"
+            def ctx_for(w, h, mobile=False):
+                c = b.new_context(viewport={'width': w, 'height': h}, is_mobile=mobile, has_touch=mobile)
+                c.route('**/*', lambda r, req=None: r.continue_() if f'localhost:{PORT}' in r.request.url else r.abort())
+                c.add_init_script("Object.defineProperty(window,'SB_NO_GUARD',{value:true,writable:true});"); return c
+            c = ctx_for(1366, 800); pg = c.new_page(); pg.goto(f'http://localhost:{PORT}/fees.html'); pg.wait_for_timeout(500)
+            a = pg.evaluate(R, '#appNav'); check('desktop: sidebar is beside the content', a['l'] == 0 and a['r'] == 272 and pg.evaluate(R, 'main')['l'] == 272, a)
+            pg.click('#navCollapseBtn'); pg.wait_for_timeout(100)
+            check('desktop: Hide button hides the sidebar and the page uses the full width', pg.evaluate(R, '#appNav')['disp'] == 'none' and pg.evaluate(R, 'main')['l'] == 0)
+            check('desktop: a small tab is shown to bring it back', pg.evaluate(R, '#navReopen')['disp'] == 'flex')
+            pg.goto(f'http://localhost:{PORT}/students.html'); pg.wait_for_timeout(400)
+            check('desktop: the choice is remembered on the next page', pg.evaluate(R, '#appNav')['disp'] == 'none')
+            pg.click('#navReopen'); pg.wait_for_timeout(100); check('desktop: the tab shows the sidebar again', pg.evaluate(R, '#appNav')['disp'] == 'flex'); c.close()
+            c = ctx_for(900, 700); pg = c.new_page(); pg.goto(f'http://localhost:{PORT}/accounts.html'); pg.wait_for_timeout(400)
+            check('tablet / narrow window: starts with the sidebar hidden', pg.evaluate("document.documentElement.classList.contains('nav-collapsed')")); c.close()
+            c = ctx_for(390, 780, True); pg = c.new_page(); pg.goto(f'http://localhost:{PORT}/fees.html'); pg.wait_for_timeout(500)
+            a = pg.evaluate(R, '#appNav')
+            check('mobile: closed drawer is off-screen, invisible and casts no shadow', a['r'] <= 0 and a['vis'] == 'hidden' and a['sh'] == 'none', a)
+            check('mobile: content uses the whole width', pg.evaluate(R, 'main')['l'] == 0 and pg.evaluate("document.documentElement.scrollWidth-innerWidth") <= 0)
+            pg.click('#appMenuBtn'); pg.wait_for_timeout(400); a = pg.evaluate(R, '#appNav'); check('mobile: menu button opens the drawer', a['l'] == 0 and a['vis'] == 'visible', a)
+            pg.click('#navCloseBtn'); pg.wait_for_timeout(400); check('mobile: the X button closes it', pg.evaluate(R, '#appNav')['vis'] == 'hidden')
+            pg.click('#appMenuBtn'); pg.wait_for_timeout(300); pg.mouse.click(375, 400); pg.wait_for_timeout(400); check('mobile: tapping outside closes it', pg.evaluate(R, '#appNav')['vis'] == 'hidden')
+            pg.click('#appMenuBtn'); pg.wait_for_timeout(300); pg.keyboard.press('Escape'); pg.wait_for_timeout(400); check('mobile: Esc closes it', pg.evaluate(R, '#appNav')['vis'] == 'hidden'); c.close()
+
             b.close()
     finally:
         srv.terminate()

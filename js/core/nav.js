@@ -1,3 +1,5 @@
+// Sidebar state is applied immediately so the page never flashes the wrong layout
+(function () { try { var p = localStorage.getItem('shibra_nav_collapsed'); if (p === '1' || (p === null && window.innerWidth >= 768 && window.innerWidth < 1100)) document.documentElement.classList.add('nav-collapsed'); } catch (e) {} })();
 // Shared sidebar + mobile menu. A page only needs: <aside id="appNav"></aside> and <script src="nav.js"></script>
 (function () {
     const links = [
@@ -76,30 +78,6 @@
             if (!response.ok) throw new Error(`${table} preload failed with HTTP ${response.status}`);
         })).catch(error => console.warn(`Navigation data prefetch for ${file} failed:`, error));
     }
-
-    // Background prefetch for fast loading
-    function prefetchAllWindowsData() {
-        if (typeof sbFetchAll !== 'function' || typeof can !== 'function' || typeof PAGE_FILE === 'undefined') return;
-        const connection = navigator.connection;
-        if (connection && (connection.saveData || ['slow-2g', '2g'].includes(connection.effectiveType))) return;
-        const allPages = Object.keys(pageData);
-        setTimeout(() => {
-            allPages.forEach((file, index) => {
-                const pageKey = PAGE_FILE[file];
-                if (pageKey && can(pageKey, 'v')) {
-                    const queries = pageData[file] || [];
-                    setTimeout(() => {
-                        queries.forEach(async ([table, query]) => {
-                            try {
-                                await ERP.db.fetchResponse(table, query);
-                            } catch (e) {}
-                        });
-                    }, index * 300); 
-                }
-            });
-        }, 1500); 
-    }
-
     function build() {
         const aside = document.getElementById('appNav');
         if (!aside) return;
@@ -112,18 +90,13 @@
             <summary class="app-report-summary flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-indigo-100 hover:bg-white/10"><span>📊 Reports &amp; Audit</span><span aria-hidden="true">⌄</span></summary>
             <div class="space-y-1 pb-1 pl-3">${reportLinks.map(l => `<a href="${l[0]}" class="flex gap-2.5 items-center px-3 py-2 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}</div>
         </details>` : '';
-        
-        // Original layout classes with proper mobile hiding (-translate-x-full)
         aside.className = 'no-print fixed md:sticky top-0 left-0 h-screen w-64 shrink-0 z-50 bg-indigo-950 text-white flex flex-col -translate-x-full md:translate-x-0 transition-transform';
-        
         const accountActions = me && me.email ? `<div class="flex gap-2 p-3 border-b border-white/10"><button id="appPwBtn" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Password</button><button onclick="sbLogout()" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Logout</button></div>` : '';
         const who = me && me.email ? `<div class="px-3 py-2 border-b border-white/10"><div class="min-w-0"><div class="text-sm font-semibold truncate">👤 ${esc(me.name || me.email)}</div><div class="text-[11px] text-indigo-300 truncate">${esc(me.role || '')} · ${esc(me.email)}</div>${me.closedThrough ? `<div class="text-[11px] text-amber-300 mt-0.5">🔒 Closed up to ${esc(me.closedThrough)}</div>` : ''}</div></div>` : '';
-        
-        aside.innerHTML = `${accountActions}<div class="p-5 border-b border-white/10"><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div>${who}
+        aside.innerHTML = `${accountActions}<div class="p-5 border-b border-white/10 nav-head"><div><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div><button type="button" id="navCollapseBtn" class="nav-collapse" title="Hide sidebar" aria-label="Hide sidebar">«</button><button type="button" id="navCloseBtn" class="nav-close" aria-label="Close menu">✕</button></div>${who}
             <nav class="flex-1 p-3 space-y-1 overflow-y-auto">${mainLinks.map(l => `<a href="${l[0]}" data-prefetch-page="${l[0]}" class="flex gap-2.5 items-center px-3 py-2.5 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}${reportMenu}</nav>`;
-        
         document.body.insertAdjacentHTML('afterbegin',
-            `<header id="appTop" class="md:hidden sticky top-0 z-40 bg-indigo-950 text-white flex items-center justify-between px-4 py-3 no-print"><div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus</div></div><button id="appMenuBtn" class="text-2xl px-2 min-h-11 min-w-11" aria-label="Open navigation menu" aria-controls="appNav" aria-expanded="false">☰</button></header>
+            `<button type="button" id="navReopen" class="no-print" title="Show sidebar" aria-label="Show sidebar">☰</button><header id="appTop" class="md:hidden sticky top-0 z-40 bg-indigo-950 text-white flex items-center justify-between px-4 py-3 no-print"><div><div class="font-bold text-sm leading-tight">Concept School</div><div class="text-[11px] text-indigo-300">Shibra Campus</div></div><button id="appMenuBtn" class="text-2xl px-2 min-h-11 min-w-11" aria-label="Open navigation menu" aria-controls="appNav" aria-expanded="false">☰</button></header>
              <div id="appBackdrop" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden"></div>
              <button id="appDayBtn" type="button" class="fixed bottom-4 right-4 z-[80] hidden rounded-full bg-rose-600 px-4 py-3 text-sm font-bold text-white shadow-lg hover:bg-rose-700 no-print">🔒 Day close</button>
              <div id="appDayModal" class="fixed inset-0 z-[95] hidden items-center justify-center bg-black/60 p-4 no-print"><div class="w-full max-w-sm space-y-4 rounded-2xl bg-white p-5 text-slate-800 shadow-2xl">
@@ -138,22 +111,25 @@
              </div></div>
              <div id="appPwModal" class="fixed inset-0 bg-black/60 z-[95] hidden items-center justify-center p-4 no-print"><div class="bg-white w-full max-w-xs rounded-2xl p-5 space-y-3 shadow-2xl text-slate-800"><h3 class="font-bold text-indigo-950">Change my password</h3><input id="appPw1" type="password" placeholder="New password (6+ characters)" class="w-full border rounded-lg p-2.5 text-sm outline-none"><input id="appPw2" type="password" placeholder="Type it again" class="w-full border rounded-lg p-2.5 text-sm outline-none"><p id="appPwMsg" class="text-xs text-rose-600 hidden"></p><div class="flex justify-end gap-2"><button id="appPwCancel" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button id="appPwSave" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">Save</button></div></div></div>
              <style>.app-report-summary{list-style:none}.app-report-summary::-webkit-details-marker{display:none}.app-report-group[open] .app-report-summary{background:rgba(255,255,255,.08)}.app-report-summary span:last-child{display:inline-block;transition:transform .15s}.app-report-group[open] .app-report-summary span:last-child{transform:rotate(180deg)}@media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal{display:none!important}}</style>`);
-        
         const menuButton = document.getElementById('appMenuBtn');
-        aside.insertAdjacentHTML('beforeend', '<div id="shibra-build" style="padding:6px 20px 12px;font-size:10px;color:#6f86ad">Build 20261031-1</div>');
+        aside.insertAdjacentHTML('beforeend', '<div id="shibra-build" style="padding:6px 20px 12px;font-size:10px;color:#6f86ad">Build 20261102-1</div>');
         const backdrop = document.getElementById('appBackdrop');
-        
         const setMenuOpen = open => {
             aside.classList.toggle('-translate-x-full', !open);
+            document.documentElement.classList.toggle('nav-open', open);
             backdrop.classList.toggle('hidden', !open);
             menuButton.setAttribute('aria-expanded', String(open));
             menuButton.setAttribute('aria-label', open ? 'Close navigation menu' : 'Open navigation menu');
             document.body.classList.toggle('overflow-hidden', open && window.matchMedia('(max-width: 767px)').matches);
         };
-
         menuButton.onclick = () => setMenuOpen(menuButton.getAttribute('aria-expanded') !== 'true');
         backdrop.onclick = () => setMenuOpen(false);
-
+        const setCollapsed = c => { document.documentElement.classList.toggle('nav-collapsed', c); try { localStorage.setItem('shibra_nav_collapsed', c ? '1' : '0'); } catch (e) {} };
+        document.getElementById('navCollapseBtn').onclick = () => setCollapsed(true);
+        document.getElementById('navReopen').onclick = () => setCollapsed(false);
+        document.getElementById('navCloseBtn').onclick = () => setMenuOpen(false);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.documentElement.classList.contains('nav-open')) setMenuOpen(false); });
+        window.matchMedia('(min-width: 768px)').addEventListener('change', e => { if (e.matches) setMenuOpen(false); });
         aside.querySelectorAll('nav a').forEach(link => {
             let prefetchTimer = null;
             const warm = () => {
@@ -182,14 +158,12 @@
             link.addEventListener('focus', warm);
             link.addEventListener('click', () => setMenuOpen(false));
         });
-
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && menuButton.getAttribute('aria-expanded') === 'true') {
                 setMenuOpen(false);
                 menuButton.focus();
             }
         });
-
         window.addEventListener('resize', () => {
             if (!window.matchMedia('(max-width: 767px)').matches) {
                 backdrop.classList.add('hidden');
@@ -197,7 +171,6 @@
                 document.body.classList.remove('overflow-hidden');
             }
         });
-
         const pm = document.getElementById('appPwModal'), msg = document.getElementById('appPwMsg');
         const showMsg = (t, ok) => { msg.textContent = t; msg.className = 'text-xs ' + (ok ? 'text-emerald-600' : 'text-rose-600'); };
         if (document.getElementById('appPwBtn')) document.getElementById('appPwBtn').onclick = () => { document.getElementById('appPw1').value = ''; document.getElementById('appPw2').value = ''; msg.className = 'hidden'; pm.classList.remove('hidden'); pm.classList.add('flex'); };
@@ -210,9 +183,7 @@
             showMsg('Password changed.', true); setTimeout(() => { pm.classList.add('hidden'); pm.classList.remove('flex'); }, 900);
         };
         setupDayClose();
-        prefetchAllWindowsData();
     }
-
     function setupDayClose() {
         const modal = document.getElementById('appDayModal');
         const button = document.getElementById('appDayBtn');

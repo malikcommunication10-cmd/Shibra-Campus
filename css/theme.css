@@ -262,3 +262,37 @@ main{min-width:0 !important;max-width:100%}                  /* a wide table ins
   #appNav + main, .min-h-screen.flex > main{flex:1 1 0% !important;min-width:0 !important}
   #appBackdrop{display:none !important}
 }
+
+/* ====================================================================================
+   Navigation: hide / show on desktop, clean slide-in drawer on mobile
+   ==================================================================================== */
+.nav-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nav-collapse,.nav-close{flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#cfe0ff;font-size:16px;line-height:1;cursor:pointer}
+.nav-collapse:hover,.nav-close:hover{background:rgba(255,255,255,.18);color:#fff}
+#navReopen{display:none}
+@media (min-width:768px){
+  .nav-close{display:none}
+  html.nav-collapsed #appNav{display:none !important}
+  html.nav-collapsed #navReopen{display:flex}
+  #navReopen{position:fixed;left:0;top:14px;z-index:60;width:26px;height:46px;align-items:center;justify-content:center;border:0;border-radius:0 12px 12px 0;
+             background:var(--ink);color:#fff;font-size:15px;cursor:pointer;box-shadow:2px 2px 10px rgba(11,31,63,.25);transition:width .15s}
+  #navReopen:hover{width:34px}
+}
+@media (max-width:767px){
+  .nav-collapse{display:none}
+  #appNav{position:fixed !important;top:0;left:0;bottom:0;height:100vh !important;height:100dvh !important;width:min(18rem,86vw) !important;flex:none !important;z-index:70 !important;
+          transform:translateX(-100%) !important;visibility:hidden;box-shadow:none !important;overflow-y:auto;transition:transform .25s ease,visibility 0s linear .25s}
+  html.nav-open #appNav{transform:none !important;visibility:visible;box-shadow:10px 0 40px rgba(0,0,0,.4) !important;transition:transform .25s ease}
+  #appBackdrop{z-index:60 !important;backdrop-filter:blur(2px)}
+  html.nav-open,html.nav-open body{overflow:hidden}
+  #appTop{padding-top:calc(.75rem + env(safe-area-inset-top,0px))}
+}
+@media print{#navReopen{display:none !important}}
+
+/* ---------- Header action buttons (shared by every page hero) ---------- */
+.page-actions{display:flex;flex-wrap:wrap;gap:8px;position:relative;z-index:1}
+.page-actions button{min-height:40px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);color:#fff;border-radius:11px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;transition:background .15s,transform .15s}
+.page-actions button:hover{background:rgba(255,255,255,.2);transform:translateY(-1px)}
+.page-actions button:first-child{color:#12332f;background:#a7f3d0;border-color:#a7f3d0}
+.page-actions button:first-child:hover{background:#6ee7b7}
+@media (max-width:767px){.page-actions button{flex:1 1 calc(50% - 8px)}}
