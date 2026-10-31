@@ -126,7 +126,7 @@
         const accountActions = me && me.email ? `<div class="flex gap-2 p-3 border-b border-white/10"><button id="appPwBtn" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Password</button><button onclick="sbLogout()" class="flex-1 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg py-2">Logout</button></div>` : '';
         const who = me && me.email ? `<div class="px-3 py-2 border-b border-white/10"><div class="min-w-0"><div class="text-sm font-semibold truncate">👤 ${esc(me.name || me.email)}</div><div class="text-[11px] text-indigo-300 truncate">${esc(me.role || '')} · ${esc(me.email)}</div>${me.closedThrough ? `<div class="text-[11px] text-amber-300 mt-0.5">🔒 Closed up to ${esc(me.closedThrough)}</div>` : ''}</div></div>` : '';
         
-        const sidebarHeader = `<div class="flex items-center justify-between p-5 border-b border-white/15"><div><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div><button id="appCloseSidebar" class="text-indigo-200 hover:text-white p-1.5 rounded-lg hover:bg-white/10 text-xl font-bold" aria-label="Close menu">✕</button></div>`;
+        const sidebarHeader = `<div class="flex items-center justify-between p-5 border-b border-white/15"><div><h1 class="font-bold">Concept School</h1><p class="text-xs text-indigo-300">Shibra Campus</p></div><button id="appCloseSidebar" type="button" class="text-indigo-200 hover:text-white p-1.5 rounded-lg hover:bg-white/10 text-xl font-bold cursor-pointer" aria-label="Close menu">✕</button></div>`;
 
         aside.innerHTML = `${accountActions}${sidebarHeader}${who}
             <nav class="flex-1 p-3 space-y-1 overflow-y-auto">${mainLinks.map(l => `<a href="${l[0]}" data-prefetch-page="${l[0]}" class="flex gap-2.5 items-center px-3 py-2.5 rounded-xl text-sm ${l[0] === page ? 'bg-indigo-600 text-white font-semibold' : 'text-indigo-200 hover:bg-white/10'}">${l[1]} <span>${l[2]}</span></a>`).join('')}${reportMenu}</nav>`;
@@ -142,7 +142,20 @@
             if (menuButton) menuButton.setAttribute('aria-expanded', String(open));
         };
 
-        if (closeButton) closeButton.onclick = () => setMenuOpen(false);
+        if (menuButton) {
+            menuButton.onclick = () => {
+                const isOpen = aside.classList.contains('-translate-x-full');
+                setMenuOpen(isOpen);
+            };
+        }
+
+        if (closeButton) {
+            closeButton.onclick = (e) => {
+                e.preventDefault();
+                setMenuOpen(false);
+            };
+        }
+
         if (backdrop) backdrop.onclick = () => setMenuOpen(false);
 
         if (window.matchMedia('(min-width: 768px)').matches) {
