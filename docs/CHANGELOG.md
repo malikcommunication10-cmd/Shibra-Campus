@@ -62,3 +62,11 @@ not the amount of data but the *steps before it appears*. Changed:
    if the server cannot be reached a short notice says the saved copy is being shown.
 5. The connection to the database is opened at page start (`preconnect`).
 6. "Loading…" while only reading data is now a small floating chip; the page stays visible. Saving / deleting still blocks the screen.
+
+## Smooth page switching (screen / sidebar blink)
+Causes: (1) the sidebar was built only after the whole page had been read, so it popped in on every page; (2) ten pages hid the whole
+page until the stylesheet loaded (four others did not, which is why only some pages blinked); (3) the browser had nothing to hold on
+screen while the next page loaded.
+Changed: the sidebar is drawn as soon as its container is read (first frame) and redrawn only if permissions arrive late;
+the page is no longer hidden while loading (only if the stylesheet truly fails); `@view-transition` makes Chrome / Edge / Safari keep
+the old page until the new one is ready and cross-fade the content while the sidebar stays still.

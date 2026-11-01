@@ -112,7 +112,7 @@
              <div id="appPwModal" class="fixed inset-0 bg-black/60 z-[95] hidden items-center justify-center p-4 no-print"><div class="bg-white w-full max-w-xs rounded-2xl p-5 space-y-3 shadow-2xl text-slate-800"><h3 class="font-bold text-indigo-950">Change my password</h3><input id="appPw1" type="password" placeholder="New password (6+ characters)" class="w-full border rounded-lg p-2.5 text-sm outline-none"><input id="appPw2" type="password" placeholder="Type it again" class="w-full border rounded-lg p-2.5 text-sm outline-none"><p id="appPwMsg" class="text-xs text-rose-600 hidden"></p><div class="flex justify-end gap-2"><button id="appPwCancel" class="px-3 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button id="appPwSave" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">Save</button></div></div></div>
              <style>.app-report-summary{list-style:none}.app-report-summary::-webkit-details-marker{display:none}.app-report-group[open] .app-report-summary{background:rgba(255,255,255,.08)}.app-report-summary span:last-child{display:inline-block;transition:transform .15s}.app-report-group[open] .app-report-summary span:last-child{transform:rotate(180deg)}@media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal{display:none!important}}</style>`);
         const menuButton = document.getElementById('appMenuBtn');
-        aside.insertAdjacentHTML('beforeend', '<div id="shibra-build" style="padding:6px 20px 12px;font-size:10px;color:#6f86ad">Build 20261103-1</div>');
+        aside.insertAdjacentHTML('beforeend', '<div id="shibra-build" style="padding:6px 20px 12px;font-size:10px;color:#6f86ad">Build 20261104-1</div>');
         const backdrop = document.getElementById('appBackdrop');
         const setMenuOpen = open => {
             aside.classList.toggle('-translate-x-full', !open);
@@ -298,5 +298,19 @@
         window.shibraDayCloseRefresh = refresh;
         refresh();
     }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
+    // Paint the sidebar in the very first frame: build as soon as <aside id="appNav"> is parsed, not after the whole page.
+    let built = false, builtWithPerms = false;
+    const hasPerms = () => typeof ME !== 'undefined' && ME && ME.perms;
+    const buildOnce = () => { if (built || !document.getElementById('appNav')) return; built = true; builtWithPerms = !!hasPerms(); build(); };
+    if (document.readyState === 'loading') {
+        const mo = new MutationObserver(() => { if (document.getElementById('appNav')) { mo.disconnect(); buildOnce(); } });
+        mo.observe(document.documentElement, { childList: true, subtree: true });
+        document.addEventListener('DOMContentLoaded', () => { mo.disconnect(); buildOnce(); });
+    } else buildOnce();
+    // Very first visit only: permissions arrive after the first paint, so the menu is redrawn once with the right links.
+    document.addEventListener('shibra:me-ready', () => {
+        if (!built || builtWithPerms || !hasPerms()) return;
+        ['navReopen', 'appTop', 'appBackdrop', 'appPwModal', 'appDayModal'].forEach(id => { const n = document.getElementById(id); if (n) n.remove(); });
+        builtWithPerms = true; build();
+    });
 })();

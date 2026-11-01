@@ -301,3 +301,16 @@ main{min-width:0 !important;max-width:100%}                  /* a wide table ins
 #loadingOverlay.ui-soft{background:transparent !important;pointer-events:none !important;justify-content:flex-start !important;padding-top:84px}
 #loadingOverlay.ui-soft > div{width:20px;height:20px;border-width:3px;border-color:var(--action);border-top-color:transparent;margin:0}
 #loadingOverlay.ui-soft p{margin:8px 0 0;background:var(--ink);color:#fff;padding:6px 14px;border-radius:99px;font-size:12px;box-shadow:var(--shadow-up)}
+
+/* ====================================================================================
+   Smooth page changes: the old page stays on screen until the new one is ready, the content
+   cross-fades, and the sidebar itself never blinks (Chrome / Edge / Safari; others just load normally)
+   ==================================================================================== */
+@view-transition { navigation: auto; }
+::view-transition-old(root),::view-transition-new(root){animation-duration:.16s;animation-timing-function:ease}
+#appNav{view-transition-name:appnav}
+#appTop{view-transition-name:apptop}
+::view-transition-group(appnav),::view-transition-group(apptop),
+::view-transition-old(appnav),::view-transition-new(appnav),
+::view-transition-old(apptop),::view-transition-new(apptop){animation:none;mix-blend-mode:normal}
+@media (prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none !important}}

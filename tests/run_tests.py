@@ -228,6 +228,29 @@ def main():
             check('database connection is opened early (preconnect)', pg.evaluate("[...document.querySelectorAll('link[rel=preconnect]')].some(l=>l.href.includes('supabase.co'))"))
             check('no errors', not errs, errs); pg.close()
 
+            print('11. Switching pages without a blink')
+            WATCH = """(()=>{ window.__nav={first:null,counts:[]}; window.__vis=[]; window.__vt=null;
+              addEventListener('pagereveal',e=>{window.__vt=!!e.viewTransition});
+              const log=()=>{ const v=document.documentElement&&document.documentElement.style.visibility; if(v)window.__vis.push(v);
+                const a=document.getElementById('appNav'); if(!a)return; const n=a.querySelectorAll('a').length; const c=window.__nav.counts;
+                if(c[c.length-1]!==n){c.push(n); if(window.__nav.first===null&&n>0)window.__nav.first=document.readyState;} };
+              new MutationObserver(log).observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['style']}); })();"""
+            bad = []
+            for n in [x for x in PAGES if x != 'login']:
+                c = ctx_for(1366, 800); c.add_init_script(WATCH); pg = c.new_page(); pg.goto(f'http://localhost:{PORT}/{n}.html'); pg.wait_for_timeout(500)
+                r = pg.evaluate("({first:window.__nav.first,shown:window.__nav.counts.filter(x=>x>0),hidden:window.__vis.includes('hidden')})")
+                if r['first'] != 'loading' or len(r['shown']) != 1 or r['hidden']: bad.append((n, r))
+                c.close()
+            check('sidebar is painted while the page is still loading, drawn once, and the page is never hidden (13 pages)', not bad, bad[:2])
+            c = ctx_for(1366, 800); c.add_init_script(WATCH); pg = c.new_page(); pg.goto(f'http://localhost:{PORT}/fees.html'); pg.wait_for_timeout(400)
+            supported = pg.evaluate("'PageRevealEvent' in window")
+            pg.click('#appNav a[href="students.html"]'); pg.wait_for_url('**/students.html'); pg.wait_for_timeout(500)
+            check('browser keeps the old page and cross-fades to the new one' + ('' if supported else ' (not supported by this browser, skipped)'), (not supported) or pg.evaluate('window.__vt') is True, pg.evaluate('window.__vt')); c.close()
+            c = ctx_for(1366, 800); pg = c.new_page(); pg.goto(f'http://localhost:{PORT}/students.html'); pg.wait_for_timeout(400)
+            r = pg.evaluate("""()=>{ ME={perms:{pages:{students:'v',fees:'v'}},email:'a@b.c',name:'A',role:'Admin'}; document.dispatchEvent(new CustomEvent('shibra:me-ready'));
+              return {links:[...document.querySelectorAll('#appNav a')].map(a=>a.getAttribute('href')),tops:document.querySelectorAll('#appTop').length,backs:document.querySelectorAll('#appBackdrop').length}; }""")
+            check('permissions arriving late redraw the menu once, without duplicates', r['links'] == ['students.html', 'fees.html'] and r['tops'] == 1 and r['backs'] == 1, r); c.close()
+
             b.close()
     finally:
         srv.terminate()
