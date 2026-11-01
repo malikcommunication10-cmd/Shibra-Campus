@@ -525,6 +525,7 @@ function openStudentLedger(name,adm){
   $('ledgerTotalBalance').innerText=run<0?`Adv ${fmt(-run)}`:`PKR ${fmt(run)}`;
   const due=Math.round((dueCh-tp)*100)/100;
   $('ledgerDue').innerText=(last?`Last payment: PKR ${fmt(last.amt)} on ${last.date}. `:'No payment received yet. ')+(future?`Due up to this month: ${due<0?'Adv '+fmt(-due):'PKR '+fmt(due)} (the grey rows are later months)`:'');
+  setLedgerView('monthly');                       // always open on the month-wise view
   window.LEDGER_CTX={name,adm:ref.admis_no||adm||'',cls:cls||'-',receipts:ev.filter(e=>e.receipt).map(e=>e.receipt)};
   $('ledgerModal').classList.add('open');
 }
@@ -894,3 +895,16 @@ function submitStuBulk(){
     if(await postAccounts(pl,'Bulk payment recorded successfully!','Applying payment...')){closeStuBulk();initFeePage()}
   });
 }
+
+
+/* ---------- Student ledger: month-wise view (default) <-> full transaction statement ----------
+   Only the view on screen is printed, so each one comes out as its own clean page. */
+let LEDGER_VIEW = 'monthly';
+function setLedgerView(view) {
+  LEDGER_VIEW = view === 'txn' ? 'txn' : 'monthly';
+  $('ledgerApplied').style.display = LEDGER_VIEW === 'monthly' ? '' : 'none';
+  $('ledgerTxnView').style.display = LEDGER_VIEW === 'txn' ? '' : 'none';
+  $('ledgerViewBtn').innerText = LEDGER_VIEW === 'monthly' ? '🧾 Transaction statement' : '📅 Monthly view';
+  const sheet = $('ledgerSheet'); if (sheet) sheet.scrollTop = 0;
+}
+function toggleLedgerView() { setLedgerView(LEDGER_VIEW === 'monthly' ? 'txn' : 'monthly'); }
