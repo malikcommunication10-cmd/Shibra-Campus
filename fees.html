@@ -175,13 +175,15 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
 <div id="ledgerModal" class="modal"><div id="ledgerSheet" class="sheet max-w-4xl">
   <div class="flex justify-between items-start border-b pb-3 mb-3 gap-2">
     <div><h3 class="font-bold text-indigo-950">Concept School - Student Fee Ledger</h3><p id="ledgerStudentInfo" class="text-xs text-slate-500 mt-0.5"></p></div>
-    <div class="flex gap-2 no-print"><button onclick="window.print()" class="btn b-pri">🖨️ Print</button><button onclick="closeLedgerModal()" class="btn b-gh">✕</button></div>
+    <div class="flex flex-wrap justify-end gap-2 no-print"><button type="button" id="ledgerViewBtn" onclick="toggleLedgerView()" class="btn b-gh" title="Switch between the month-wise view and the full transaction list. Print prints only the view you are looking at.">🧾 Transaction statement</button><button onclick="window.print()" class="btn b-pri">🖨️ Print</button><button onclick="closeLedgerModal()" class="btn b-gh">✕</button></div>
   </div>
   <div id="ledgerApplied" class="overflow-x-auto"></div>
+  <div id="ledgerTxnView" style="display:none">
   <div class="font-bold text-xs text-indigo-950 mb-1">Transaction statement</div>
   <div class="overflow-x-auto mb-3"><table class="w-full text-xs text-left">
     <thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr></thead>
     <tbody id="ledgerTableBody"></tbody></table></div>
+  </div>
   <div class="bg-slate-50 p-3 rounded-xl border flex flex-wrap justify-between gap-2 text-xs font-semibold">
     <div>Total charges: <span id="ledgerTotalPayable" class="text-indigo-900"></span></div>
     <div>Paid: <span id="ledgerTotalPaid" class="text-emerald-600"></span></div>
@@ -277,6 +279,6 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Save discount</button></div>
 </div></div>
 
-<script src="js/pages/fees.js?v=20261101-1"></script>
+<script src="js/pages/fees.js?v=20261105-1"></script>
 </body>
 </html>
