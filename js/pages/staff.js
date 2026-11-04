@@ -71,6 +71,8 @@ create table if not exists public.staff_attendance (
   staff_name text not null,
   attendance_date date not null,
   status text not null check (status in ('present', 'absent', 'late')),
+  time_in time,
+  time_out time,
   note text,
   absence_exempt boolean not null default false,
   late_exempt boolean not null default false,
@@ -86,7 +88,9 @@ create index if not exists staff_attendance_date_idx
   on public.staff_attendance (attendance_date);
 alter table public.staff_attendance
   add column if not exists absence_exempt boolean not null default false,
-  add column if not exists late_exempt boolean not null default false;
+  add column if not exists late_exempt boolean not null default false,
+  add column if not exists time_in time,
+  add column if not exists time_out time;
 alter table public.staff_attendance enable row level security;
 revoke all on table public.staff_attendance from anon;
 grant select, insert, update, delete on table public.staff_attendance to authenticated;
@@ -158,6 +162,56 @@ create policy shibra_attendance_exemption_update on public.staff_attendance as r
 create policy shibra_attendance_exemption_delete on public.staff_attendance as restrictive
   for delete to authenticated
   using (public.app_is_admin() or (not absence_exempt and not late_exempt));
+
+create or replace function public.backfill_staff_attendance_times(p_rows jsonb)
+returns integer
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  v_updated integer;
+begin
+  if not public.app_has_page_permission('staff', 'e') then
+      raise exception 'Staff edit permission is required to fill missing attendance times.';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) is distinct from 'array' then
+      raise exception 'Attendance time updates must be provided as a list.';
+  end if;
+  if jsonb_array_length(p_rows) > 2000 then
+      raise exception 'Attendance time update list is too large.';
+  end if;
+  if exists (
+      select 1
+      from jsonb_to_recordset(p_rows) as x(staff_id text, attendance_date date, time_in time, time_out time)
+      where staff_id is null or attendance_date is null or (time_in is null and time_out is null)
+  ) then
+      raise exception 'Each attendance time update needs a staff, date, and at least one punch time.';
+  end if;
+  if exists (
+      select 1
+      from jsonb_to_recordset(p_rows) as x(staff_id text, attendance_date date, time_in time, time_out time)
+      group by staff_id, attendance_date
+      having count(*) > 1
+  ) then
+      raise exception 'Duplicate staff and date values were supplied for attendance time updates.';
+  end if;
+
+  update public.staff_attendance as attendance
+  set time_in = coalesce(attendance.time_in, updates.time_in),
+      time_out = coalesce(attendance.time_out, updates.time_out)
+  from jsonb_to_recordset(p_rows) as updates(staff_id text, attendance_date date, time_in time, time_out time)
+  where attendance.staff_id = updates.staff_id
+    and attendance.attendance_date = updates.attendance_date
+    and ((attendance.time_in is null and updates.time_in is not null)
+      or (attendance.time_out is null and updates.time_out is not null));
+  get diagnostics v_updated = row_count;
+  return v_updated;
+end;
+$$;
+revoke all on function public.backfill_staff_attendance_times(jsonb) from public, anon;
+grant execute on function public.backfill_staff_attendance_times(jsonb) to authenticated;
+
 update public.settings set setting_value = '0' where lower(trim(setting_key)) = 'payroll free leaves';
 
 -- Staff security opening balances, monthly deductions, and refunds
@@ -207,12 +261,130 @@ create policy staff_security_delete on public.staff_security_ledger for delete t
 );
 notify pgrst, 'reload schema';`;
 
+const STAFF_DEVICE_ID_SQL = `-- Permanent fingerprint device ID mapping; software Staff IDs remain unchanged.
+create table if not exists public.staff_attendance_device_map (
+    device_id text primary key check (device_id ~ '^[1-9][0-9]*$'),
+    staff_id text not null unique,
+    device_name text not null,
+    updated_at timestamptz not null default now()
+);
+alter table public.staff_attendance_device_map enable row level security;
+revoke all on table public.staff_attendance_device_map from anon;
+grant select on table public.staff_attendance_device_map to authenticated;
+drop policy if exists staff_attendance_device_map_select on public.staff_attendance_device_map;
+create policy staff_attendance_device_map_select on public.staff_attendance_device_map
+    for select to authenticated using (public.app_has_page_permission('staff', 'v'));
+
+create sequence if not exists public.staff_attendance_device_id_seq start with 1;
+
+create or replace function public.save_staff_attendance_device_map(p_mappings jsonb)
+returns integer
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+    v_max_id bigint;
+    v_last_id bigint;
+    v_sequence_called boolean;
+begin
+    if not public.app_has_page_permission('staff', 'e') then
+        if not public.app_has_page_permission('staff', 'a') then
+            raise exception 'Staff add or edit permission is required to save device ID links.';
+        end if;
+    end if;
+    if p_mappings is null or jsonb_typeof(p_mappings) is distinct from 'array' then
+        raise exception 'Device ID links must be provided as a list.';
+    end if;
+    if jsonb_array_length(p_mappings) = 0 then
+        raise exception 'No device ID links were provided.';
+    end if;
+    if exists (
+        select 1 from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text)
+        where device_id is null or device_id !~ '^[1-9][0-9]*$'
+           or staff_id is null or staff_id = '' or device_name is null or device_name = ''
+    ) then
+        raise exception 'Every device ID must have a valid staff member.';
+    end if;
+    if (select count(*) from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text))
+       <> (select count(distinct device_id) from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text))
+       or (select count(*) from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text))
+       <> (select count(distinct staff_id) from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text)) then
+        raise exception 'Each device ID and staff member must be mapped only once.';
+    end if;
+    if exists (
+        select 1
+        from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text)
+        left join public.staff s on s.staff_id = m.staff_id
+        where s.staff_id is null
+    ) then
+        raise exception 'A selected staff member no longer exists. Refresh and review the report again.';
+    end if;
+    delete from public.staff_attendance_device_map saved
+    where saved.device_id in (
+        select m.device_id
+        from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text)
+    ) or saved.staff_id in (
+        select m.staff_id
+        from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text)
+    );
+    insert into public.staff_attendance_device_map (device_id, staff_id, device_name, updated_at)
+    select device_id, staff_id, device_name, now()
+    from jsonb_to_recordset(p_mappings) as m(device_id text, staff_id text, device_name text)
+    on conflict (device_id) do update
+        set staff_id = excluded.staff_id, device_name = excluded.device_name, updated_at = now();
+
+    select coalesce(max(device_id::bigint), 0) into v_max_id
+    from public.staff_attendance_device_map;
+    select last_value, is_called into v_last_id, v_sequence_called
+    from public.staff_attendance_device_id_seq;
+    if v_max_id > v_last_id or (v_max_id > 0 and not v_sequence_called) then
+        perform setval('public.staff_attendance_device_id_seq', v_max_id, true);
+    end if;
+    return jsonb_array_length(p_mappings);
+end;
+$$;
+revoke all on function public.save_staff_attendance_device_map(jsonb) from public, anon;
+grant execute on function public.save_staff_attendance_device_map(jsonb) to authenticated;
+
+create or replace function public.next_staff_attendance_device_id()
+returns text
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+    if not public.app_has_page_permission('staff', 'a') then
+        raise exception 'Staff add permission is required to generate a device ID.';
+    end if;
+    if exists (
+        select 1
+        from public.staff s
+        where coalesce(s.status, 'Active') = 'Active'
+          and not exists (
+              select 1 from public.staff_attendance_device_map m
+              where m.staff_id = s.staff_id
+          )
+    ) then
+        raise exception 'Pehle attendance report se mojooda tamam active staff ke device IDs save karein.';
+    end if;
+    return nextval('public.staff_attendance_device_id_seq')::text;
+end;
+$$;
+revoke all on function public.next_staff_attendance_device_id() from public, anon;
+grant execute on function public.next_staff_attendance_device_id() to authenticated;
+notify pgrst, 'reload schema';`;
+
 // ====================================================================================
 //  STATE + HELPERS
 // ====================================================================================
 let staff = [], staffByKey = {}, payroll = [], payById = {}, payMap = {};
-let staffExt = false, payrollOk = false, attendanceOk = false, securityOk = false, incrementsOk = false;
+let staffExt = false, payrollOk = false, attendanceOk = false, securityOk = false, incrementsOk = false, staffDeviceIdSetupOk = false;
+let attendanceDeviceMappings = [];
 let attendanceRows = [], attendanceByStaff = {}, attendanceDrafts = {}, attendanceDirty = false, attendanceImportPlan = null;
+let attendanceRangeRows = [], attendanceRangePreset = 'salary_month', attendanceRangeMonth = '';
+let attendanceRangeLoaded = null, attendanceStaffFilter = 'active';
+let staffAttendanceMonthDraft = null;
 let attendanceDate = '';
 let editingStaffKey = null, adjId = null, payTarget = null, payrollGenDrafts = [];
 let securityLedger = [], securityByStaff = {};
@@ -476,15 +648,16 @@ async function initStaff() {
     });
     let c = getSupabaseConfig();
     try {
-        let [, sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityRes, incrementsRes] = await Promise.all([
+        let [, sRes, pRes, staffProbe, payrollProbe, attendanceProbe, securityRes, incrementsRes, deviceMapRes] = await Promise.all([
             settingsPromise,
             ERP.db.request('staff', 'select=*'),
             ERP.db.request('payroll', 'select=*'),
-            sbProbe(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`),
-            sbProbe(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days,security_deduction&limit=1`),
-            sbProbe(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt&limit=1`),
+            fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days,security_deduction&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt,time_in,time_out&limit=1`, { headers: sbHeaders() }),
             ERP.db.request('staff_security_ledger', 'select=*'),
-            ERP.db.request('staff_salary_increments', 'select=*')
+            ERP.db.request('staff_salary_increments', 'select=*'),
+            ERP.db.request('staff_attendance_device_map', 'select=*')
         ]);
         let sRows = await sRes.json();
         if(!Array.isArray(sRows)) throw new Error('staff failed to load');
@@ -499,6 +672,9 @@ async function initStaff() {
         salaryIncrements = incrementsRes.ok ? await incrementsRes.json() : [];
         incrementsOk = incrementsRes.ok && Array.isArray(salaryIncrements);
         if(!incrementsOk) salaryIncrements = [];
+        attendanceDeviceMappings = deviceMapRes.ok ? await deviceMapRes.json() : [];
+        staffDeviceIdSetupOk = deviceMapRes.ok && Array.isArray(attendanceDeviceMappings);
+        if(!staffDeviceIdSetupOk) attendanceDeviceMappings = [];
 
         staff = sRows.map(normStaff).sort((a, b) => a.name.localeCompare(b.name));
         staffByKey = {}; staff.forEach(s => staffByKey[s.key] = s);
@@ -510,6 +686,7 @@ async function initStaff() {
         if(!$('gMonth').value) $('gMonth').value = todayStr().slice(0, 7);
         populateSalaryMonthYears();
         syncSalaryMonthControls($('gMonth').value);
+        syncAttendanceRangeToSalaryMonth();
         $('attendanceDate').max = todayStr();
         if(!$('attendanceDate').value) $('attendanceDate').value = todayStr();
         attendanceDate = $('attendanceDate').value;
@@ -522,6 +699,10 @@ async function initStaff() {
             console.error('Could not load attendance:', error);
             toast(error.message || 'Could not load attendance.', false);
         });
+        if(attendanceOk) loadAttendanceRange().catch(error => {
+            console.error('Could not load attendance overview:', error);
+            toast(error.message || 'Could not load attendance overview.', false);
+        });
     } catch (e) {
         console.error(e);
         toast(e.message || 'Could not load data. Check your internet connection or API settings.', false);
@@ -529,9 +710,11 @@ async function initStaff() {
     hideLoading();
 }
 function updateBanner() {
-    let need = !staffExt || !payrollOk || !attendanceOk || !securityOk;
-    $('setupSql').innerText = SETUP_SQL;
-    $('setupText').innerText = !securityOk
+    let need = !staffExt || !payrollOk || !attendanceOk || !securityOk || !staffDeviceIdSetupOk;
+    $('setupSql').innerText = `${SETUP_SQL}\n\n${STAFF_DEVICE_ID_SQL}`;
+    $('setupText').innerText = !staffDeviceIdSetupOk
+        ? 'Permanent fingerprint ID links and automatic device IDs for new staff need setup. Copy and run the complete SQL below once, then refresh.'
+        : !securityOk
         ? 'Staff security setup is missing. Run the updated setup SQL once in Supabase → SQL Editor, then refresh this page.'
         : !payrollOk || !attendanceOk
         ? 'Payroll attendance setup is missing. Run this once in Supabase → SQL Editor, then refresh this page.'
@@ -542,7 +725,7 @@ function updateBanner() {
     $('salaryIncrementButton').disabled = !incrementsOk;
     $('salaryIncrementButton').classList.toggle('opacity-50', !incrementsOk);
 }
-function copySetupSql() { navigator.clipboard.writeText(SETUP_SQL).then(() => toast('SQL copied. Paste it in the Supabase SQL Editor and run it.')); }
+function copySetupSql() { navigator.clipboard.writeText(`${SETUP_SQL}\n\n${STAFF_DEVICE_ID_SQL}`).then(() => toast('SQL copied. Paste it in the Supabase SQL Editor and run it.')); }
 function fillFilters() {
     let d = [...new Set(staff.map(s => s.designation))].sort();
     let cur = $('sDesig').value;
@@ -597,7 +780,16 @@ function showTab(t) {
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
     if(t === 'overview') renderOverview();
     else if(t === 'staff') renderStaff();
-    else if(t === 'attendance') renderAttendance();
+    else if(t === 'attendance') {
+        syncAttendanceRangeToSalaryMonth();
+        if($('attendanceDeleteMonth') && !$('attendanceDeleteMonth').value) $('attendanceDeleteMonth').value = curMonth();
+        renderAttendanceStaffFilterButtons();
+        renderAttendance();
+        loadAttendanceRange().catch(error => {
+            console.error('Could not load attendance overview:', error);
+            toast(error.message || 'Could not load attendance overview.', false);
+        });
+    }
     else if(t === 'payroll') renderPayroll();
     else if(t === 'history') renderHistory();
     const names = { overview: 'Overview', staff: 'Staff Directory', attendance: 'Daily Attendance', payroll: 'Salary Sheet', history: 'Salary Payment History' };
@@ -607,6 +799,236 @@ function showTab(t) {
 function attendanceStaff(date) {
     return staff.filter(s => (!s.joining || s.joining <= date) &&
         (s.status === 'Active' || (s.leaving && s.leaving >= date)));
+}
+function attendanceDateList(from, to) {
+    const dates = [];
+    for(let date = parseYmd(from); ymd(date) <= to; date.setDate(date.getDate() + 1)) dates.push(ymd(date));
+    return dates;
+}
+function setAttendanceRangeDates(from, to) {
+    $('attendanceRangeFrom').value = from;
+    $('attendanceRangeTo').value = to;
+}
+function syncAttendanceRangeToSalaryMonth() {
+    const month = curMonth();
+    if(attendanceRangePreset !== 'salary_month' || attendanceRangeMonth === month) return;
+    attendanceRangeMonth = month;
+    setAttendanceRangeDates(monthStart(month), monthEnd(month));
+    if($('attendanceRangePreset')) $('attendanceRangePreset').value = 'salary_month';
+}
+function setAttendanceRangePreset(preset) {
+    const today = parseYmd(todayStr());
+    let from = todayStr(), to = todayStr();
+    if(preset === 'salary_month' || preset === 'this_month') {
+        const month = preset === 'salary_month' ? curMonth() : todayStr().slice(0, 7);
+        from = monthStart(month);
+        to = monthEnd(month);
+        if(preset === 'salary_month') attendanceRangeMonth = month;
+    } else if(preset === 'yesterday') {
+        today.setDate(today.getDate() - 1);
+        from = to = ymd(today);
+    } else if(preset === 'last_week') {
+        const start = new Date(today);
+        start.setDate(start.getDate() - 6);
+        from = ymd(start);
+    } else if(preset === 'last_month') {
+        const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const end = new Date(today.getFullYear(), today.getMonth(), 0);
+        from = ymd(start);
+        to = ymd(end);
+    } else if(preset !== 'today' && preset !== 'custom') {
+        preset = 'salary_month';
+        from = monthStart(curMonth());
+        to = monthEnd(curMonth());
+        attendanceRangeMonth = curMonth();
+    }
+    attendanceRangePreset = preset;
+    $('attendanceRangePreset').value = preset;
+    setAttendanceRangeDates(from, to);
+    if(preset !== 'custom') loadAttendanceRange().catch(error => {
+        console.error('Could not load attendance overview:', error);
+        toast(error.message || 'Could not load attendance overview.', false);
+    });
+}
+function attendanceRangeChanged() {
+    attendanceRangePreset = 'custom';
+    $('attendanceRangePreset').value = 'custom';
+}
+async function loadAttendanceRange() {
+    const from = $('attendanceRangeFrom').value, to = $('attendanceRangeTo').value;
+    if(!from || !to || from > to) {
+        toast('From/To date sahi select karein.', false);
+        return;
+    }
+    if(attendanceDateList(from, to).length > 62) {
+        toast('Overview ke liye maximum 62 din select karein.', false);
+        return;
+    }
+    if(!attendanceOk) {
+        $('attendanceRangeSummary').innerText = 'Attendance setup required.';
+        $('attendanceRangeTable').innerHTML = '<p class="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Pehle attendance setup SQL run karein.</p>';
+        return;
+    }
+    $('attendanceRangeSummary').innerText = 'Loading...';
+    const response = await ERP.db.request('staff_attendance',
+        `select=staff_id,staff_name,attendance_date,status,time_in,time_out,note&attendance_date=gte.${encodeURIComponent(from)}&attendance_date=lte.${encodeURIComponent(to)}&order=attendance_date.asc`);
+    if(!response.ok) throw new Error('Could not load attendance date range: ' + await response.text());
+    const rows = await response.json();
+    if(!Array.isArray(rows)) throw new Error('Supabase returned invalid attendance overview data.');
+    attendanceRangeRows = rows;
+    attendanceRangeLoaded = { from, to };
+    renderAttendanceRangeTable(from, to);
+}
+function renderAttendanceStaffFilterButtons() {
+    document.querySelectorAll('[data-attendance-staff-filter]').forEach(button => {
+        const selected = button.dataset.attendanceStaffFilter === attendanceStaffFilter;
+        button.className = `rounded-lg border px-3 py-1.5 text-xs font-semibold ${selected
+            ? 'border-indigo-600 bg-indigo-600 text-white'
+            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`;
+        button.setAttribute('aria-pressed', String(selected));
+    });
+}
+function setAttendanceStaffFilter(filter) {
+    if(!['active', 'inactive', 'all'].includes(filter)) return;
+    attendanceStaffFilter = filter;
+    renderAttendanceStaffFilterButtons();
+    if(attendanceRangeLoaded) renderAttendanceRangeTable(attendanceRangeLoaded.from, attendanceRangeLoaded.to);
+}
+async function refreshAttendanceRangeAfterSave() {
+    try {
+        await loadAttendanceRange();
+        return '';
+    } catch(error) {
+        console.error('Attendance saved, but overview refresh failed:', error);
+        return ` Overview refresh nahi ho saka: ${error.message || 'unknown error'}`;
+    }
+}
+async function deleteSelectedMonthAttendance() {
+    if(!attendanceOk) { toast('Attendance setup SQL run karna zaroori hai.', false); return; }
+    const month = $('attendanceDeleteMonth').value;
+    if(!/^\d{4}-\d{2}$/.test(month)) { toast('Delete ke liye month select karein.', false); return; }
+    const dateFilter = `attendance_date=gte.${monthStart(month)}&attendance_date=lte.${monthEnd(month)}`;
+    const baseUrl = `${getSupabaseConfig().url}/rest/v1/staff_attendance?${dateFilter}`;
+    try {
+        const countResponse = await fetch(`${baseUrl}&select=id`, {
+            headers: sbHeaders({ Prefer: 'count=exact', Range: '0-0' })
+        });
+        if(!countResponse.ok) throw new Error('Is month ki attendance count nahi ho saki: ' + await countResponse.text());
+        const countMatch = String(countResponse.headers.get('content-range') || '').match(/\/(\d+)$/);
+        if(!countMatch) throw new Error('Database se attendance ki exact count tasdeeq nahi hui; delete roka gaya.');
+        const total = Number(countMatch[1]);
+        if(!Number.isSafeInteger(total) || total < 0) throw new Error('Database se attendance count invalid aayi.');
+        if(!total) { toast(`${monthLabel(month)} mein delete karne ke liye attendance maujood nahi.`); return; }
+        confirmBox(
+            `${monthLabel(month)} ke tamam ${total} attendance records permanently delete honge. Sirf yahi selected month clear hoga; payroll records nahi mitenge. Kya aap jari rakhna chahte hain?`,
+            'Delete month attendance',
+            async () => {
+                let deletedCount = 0;
+                showLoading(`${monthLabel(month)} ki ${total} attendance entries delete ho rahi hain...`);
+                try {
+                    const ids = [];
+                    const pageSize = 500;
+                    for(let offset = 0; offset < total; offset += pageSize) {
+                        const end = Math.min(offset + pageSize - 1, total - 1);
+                        const response = await fetch(`${baseUrl}&select=id&order=id.asc`, {
+                            headers: sbHeaders({ Prefer: 'count=exact', Range: `${offset}-${end}` })
+                        });
+                        if(!response.ok) throw new Error('Delete se pehle attendance IDs load nahi huin: ' + await response.text());
+                        const pageRows = await response.json();
+                        if(!Array.isArray(pageRows) || pageRows.some(row => !/^\d+$/.test(String(row.id)))) {
+                            throw new Error('Database se attendance IDs invalid format mein aayi; delete roka gaya.');
+                        }
+                        ids.push(...pageRows.map(row => String(row.id)));
+                    }
+                    if(ids.length !== total) throw new Error(`Delete se pehle records ki tadaad badal gayi (${ids.length}/${total}); dobara try karein.`);
+                    for(let offset = 0; offset < ids.length; offset += 200) {
+                        const batch = ids.slice(offset, offset + 200);
+                        const deleteUrl = `${baseUrl}&id=in.(${batch.join(',')})&select=id`;
+                        const response = await fetch(deleteUrl, {
+                            method: 'DELETE',
+                            headers: sbHeaders({ Prefer: 'return=representation' })
+                        });
+                        if(!response.ok) throw new Error('Attendance delete nahi hui: ' + await response.text());
+                        const deletedRows = await response.json();
+                        if(!Array.isArray(deletedRows) || deletedRows.length !== batch.length) {
+                            deletedCount += Array.isArray(deletedRows) ? deletedRows.length : 0;
+                            throw new Error(`Sirf ${deletedCount} mein se kuch records delete huay. Staff Delete permission aur closed-date rules check karein.`);
+                        }
+                        deletedCount += deletedRows.length;
+                    }
+                    const refreshError = await refreshAttendanceRangeAfterSave();
+                    if(attendanceDate.startsWith(month + '-')) {
+                        try { await loadAttendance(attendanceDate); }
+                        catch(error) {
+                            console.error('Monthly attendance deleted, but selected-day refresh failed:', error);
+                            toast(`${deletedCount} records delete huay. Selected-day view refresh nahi hua: ${error.message || 'unknown error'}`, false);
+                            return;
+                        }
+                    }
+                    toast(`${monthLabel(month)} ke ${deletedCount} attendance records delete ho gaye. Payroll records mehfooz hain.${refreshError}`, !refreshError);
+                } catch(error) {
+                    let refreshError = deletedCount ? await refreshAttendanceRangeAfterSave() : '';
+                    if(deletedCount && attendanceDate.startsWith(month + '-')) {
+                        try { await loadAttendance(attendanceDate); }
+                        catch(refreshFailure) {
+                            console.error('Partial month attendance deletion, but selected-day refresh failed:', refreshFailure);
+                            refreshError += ` Selected-day view refresh nahi hua: ${refreshFailure.message || 'unknown error'}`;
+                        }
+                    }
+                    toast(`${error.message || 'Selected month attendance delete nahi hui.'}${deletedCount ? ` Ab tak ${deletedCount} records delete huay.` : ''}${refreshError}`, false);
+                } finally { hideLoading(); }
+            }
+        );
+    } catch(error) {
+        toast(error.message || 'Selected month attendance delete nahi hui.', false);
+    }
+}
+function renderAttendanceRangeTable(from, to) {
+    const dates = attendanceDateList(from, to);
+    const records = new Map(attendanceRangeRows.map(row => [`${row.staff_id}|${String(row.attendance_date).slice(0, 10)}`, row]));
+    const members = staff.filter(member => {
+        const active = member.status === 'Active';
+        const matchesFilter = attendanceStaffFilter === 'all' ||
+            (attendanceStaffFilter === 'active' && active) ||
+            (attendanceStaffFilter === 'inactive' && !active);
+        if(!matchesFilter) return false;
+        if(attendanceStaffFilter === 'inactive') return true;
+        return dates.some(date => staffEmployedOnDate(member, date)) ||
+            attendanceRangeRows.some(row => row.staff_id === member.staffId);
+    });
+    const memberIds = new Set(members.map(member => member.staffId));
+    const marked = attendanceRangeRows.filter(row => memberIds.has(row.staff_id)).length;
+    $('attendanceRangeSummary').innerText = `${fmtDate(from)} – ${fmtDate(to)} · ${members.length} staff · ${marked} marked records`;
+    if(!members.length) {
+        $('attendanceRangeTable').innerHTML = '<p class="rounded-lg border border-slate-200 p-6 text-center text-sm text-slate-500">Is date range mein staff record nahi mila.</p>';
+        return;
+    }
+    const headings = dates.map(date => {
+        const day = parseYmd(date);
+        return `<th class="min-w-[104px] border-b border-l border-slate-200 bg-slate-50 p-2 text-center"><div>${day.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</div><div class="text-[10px] font-normal text-slate-400">${day.toLocaleDateString('en-GB', { weekday: 'short' })}</div></th>`;
+    }).join('');
+    const body = members.map(member => `<tr class="border-b border-slate-100">
+        <th class="sticky left-0 z-10 min-w-[180px] border-r border-slate-200 bg-white p-2 text-left">
+            <button type="button" onclick="openStaffAttendanceMonth(${js(member.staffId)})" class="text-left font-semibold text-indigo-700 hover:text-indigo-950 hover:underline">${esc(member.name)}</button>
+            <div class="text-[10px] font-normal text-slate-400">${esc(member.designation)} · ${esc(member.staffId)} · <span class="${member.status === 'Active' ? 'text-emerald-600' : 'text-slate-500'}">${member.status === 'Active' ? 'Active' : 'Inactive'}</span></div>
+        </th>
+        ${dates.map(date => {
+            const row = records.get(`${member.staffId}|${date}`);
+            if(!row) return `<td class="border-l border-slate-100 p-2 text-center text-xs text-slate-300">${isSunday(date) ? 'Off' : '—'}</td>`;
+            const late = row.status === 'late';
+            const absent = row.status === 'absent';
+            const timeIn = String(row.time_in || '').slice(0, 5), timeOut = String(row.time_out || '').slice(0, 5);
+            const status = late ? 'Late' : absent ? 'Absent' : 'Present';
+            return `<td title="${esc(row.note || '')}" class="border-l border-slate-100 p-1.5 text-center">
+                <div class="whitespace-nowrap text-[11px] font-semibold ${late ? 'text-rose-700' : 'text-slate-700'}">${esc(timeIn || '—')} <span class="text-slate-300">/</span> ${esc(timeOut || '—')}</div>
+                <div class="mt-0.5 text-[9px] font-bold ${late ? 'text-rose-600' : absent ? 'text-amber-600' : 'text-emerald-600'}">${status}</div>
+            </td>`;
+        }).join('')}
+    </tr>`).join('');
+    $('attendanceRangeTable').innerHTML = `<div class="max-h-[65vh] overflow-auto rounded-lg border border-slate-200">
+        <table class="w-full border-collapse text-xs"><thead class="sticky top-0 z-20"><tr>
+            <th class="sticky left-0 z-30 min-w-[180px] border-b border-slate-200 bg-slate-100 p-2 text-left">Staff <span class="font-normal text-slate-400">(click to edit dates)</span></th>${headings}
+        </tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function isSunday(date) { return new Date(`${date}T00:00:00Z`).getUTCDay() === 0; }
 function monthSchoolDays(month) {
@@ -628,7 +1050,7 @@ function renderAttendance() {
     $('attendanceList').innerHTML = members.length ? members.map(s => {
         let row = attendanceDrafts[s.staffId] || { status: '', note: '' };
         return `<article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <div class="flex items-center gap-3 mb-3">${avatar(s.name)}<div class="min-w-0"><div class="font-bold text-slate-800 truncate">${esc(s.name)}</div><div class="text-xs text-slate-500">${esc(s.designation)}</div></div></div>
+            <div class="flex items-center gap-3 mb-3">${avatar(s.name)}<div class="min-w-0"><div class="font-bold text-slate-800 truncate">${esc(s.name)}</div><div class="text-xs text-slate-500">${esc(s.designation)}</div>${row.timeIn || row.timeOut ? `<div class="mt-1 text-[11px] font-semibold ${row.status === 'late' ? 'text-rose-600' : 'text-slate-600'}">In ${esc(row.timeIn || '—')} · Out ${esc(row.timeOut || '—')}${row.status === 'late' ? ' · LATE' : ''}</div>` : ''}</div></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label class="text-xs text-slate-500">Status<select onchange="setAttendanceStatus(${js(s.staffId)},this.value)" class="mt-1 w-full border rounded-lg p-2.5 text-sm bg-white text-slate-800">
                     <option value="" ${!row.status ? 'selected' : ''}>Select status</option>
@@ -739,7 +1161,8 @@ async function markMonthAttendancePresent() {
                     if(!response.ok) throw new Error('Could not save monthly attendance: ' + await response.text());
                 }
                 if(attendanceDate.startsWith(month + '-')) await loadAttendance(attendanceDate);
-                toast(`Monthly attendance saved: ${toInsert.length} unmarked workday(s) set to Present. Existing payroll was not recalculated.`);
+                const refreshError = await refreshAttendanceRangeAfterSave();
+                toast(`Monthly attendance saved: ${toInsert.length} unmarked workday(s) set to Present. Existing payroll was not recalculated.${refreshError}`, !refreshError);
             } catch(error) {
                 toast(`${error.message || 'Could not save monthly attendance.'} Any completed batches are safe to retry; existing records were not overwritten.`, false);
             } finally {
@@ -808,6 +1231,7 @@ function parseAttendanceReport(workbook) {
         scheduleById.set(id, { shifts });
     }
     const lateMinutesByIdDate = new Map();
+    const abnormalPunchesByIdDate = new Map();
     for(let rowIndex = 0; rowIndex < abnormal.length; rowIndex++) {
         if(reportText(abnormal, rowIndex, 0).toUpperCase() !== 'ID' ||
            reportText(abnormal, rowIndex, 1).toLowerCase() !== 'name' ||
@@ -824,6 +1248,11 @@ function parseAttendanceReport(workbook) {
             const minutes = clock ? Number(clock[1]) * 60 + Number(clock[2]) : (Number(value.replace(/[^\d.-]/g, '')) || 0);
             const key = `${id}|${date}`;
             lateMinutesByIdDate.set(key, Math.max(lateMinutesByIdDate.get(key) || 0, minutes));
+            const abnormalPunches = [4, 5, 6, 7]
+                .map(column => reportText(abnormal, dataIndex, column))
+                .filter(punch => /^(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(punch))
+                .map(punch => punch.slice(0, 5));
+            if(abnormalPunches.length) abnormalPunchesByIdDate.set(key, abnormalPunches);
         }
     }
     const reportStaff = [];
@@ -845,11 +1274,16 @@ function parseAttendanceReport(workbook) {
             if(!shift || isSunday(date)) continue;
             if(date > todayStr()) continue;
             if(shift === 25) { days.push({ date, status: null, reason: 'Leave on shift schedule (review manually)' }); continue; }
-            const punches = String(punchRow[column] || '').match(/\b\d{1,2}:\d{2}\b/g) || [];
+            const key = `${deviceId}|${date}`;
+            const logPunches = String(punchRow[column] || '').match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g) || [];
+            const abnormalPunches = abnormalPunchesByIdDate.get(key) || [];
+            const punches = logPunches.length >= abnormalPunches.length ? logPunches : abnormalPunches;
+            const timeIn = punches[0] || null, timeOut = punches.length > 1 ? punches[punches.length - 1] : null;
             if(shift === 26) days.push({ date, status: 'present', reason: 'Business trip on shift schedule' });
             else if(punches.length) {
-                const late = lateMinutesByIdDate.get(`${deviceId}|${date}`) || 0;
-                days.push({ date, status: late > 0 ? 'late' : 'present', reason: late > 0 ? `Fingerprint report: ${late} late minute(s)` : 'Fingerprint report: punch recorded' });
+                const late = lateMinutesByIdDate.get(key) || 0;
+                days.push({ date, status: late > 0 ? 'late' : 'present', timeIn, timeOut,
+                    reason: late > 0 ? `Fingerprint report: ${late} late minute(s)` : 'Fingerprint report: punch recorded' });
             } else days.push({ date, status: 'absent', reason: 'Fingerprint report: no punch on scheduled shift' });
         }
         reportStaff.push({ deviceId, name, days });
@@ -863,6 +1297,7 @@ function staffEmployedOnDate(member, date) {
 }
 async function previewAttendanceReport() {
     if(!attendanceOk) { toast('Run the staff attendance setup SQL first.', false); return; }
+    if(!staffDeviceIdSetupOk) { toast('Run the complete staff setup SQL once to enable permanent fingerprint ID links.', false); return; }
     if(attendanceDirty) { toast('Save or discard unsaved daily attendance changes before importing a report.', false); return; }
     const file = $('attendanceReportFile').files[0];
     if(!file) { toast('Choose the fingerprint attendance report first.', false); return; }
@@ -872,20 +1307,31 @@ async function previewAttendanceReport() {
         const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
         const parsed = parseAttendanceReport(workbook);
         const response = await ERP.db.request('staff_attendance',
-            `select=staff_id,attendance_date&attendance_date=gte.${monthStart(parsed.month)}&attendance_date=lte.${monthEnd(parsed.month)}`);
+            `select=staff_id,attendance_date,time_in,time_out&attendance_date=gte.${monthStart(parsed.month)}&attendance_date=lte.${monthEnd(parsed.month)}`);
         if(!response.ok) throw new Error('Could not check existing attendance: ' + await response.text());
         const existingRows = await response.json();
         if(!Array.isArray(existingRows)) throw new Error('Supabase returned invalid existing attendance data.');
         const existing = new Set(existingRows.map(row => `${row.staff_id}|${String(row.attendance_date).slice(0, 10)}`));
+        const existingByKey = new Map(existingRows.map(row => [`${row.staff_id}|${String(row.attendance_date).slice(0, 10)}`, row]));
+        const deviceMapResponse = await ERP.db.request('staff_attendance_device_map', 'select=device_id,staff_id,device_name');
+        if(!deviceMapResponse.ok) throw new Error('Could not load saved fingerprint ID links: ' + await deviceMapResponse.text());
+        attendanceDeviceMappings = await deviceMapResponse.json();
+        if(!Array.isArray(attendanceDeviceMappings)) throw new Error('Supabase returned invalid fingerprint ID links.');
         const staffByName = new Map();
         staff.forEach(member => {
             const key = norm(member.name);
             staffByName.set(key, [...(staffByName.get(key) || []), member]);
         });
         parsed.reportStaff.forEach(person => {
+            const saved = attendanceDeviceMappings.find(mapping => String(mapping.device_id) === person.deviceId);
+            const savedMember = saved && staff.find(member => member.staffId === saved.staff_id);
             const matches = staffByName.get(norm(person.name)) || [];
-            person.mappedStaffId = matches.length === 1 ? matches[0].staffId : '';
-            person.matchProblem = matches.length > 1 ? 'More than one staff member has this name' : '';
+            person.mappedStaffId = savedMember ? savedMember.staffId : matches.length === 1 ? matches[0].staffId : '';
+            person.savedStaffId = savedMember ? savedMember.staffId : '';
+            person.matchProblem = saved && !savedMember
+                ? 'Saved ID link points to a staff record that no longer exists'
+                : !saved && matches.length > 1 ? 'More than one staff member has this name' : '';
+            person.hasSavedDeviceMapping = !!savedMember;
         });
         parsed.reportStaff.forEach(person => {
             if(person.mappedStaffId && parsed.reportStaff.some(other => other !== person && other.mappedStaffId === person.mappedStaffId)) {
@@ -893,29 +1339,39 @@ async function previewAttendanceReport() {
                 person.mappedStaffId = '';
             }
         });
-        const counters = { planned: 0, already: 0, leave: 0, unmapped: 0, notEmployed: 0 };
+        const counters = { planned: 0, already: 0, timeBackfill: 0, leave: 0, unmapped: 0, notEmployed: 0 };
         parsed.reportStaff.forEach(person => {
             if(!person.mappedStaffId) { counters.unmapped++; return; }
             const member = staff.find(item => item.staffId === person.mappedStaffId);
             person.days.forEach(day => {
                 if(!member || !staffEmployedOnDate(member, day.date)) { counters.notEmployed++; return; }
                 if(!day.status) counters.leave++;
-                else if(existing.has(`${person.mappedStaffId}|${day.date}`)) counters.already++;
-                else counters.planned++;
+                else {
+                    const key = `${person.mappedStaffId}|${day.date}`;
+                    if(existing.has(key)) {
+                        counters.already++;
+                        const saved = existingByKey.get(key);
+                        if((!saved.time_in && day.timeIn) || (!saved.time_out && day.timeOut)) counters.timeBackfill++;
+                    } else counters.planned++;
+                }
             });
         });
-        attendanceImportPlan = { ...parsed, existing, counters, fileName: file.name };
-        const mappingRows = parsed.reportStaff.filter(person => !person.mappedStaffId || person.matchProblem);
-        const mappingHtml = mappingRows.length ? `
-            <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <p class="font-semibold text-amber-900">Some report names need manual matching. Select the matching staff member, or leave unmatched to skip that person.</p>
+        attendanceImportPlan = { ...parsed, existing, existingByKey, counters, fileName: file.name };
+        const mappingRows = parsed.reportStaff;
+        const mappingHtml = `
+            <div class="mb-3 rounded-lg border ${mappingRows.length ? 'border-amber-200 bg-amber-50' : 'border-indigo-200 bg-indigo-50'} p-3">
+                <p class="font-semibold ${parsed.reportStaff.some(person => !person.mappedStaffId || person.matchProblem) ? 'text-amber-900' : 'text-indigo-900'}">Device ID har staff ke samne dikhaya hai. Names verify karein; zarurat par dropdown manually change karke ID links save karein.</p>
                 <div class="mt-2 space-y-2">${mappingRows.map(person => `<label class="grid grid-cols-1 sm:grid-cols-[1fr_1fr] gap-2 items-center text-xs">
-                    <span>${esc(person.name)} · device ID ${esc(person.deviceId)}${person.matchProblem ? ` — ${esc(person.matchProblem)}` : ''}</span>
+                    <span data-attendance-device-label="${esc(person.deviceId)}">${esc(person.name)} · device ID ${esc(person.deviceId)}${person.savedStaffId === person.mappedStaffId ? ' · saved link' : ''}${person.matchProblem ? ` — ${esc(person.matchProblem)}` : ''}</span>
                     <select data-attendance-device="${esc(person.deviceId)}" onchange="updateAttendanceReportPreview()" class="border rounded-lg p-2 text-sm bg-white">
                         <option value="">Do not import this person</option>${staff.map(member => `<option value="${esc(member.staffId)}" ${person.mappedStaffId === member.staffId ? 'selected' : ''}>${esc(member.name)} · ${esc(member.staffId)}</option>`).join('')}
                     </select>
                 </label>`).join('')}</div>
-            </div>` : '';
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <button id="saveAttendanceDeviceMappings" type="button" onclick="saveAttendanceDeviceMappings()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">💾 Save ID links permanently</button>
+                    <span id="attendanceDeviceMappingStatus" class="text-xs text-slate-600"></span>
+                </div>
+            </div>`;
         $('attendanceReportPreview').innerHTML = `${mappingHtml}<div id="attendanceReportCounts" class="rounded-lg border bg-slate-50 p-3 text-xs"></div><div id="attendanceReportSample" class="mt-2 max-h-64 overflow-auto"></div>`;
         $('attendanceReportPreview').classList.remove('hidden');
         updateAttendanceReportPreview();
@@ -929,7 +1385,11 @@ function updateAttendanceReportPreview() {
     if(!attendanceImportPlan) return;
     const plan = attendanceImportPlan, mappings = new Map();
     document.querySelectorAll('[data-attendance-device]').forEach(select => mappings.set(select.dataset.attendanceDevice, select.value));
-    plan.reportStaff.forEach(person => { if(mappings.has(person.deviceId)) person.mappedStaffId = mappings.get(person.deviceId); });
+    plan.reportStaff.forEach(person => {
+        if(mappings.has(person.deviceId)) person.mappedStaffId = mappings.get(person.deviceId);
+        const label = document.querySelector(`[data-attendance-device-label="${person.deviceId}"]`);
+        if(label) label.textContent = `${person.name} · device ID ${person.deviceId}${person.savedStaffId === person.mappedStaffId ? ' · saved link' : ''}${person.matchProblem ? ` — ${person.matchProblem}` : ''}`;
+    });
     const assigned = new Map();
     plan.reportStaff.forEach(person => {
         if(!person.mappedStaffId) return;
@@ -937,7 +1397,7 @@ function updateAttendanceReportPreview() {
     });
     const duplicates = [...assigned.values()].some(count => count > 1);
     plan.hasDuplicateMappings = duplicates;
-    const counts = { planned: 0, already: 0, leave: 0, unmapped: 0, notEmployed: 0 };
+    const counts = { planned: 0, already: 0, timeBackfill: 0, leave: 0, unmapped: 0, notEmployed: 0 };
     const sample = [];
     plan.reportStaff.forEach(person => {
         if(!person.mappedStaffId) { counts.unmapped++; return; }
@@ -945,51 +1405,141 @@ function updateAttendanceReportPreview() {
         person.days.forEach(day => {
             if(!member || !staffEmployedOnDate(member, day.date)) { counts.notEmployed++; return; }
             if(!day.status) { counts.leave++; return; }
-            if(plan.existing.has(`${person.mappedStaffId}|${day.date}`)) { counts.already++; return; }
-            counts.planned++;
-            if(sample.length < 15) {
-                const member = staff.find(item => item.staffId === person.mappedStaffId);
-                sample.push({ name: member ? member.name : person.name, date: day.date, status: day.status, reason: day.reason });
+            const key = `${person.mappedStaffId}|${day.date}`;
+            const saved = plan.existingByKey.get(key);
+            if(saved) {
+                counts.already++;
+                if((!saved.time_in && day.timeIn) || (!saved.time_out && day.timeOut)) {
+                    counts.timeBackfill++;
+                    if(sample.length < 15) sample.push({
+                        name: member.name, date: day.date, status: day.status, reason: 'Fill missing punch times',
+                        timeIn: String(saved.time_in || day.timeIn || '').slice(0, 5),
+                        timeOut: String(saved.time_out || day.timeOut || '').slice(0, 5), action: 'Fill missing times'
+                    });
+                }
+                return;
             }
+            counts.planned++;
+            if(sample.length < 15) sample.push({
+                name: member.name, date: day.date, status: day.status, reason: day.reason,
+                timeIn: day.timeIn, timeOut: day.timeOut, action: 'Import new record'
+            });
         });
     });
     plan.counters = counts;
+    const mappingsSaved = plan.reportStaff.length > 0 &&
+        plan.reportStaff.every(person => person.mappedStaffId && person.savedStaffId === person.mappedStaffId);
     $('attendanceReportCounts').innerHTML = `<b>${esc(monthLabel(plan.month))}</b> · ${esc(plan.fileName)}<br>
-        To import: <b>${counts.planned}</b> · Already saved (preserved): ${counts.already} · Scheduled leave for manual review: ${counts.leave} · Outside employment dates: ${counts.notEmployed} · Unmatched / skipped staff: ${counts.unmapped}
+        New records: <b>${counts.planned}</b> · Existing records to fill missing In/Out times: <b>${counts.timeBackfill}</b> · Already saved without changes: ${counts.already - counts.timeBackfill} · Scheduled leave for manual review: ${counts.leave} · Outside employment dates: ${counts.notEmployed} · Unmatched / skipped staff: ${counts.unmapped}
         ${duplicates ? '<p class="mt-2 font-bold text-rose-700">A staff member is mapped to multiple device IDs. Fix duplicate mappings before importing.</p>' : ''}
+        ${!mappingsSaved ? '<p class="mt-2 font-semibold text-indigo-700">Import se pehle neeche Save ID links permanently dabayein; is se staff matching future imports ke liye bhi fix ho jayegi.</p>' : ''}
         ${counts.planned && monthEnd(plan.month) > todayStr() ? '<p class="mt-2 font-bold text-rose-700">This report contains future dates. Import is blocked until the month has ended.</p>' : ''}`;
-    $('attendanceReportSample').innerHTML = sample.length ? `<div class="text-xs font-semibold text-slate-600 mb-1">First ${sample.length} rows to import</div><table class="w-full text-left text-xs"><thead><tr class="border-b"><th class="p-2">Staff</th><th class="p-2">Date</th><th class="p-2">Status</th><th class="p-2">Why</th></tr></thead><tbody>${sample.map(row => `<tr class="border-b"><td class="p-2">${esc(row.name)}</td><td class="p-2">${esc(row.date)}</td><td class="p-2 font-semibold">${esc(row.status)}</td><td class="p-2">${esc(row.reason)}</td></tr>`).join('')}</tbody></table>` : '<p class="text-xs text-slate-500">No new attendance rows to import for the current mapping.</p>';
-    const blocked = duplicates || !counts.planned || monthEnd(plan.month) > todayStr();
+    $('attendanceReportSample').innerHTML = sample.length ? `<div class="text-xs font-semibold text-slate-600 mb-1">First ${sample.length} records · device punch times</div><table class="w-full text-left text-xs"><thead><tr class="border-b"><th class="p-2">Staff</th><th class="p-2">Date</th><th class="p-2">In</th><th class="p-2">Out</th><th class="p-2">Status</th><th class="p-2">Action</th></tr></thead><tbody>${sample.map(row => `<tr class="border-b"><td class="p-2">${esc(row.name)}</td><td class="p-2">${esc(row.date)}</td><td class="p-2">${esc(row.timeIn || '—')}</td><td class="p-2">${esc(row.timeOut || '—')}</td><td class="p-2 font-semibold">${esc(row.status)}</td><td class="p-2">${esc(row.action)}</td></tr>`).join('')}</tbody></table>` : '<p class="text-xs text-slate-500">No new records or missing punch times to import for the current mapping.</p>';
+    const blocked = duplicates || !mappingsSaved || (!counts.planned && !counts.timeBackfill) || monthEnd(plan.month) > todayStr();
     $('importAttendanceConfirm').classList.toggle('hidden', blocked);
     $('importAttendanceConfirm').disabled = blocked;
+    const saveButton = $('saveAttendanceDeviceMappings');
+    const mappingsComplete = plan.reportStaff.length > 0 && plan.reportStaff.every(person => person.mappedStaffId);
+    if(saveButton) saveButton.disabled = duplicates || !mappingsComplete;
+    const mappingStatus = $('attendanceDeviceMappingStatus');
+    if(mappingStatus) mappingStatus.textContent = duplicates
+        ? 'Har device ID ko alag staff se match karein.'
+        : !mappingsComplete ? 'Save karne se pehle tamam device IDs match karein.'
+        : plan.reportStaff.every(person => person.savedStaffId === person.mappedStaffId) ? 'Tamam links saved hain.'
+        : 'Save karne ke baad agli import mein ID khud match hogi.';
+}
+async function saveAttendanceDeviceMappings() {
+    const plan = attendanceImportPlan;
+    if(!plan || !staffDeviceIdSetupOk) { toast('Permanent ID links ke liye staff setup SQL run karein.', false); return; }
+    updateAttendanceReportPreview();
+    if(plan.hasDuplicateMappings || plan.reportStaff.some(person => !person.mappedStaffId)) {
+        toast('Pehle har device ID ko alag staff member se match karein.', false); return;
+    }
+    const mappings = plan.reportStaff.map(person => ({
+        device_id: person.deviceId,
+        staff_id: person.mappedStaffId,
+        device_name: person.name
+    }));
+    const button = $('saveAttendanceDeviceMappings');
+    button.disabled = true;
+    showLoading('Saving permanent fingerprint ID links...');
+    try {
+        const c = getSupabaseConfig();
+        const response = await fetch(`${c.url}/rest/v1/rpc/save_staff_attendance_device_map`, {
+            method: 'POST',
+            headers: sbHeaders(JSON_H),
+            body: JSON.stringify({ p_mappings: mappings })
+        });
+        if(!response.ok) throw new Error('ID links save nahi huay: ' + await response.text());
+        const savedCount = await response.json();
+        if(Number(savedCount) !== mappings.length) throw new Error('Database ne tamam ID links save hone ki tasdeeq nahi ki. Preview dobara check karein.');
+        attendanceDeviceMappings = mappings;
+        plan.reportStaff.forEach(person => {
+            person.hasSavedDeviceMapping = true;
+            person.savedStaffId = person.mappedStaffId;
+        });
+        toast(`${savedCount} fingerprint ID links hamesha ke liye save ho gaye. Agli import mein ye khud match honge.`);
+        updateAttendanceReportPreview();
+    } catch(error) {
+        toast(error.message || 'Fingerprint ID links save nahi huay.', false);
+    } finally {
+        hideLoading();
+        if(button.isConnected) updateAttendanceReportPreview();
+    }
 }
 async function confirmAttendanceReportImport() {
     const plan = attendanceImportPlan;
     if(!plan || attendanceDirty) { toast('Preview the report again after saving or discarding attendance edits.', false); return; }
     updateAttendanceReportPreview();
-    if(!plan.counters.planned || plan.hasDuplicateMappings || monthEnd(plan.month) > todayStr()) return;
+    if((!plan.counters.planned && !plan.counters.timeBackfill) || plan.hasDuplicateMappings || monthEnd(plan.month) > todayStr()) return;
     const rows = [];
+    const timeBackfills = [];
     plan.reportStaff.forEach(person => {
         if(!person.mappedStaffId) return;
         const member = staff.find(item => item.staffId === person.mappedStaffId);
         if(!member) return;
         person.days.forEach(day => {
             if(!staffEmployedOnDate(member, day.date)) return;
-            if(!day.status || plan.existing.has(`${person.mappedStaffId}|${day.date}`)) return;
+            if(!day.status) return;
+            const key = `${member.staffId}|${day.date}`;
+            const saved = plan.existingByKey.get(key);
+            if(saved) {
+                if((!saved.time_in && day.timeIn) || (!saved.time_out && day.timeOut)) {
+                    timeBackfills.push({
+                        staff_id: member.staffId,
+                        attendance_date: day.date,
+                        time_in: saved.time_in || day.timeIn || null,
+                        time_out: saved.time_out || day.timeOut || null
+                    });
+                }
+                return;
+            }
             rows.push({ staff_id: member.staffId, staff_name: member.name, attendance_date: day.date, status: day.status,
-                note: day.reason, absence_exempt: false, late_exempt: false });
+                time_in: day.timeIn || null, time_out: day.timeOut || null, note: day.reason, absence_exempt: false, late_exempt: false });
         });
     });
-    if(!rows.length) { toast('There are no new attendance rows to import.', false); return; }
+    if(!rows.length && !timeBackfills.length) { toast('There are no new records or missing punch times to import.', false); return; }
     confirmBox(
-        `Import ${rows.length} attendance record(s) for ${monthLabel(plan.month)}? Existing attendance will not be overwritten. Scheduled leave days and unmatched staff will be skipped.`,
+        `Import ${rows.length} new attendance record(s) and fill missing punch times on up to ${timeBackfills.length} existing record(s) for ${monthLabel(plan.month)}? Existing statuses, remarks, exemptions, and saved punch times will not be overwritten.`,
         'Import attendance',
         async () => {
             const button = $('importAttendanceConfirm');
             button.disabled = true;
-            showLoading(`Importing ${rows.length} attendance rows...`);
+            showLoading(`Importing ${rows.length} records and filling up to ${timeBackfills.length} existing punch times...`);
             try {
                 const c = getSupabaseConfig();
+                let backfilled = 0;
+                if(timeBackfills.length) {
+                    const backfillResponse = await fetch(`${c.url}/rest/v1/rpc/backfill_staff_attendance_times`, {
+                        method: 'POST',
+                        headers: sbHeaders(JSON_H),
+                        body: JSON.stringify({ p_rows: timeBackfills })
+                    });
+                    if(!backfillResponse.ok) throw new Error('Existing punch times could not be filled. Run the updated staff setup SQL, then preview and import again: ' + await backfillResponse.text());
+                    backfilled = Number(await backfillResponse.json());
+                    if(!Number.isInteger(backfilled) || backfilled < 0 || backfilled > timeBackfills.length)
+                        throw new Error('Database returned an invalid result while filling existing punch times.');
+                }
                 for(let index = 0; index < rows.length; index += 200) {
                     const response = await fetch(`${c.url}/rest/v1/staff_attendance?on_conflict=staff_id,attendance_date`, {
                         method: 'POST',
@@ -999,9 +1549,20 @@ async function confirmAttendanceReportImport() {
                     if(!response.ok) throw new Error(`Could not import attendance batch ${Math.floor(index / 200) + 1}: ${await response.text()}`);
                 }
                 if(attendanceDate.startsWith(plan.month + '-')) await loadAttendance(attendanceDate);
-                toast(`Imported ${rows.length} attendance rows for ${monthLabel(plan.month)}. Existing saved dates were preserved.`);
-                $('attendanceReportFile').value = '';
-                resetAttendanceReportPreview();
+                const refreshError = await refreshAttendanceRangeAfterSave();
+                const notBackfilled = timeBackfills.length - backfilled;
+                const results = [];
+                if(rows.length) results.push(`Imported ${rows.length} new record(s)`);
+                if(timeBackfills.length) results.push(`filled missing In/Out times on ${backfilled} of ${timeBackfills.length} existing record(s)`);
+                const message = `${results.join(' and ')} for ${monthLabel(plan.month)}.`;
+                const warning = notBackfilled
+                    ? ` ${notBackfilled} existing record(s) could not be updated; check Staff Edit permission and whether those dates are closed.`
+                    : '';
+                toast(`${message}${warning}${refreshError}`, !notBackfilled && !refreshError);
+                if(!notBackfilled && !refreshError) {
+                    $('attendanceReportFile').value = '';
+                    resetAttendanceReportPreview();
+                }
             } catch(error) {
                 toast(`${error.message || 'Could not import the fingerprint report.'} Completed batches are safe to retry; existing attendance was not overwritten.`, false);
             } finally { hideLoading(); updateAttendanceReportPreview(); }
@@ -1011,7 +1572,7 @@ async function confirmAttendanceReportImport() {
 async function loadAttendance(date) {
     if(!attendanceOk || !date) { attendanceRows = []; attendanceByStaff = {}; attendanceDrafts = {}; renderAttendance(); return; }
     const response = await ERP.db.request('staff_attendance',
-        `select=id,staff_id,staff_name,attendance_date,status,note,absence_exempt,late_exempt&attendance_date=eq.${encodeURIComponent(date)}`);
+        `select=id,staff_id,staff_name,attendance_date,status,time_in,time_out,note,absence_exempt,late_exempt&attendance_date=eq.${encodeURIComponent(date)}`);
     if(!response.ok) throw new Error('Could not load attendance: ' + await response.text());
     const rows = await response.json();
     if(!Array.isArray(rows)) throw new Error('Could not load attendance: unexpected response.');
@@ -1021,11 +1582,196 @@ async function loadAttendance(date) {
     attendanceRows.forEach(row => {
         let id = String(row.staff_id || '').trim();
         attendanceByStaff[id] = row;
-        attendanceDrafts[id] = { status: row.status, note: row.note || '', absenceExempt: !!row.absence_exempt, lateExempt: !!row.late_exempt };
+        attendanceDrafts[id] = { status: row.status, note: row.note || '', timeIn: String(row.time_in || '').slice(0, 5),
+            timeOut: String(row.time_out || '').slice(0, 5), absenceExempt: !!row.absence_exempt, lateExempt: !!row.late_exempt };
     });
     attendanceDate = date;
     attendanceDirty = false;
     renderAttendance();
+}
+async function openStaffAttendanceMonth(staffId) {
+    const member = staff.find(item => item.staffId === staffId);
+    if(!member) { toast('Staff record nahi mila. Page refresh karke dobara try karein.', false); return; }
+    if(!attendanceOk) { toast('Attendance setup SQL run karna zaroori hai.', false); return; }
+    const month = curMonth();
+    const from = monthStart(month), to = monthEnd(month);
+    staffAttendanceMonthDraft = { member, month, from, to, rows: {} };
+    $('staffAttendanceMonthTitle').innerText = `${member.name} — ${monthLabel(month)}`;
+    $('staffAttendanceMonthSubtitle').innerText = `Software ID ${member.staffId} · Fingerprint ID ${attendanceDeviceId(member.staffId) || 'not linked'} · Popup mein ki gayi tamam edits Save se apply hongi.`;
+    $('staffAttendanceMonthPreset').value = 'salary_month';
+    $('staffAttendanceMonthFrom').value = from;
+    $('staffAttendanceMonthTo').value = to;
+    openModal('staffAttendanceMonthModal');
+    loadStaffAttendanceMonthRange(from, to);
+}
+function setStaffAttendanceMonthPreset(preset) {
+    const today = parseYmd(todayStr());
+    let from = todayStr(), to = todayStr();
+    if(preset === 'salary_month' || preset === 'this_month') {
+        const month = preset === 'salary_month' ? curMonth() : todayStr().slice(0, 7);
+        from = monthStart(month);
+        to = monthEnd(month);
+    } else if(preset === 'yesterday') {
+        today.setDate(today.getDate() - 1);
+        from = to = ymd(today);
+    } else if(preset === 'last_week') {
+        const start = new Date(today);
+        start.setDate(start.getDate() - 6);
+        from = ymd(start);
+    } else if(preset === 'last_month') {
+        const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const end = new Date(today.getFullYear(), today.getMonth(), 0);
+        from = ymd(start);
+        to = ymd(end);
+    }
+    $('staffAttendanceMonthPreset').value = preset;
+    if(preset === 'custom') return;
+    $('staffAttendanceMonthFrom').value = from;
+    $('staffAttendanceMonthTo').value = to;
+    loadStaffAttendanceMonthRange(from, to);
+}
+function staffAttendanceMonthRangeChanged() {
+    $('staffAttendanceMonthPreset').value = 'custom';
+}
+async function loadStaffAttendanceMonthRange(from = $('staffAttendanceMonthFrom').value, to = $('staffAttendanceMonthTo').value) {
+    const draft = staffAttendanceMonthDraft;
+    if(!draft) return;
+    if(!from || !to || from > to) {
+        toast('Popup mein From/To date sahi select karein.', false);
+        return;
+    }
+    if(attendanceDateList(from, to).length > 62) {
+        toast('Popup mein maximum 62 din select karein.', false);
+        return;
+    }
+    showLoading(`${draft.member.name} ki ${fmtDate(from)} – ${fmtDate(to)} attendance load ho rahi hai...`);
+    try {
+        const response = await ERP.db.request('staff_attendance',
+            `select=id,staff_id,staff_name,attendance_date,status,time_in,time_out,note,absence_exempt,late_exempt&staff_id=eq.${encodeURIComponent(draft.member.staffId)}&attendance_date=gte.${from}&attendance_date=lte.${to}&order=attendance_date.asc`);
+        if(!response.ok) throw new Error('Attendance range load nahi hui: ' + await response.text());
+        const rows = await response.json();
+        if(!Array.isArray(rows)) throw new Error('Database se attendance data theek format mein nahi aya.');
+        rows.forEach(row => {
+            const date = String(row.attendance_date).slice(0, 10);
+            if(!draft.rows[date]) draft.rows[date] = { ...row, _original: { ...row } };
+        });
+        draft.from = from;
+        draft.to = to;
+        $('staffAttendanceMonthFrom').value = from;
+        $('staffAttendanceMonthTo').value = to;
+        $('staffAttendanceMonthTitle').innerText = `${draft.member.name} — ${fmtDate(from)} – ${fmtDate(to)}`;
+        $('staffAttendanceMonthRangeSummary').innerText = `${rows.length} saved records · ${attendanceDateList(from, to).length} dates`;
+        renderStaffAttendanceMonthRows();
+    } catch(error) {
+        toast(error.message || 'Attendance range load nahi hui.', false);
+    } finally { hideLoading(); }
+}
+function setStaffAttendanceMonthField(date, field, value) {
+    if(!staffAttendanceMonthDraft) return;
+    const rows = staffAttendanceMonthDraft.rows;
+    const old = rows[date] || {
+        staff_id: staffAttendanceMonthDraft.member.staffId,
+        staff_name: staffAttendanceMonthDraft.member.name,
+        attendance_date: date,
+        status: '',
+        time_in: '',
+        time_out: '',
+        note: '',
+        absence_exempt: false,
+        late_exempt: false
+    };
+    old[field] = value;
+    if((field === 'time_in' || field === 'time_out') && value && !old.status) old.status = 'present';
+    rows[date] = old;
+    const status = document.querySelector(`[data-attendance-month-field="status"][data-attendance-month-date="${date}"]`);
+    if(status) status.value = old.status || '';
+}
+function renderStaffAttendanceMonthRows() {
+    if(!staffAttendanceMonthDraft) return;
+    const { member, from, to, rows } = staffAttendanceMonthDraft;
+    const dates = attendanceDateList(from, to);
+    const html = dates.map(date => {
+        const old = rows[date] || {};
+        const employed = staffEmployedOnDate(member, date);
+        const sunday = isSunday(date);
+        const disabled = !employed || date > todayStr() || (sunday && !(old._original && old._original.id));
+        const label = parseYmd(date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+        const status = old.status || '';
+        return `<tr class="border-b ${status === 'late' ? 'bg-rose-50' : ''}">
+            <td class="whitespace-nowrap p-2 font-semibold">${esc(label)}${sunday ? '<span class="ml-1 text-[10px] text-slate-400">Off</span>' : ''}</td>
+            <td class="p-2"><input type="time" value="${esc(String(old.time_in || '').slice(0, 5))}" data-attendance-month-date="${date}" data-attendance-month-field="time_in" oninput="setStaffAttendanceMonthField('${date}','time_in',this.value)" ${disabled ? 'disabled' : ''} class="w-full min-w-[104px] rounded border p-1.5 text-sm disabled:bg-slate-100"></td>
+            <td class="p-2"><input type="time" value="${esc(String(old.time_out || '').slice(0, 5))}" data-attendance-month-date="${date}" data-attendance-month-field="time_out" oninput="setStaffAttendanceMonthField('${date}','time_out',this.value)" ${disabled ? 'disabled' : ''} class="w-full min-w-[104px] rounded border p-1.5 text-sm disabled:bg-slate-100"></td>
+            <td class="p-2"><select data-attendance-month-date="${date}" data-attendance-month-field="status" onchange="setStaffAttendanceMonthField('${date}','status',this.value)" ${disabled ? 'disabled' : ''} class="w-full min-w-[116px] rounded border p-1.5 text-sm disabled:bg-slate-100">
+                <option value="" ${!status ? 'selected' : ''}>Unmarked</option><option value="present" ${status === 'present' ? 'selected' : ''}>Present</option><option value="absent" ${status === 'absent' ? 'selected' : ''}>Absent</option><option value="late" ${status === 'late' ? 'selected' : ''}>Late</option>
+            </select></td>
+            <td class="p-2"><input type="text" maxlength="300" value="${esc(old.note || '')}" data-attendance-month-date="${date}" data-attendance-month-field="note" oninput="setStaffAttendanceMonthField('${date}','note',this.value)" ${disabled ? 'disabled' : ''} placeholder="Remarks" class="w-full min-w-[160px] rounded border p-1.5 text-sm disabled:bg-slate-100"></td>
+        </tr>`;
+    }).join('');
+    $('staffAttendanceMonthRows').innerHTML = `<div class="mb-3 text-xs text-slate-500">Agar sirf In ya Out time enter karein to status Present set ho jayega. Sundays aur future dates edit nahi hotin. Different ranges mein ki gayi edits bhi isi popup ke Save se apply hongi.</div>
+        <div class="overflow-auto rounded-lg border"><table class="w-full border-collapse text-left text-xs"><thead class="sticky top-0 bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Time In</th><th class="p-2">Time Out</th><th class="p-2">Status</th><th class="p-2">Remarks</th></tr></thead><tbody>${html}</tbody></table></div>`;
+}
+async function saveStaffAttendanceMonth() {
+    const draft = staffAttendanceMonthDraft;
+    if(!draft || !attendanceOk) return;
+    const changes = [];
+    for(const [date, row] of Object.entries(draft.rows).sort(([a], [b]) => a.localeCompare(b))) {
+        if(!row) continue;
+        const old = row._original || null;
+        const timeIn = String(row.time_in || '').trim() || null;
+        const timeOut = String(row.time_out || '').trim() || null;
+        let status = row.status || '';
+        if(!old && !status && !timeIn && !timeOut && !String(row.note || '').trim()) continue;
+        if(!status && (timeIn || timeOut)) status = 'present';
+        if(!status) {
+            toast(`${fmtDate(date)}: In/Out edit karne ke liye status select karein.`, false);
+            return;
+        }
+        const sameStatus = !!old && old.status === status;
+        const absenceExempt = sameStatus && !!old.absence_exempt && status === 'absent';
+        const lateExempt = sameStatus && !!old.late_exempt && status === 'late';
+        const note = String(row.note || '').trim() || null;
+        if((absenceExempt || lateExempt) && !note) {
+            toast(`${fmtDate(date)}: Excused attendance ke liye Remarks mein wajah likhein.`, false);
+            return;
+        }
+        if(old && old.status === status && String(old.time_in || '').slice(0, 5) === (timeIn || '')
+            && String(old.time_out || '').slice(0, 5) === (timeOut || '')
+            && String(old.note || '') === (note || '')
+            && !!old.absence_exempt === absenceExempt && !!old.late_exempt === lateExempt) continue;
+        changes.push({
+            staff_id: draft.member.staffId, staff_name: draft.member.name, attendance_date: date,
+            status, time_in: timeIn, time_out: timeOut, note,
+            absence_exempt: absenceExempt, late_exempt: lateExempt
+        });
+    }
+    if(!changes.length) { toast('Koi attendance change nahi mila.'); return; }
+    const button = $('saveStaffAttendanceMonth');
+    button.disabled = true;
+    showLoading(`${changes.length} attendance record save ho rahe hain...`);
+    try {
+        const c = getSupabaseConfig();
+        const response = await fetch(`${c.url}/rest/v1/staff_attendance?on_conflict=staff_id,attendance_date`, {
+            method: 'POST',
+            headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify(changes)
+        });
+        if(!response.ok) throw new Error('Attendance save nahi hui: ' + await response.text());
+        closeModal('staffAttendanceMonthModal');
+        let refreshError = await refreshAttendanceRangeAfterSave();
+        if(changes.some(row => row.attendance_date === attendanceDate)) {
+            try { await loadAttendance(attendanceDate); }
+            catch(error) {
+                console.error('Attendance saved, but selected-day refresh failed:', error);
+                refreshError += ` Selected-day view refresh nahi hua: ${error.message || 'unknown error'}`;
+            }
+        }
+        toast(`${changes.length} attendance changes save ho gayin. Purana payroll apne aap recalculate nahi hota.${refreshError}`, !refreshError);
+    } catch(error) {
+        toast(error.message || 'Monthly attendance save nahi hui.', false);
+    } finally {
+        hideLoading();
+        button.disabled = false;
+    }
 }
 function changeAttendanceDate(date) {
     if(!date || date > todayStr()) {
@@ -1090,7 +1836,8 @@ async function saveAttendance() {
         }
         attendanceDirty = false;
         await loadAttendance(date);
-        toast(`Attendance saved for ${members.length} staff member(s).`);
+        const refreshError = await refreshAttendanceRangeAfterSave();
+        toast(`Attendance saved for ${members.length} staff member(s).${refreshError}`, !refreshError);
     } catch(e) {
         toast(`${e.message || 'Could not save attendance.'} Review this date before retrying.`, false);
     } finally { hideLoading(); }
@@ -1160,7 +1907,11 @@ function renderOverview() {
 // ====================================================================================
 function staffList() {
     let q = norm($('sSearch').value), d = $('sDesig').value, st = $('sStatus').value;
-    return staff.filter(s => (st === 'ALL' || s.status === st) && (d === 'ALL' || s.designation === d) && (!q || norm(s.name + ' ' + s.designation + ' ' + s.phone + ' ' + s.staffId).includes(q)));
+    return staff.filter(s => (st === 'ALL' || s.status === st) && (d === 'ALL' || s.designation === d) && (!q || norm(s.name + ' ' + s.designation + ' ' + s.phone + ' ' + s.staffId + ' ' + attendanceDeviceId(s.staffId)).includes(q)));
+}
+function attendanceDeviceId(staffId) {
+    const mapping = attendanceDeviceMappings.find(item => item.staff_id === staffId);
+    return mapping ? mapping.device_id : '';
 }
 function renderStaff() {
     let list = staffList(), active = staff.filter(s => s.status === 'Active');
@@ -1176,15 +1927,16 @@ function renderStaff() {
     const stBadge = s => s.status === 'Active' ? '<span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">Active</span>' : `<span class="px-2 py-0.5 rounded-md border text-[11px] font-semibold bg-slate-100 text-slate-600 border-slate-200">Left${s.leaving ? ' · ' + fmtDate(s.leaving) : ''}</span>`;
     $('sBody').innerHTML = list.length ? list.map(s => `<tr class="border-b hover:bg-slate-50">
         <td class="p-2.5"><div class="flex items-center gap-2">${avatar(s.name)}<div><div class="font-semibold text-slate-800">${esc(s.name)}</div><div class="text-[11px] font-mono text-slate-400">${esc(s.staffId)}</div></div></div></td>
+        <td class="p-2.5 font-mono">${attendanceDeviceId(s.staffId) ? `Device ${esc(attendanceDeviceId(s.staffId))}` : '<span class="text-slate-400">Not linked</span>'}</td>
         <td class="p-2.5">${esc(s.designation)}</td>
         <td class="p-2.5 whitespace-nowrap">${fmtDate(s.joining)}<div class="text-[11px] text-slate-400">${serviceLength(s.joining)}</div></td>
         <td class="p-2.5">${s.phone ? `<a href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}" class="text-indigo-700 hover:underline font-mono">${esc(s.phone)}</a>` : '-'}</td>
         <td class="p-2.5 text-right font-bold">PKR ${fmt(salaryForMonth(s, todayStr().slice(0, 7)))}</td><td class="p-2.5">${stBadge(s)}</td>
-        <td class="p-2.5 whitespace-nowrap no-print">${acts(s)}</td></tr>`).join('') : `<tr><td colspan="7" class="p-8 text-center text-slate-400">No staff found.</td></tr>`;
-    $('sFoot').innerHTML = list.length ? `<tr><td colspan="4" class="p-3 text-right">Total base salary:</td><td class="p-3 text-right">PKR ${fmt(list.reduce((sum, member) => sum + salaryForMonth(member, todayStr().slice(0, 7)), 0))}</td><td colspan="2" class="no-print"></td></tr>` : '';
+        <td class="p-2.5 whitespace-nowrap no-print">${acts(s)}</td></tr>`).join('') : `<tr><td colspan="8" class="p-8 text-center text-slate-400">No staff found.</td></tr>`;
+    $('sFoot').innerHTML = list.length ? `<tr><td colspan="5" class="p-3 text-right">Total base salary:</td><td class="p-3 text-right">PKR ${fmt(list.reduce((sum, member) => sum + salaryForMonth(member, todayStr().slice(0, 7)), 0))}</td><td colspan="2" class="no-print"></td></tr>` : '';
     $('sCards2').innerHTML = list.length ? list.map(s => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex items-start justify-between gap-2"><div class="flex items-center gap-3 min-w-0">${avatar(s.name)}<div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(s.name)}</div><div class="text-xs text-slate-500">${esc(s.designation)} · ${serviceLength(s.joining) || '-'}</div></div></div>${stBadge(s)}</div>
-        <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${s.phone ? `<a href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}" class="text-indigo-700 font-mono">${esc(s.phone)}</a>` : 'No phone'}<div>Joined ${fmtDate(s.joining)}</div></div><div class="text-lg font-extrabold">PKR ${fmt(salaryForMonth(s, todayStr().slice(0, 7)))}</div></div>
+        <div class="flex items-end justify-between mt-3"><div class="text-xs text-slate-500">${s.phone ? `<a href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}" class="text-indigo-700 font-mono">${esc(s.phone)}</a>` : 'No phone'}<div>Device ID ${attendanceDeviceId(s.staffId) || 'not linked'}</div><div>Joined ${fmtDate(s.joining)}</div></div><div class="text-lg font-extrabold">PKR ${fmt(salaryForMonth(s, todayStr().slice(0, 7)))}</div></div>
         <div class="flex justify-end gap-1 mt-2 border-t pt-2">${acts(s)}</div></div>`).join('') : '<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">No staff found.</div>';
 }
 
@@ -1363,14 +2115,40 @@ async function saveStaff() {
             res = await fetch(`${c.url}/rest/v1/staff?${filter}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=representation" }), body: JSON.stringify(payload) });
             if(res.ok) { let r = await res.json(); if(!Array.isArray(r) || !r.length) { hideLoading(); toast('Nothing was updated (check permissions / RLS).', false); return; } }
         } else {
+            let deviceId = '';
+            if(staffDeviceIdSetupOk) {
+                const idResponse = await fetch(`${c.url}/rest/v1/rpc/next_staff_attendance_device_id`, {
+                    method: 'POST', headers: sbHeaders(JSON_H), body: '{}'
+                });
+                if(!idResponse.ok) throw new Error('Naya fingerprint ID hasil nahi hua: ' + await idResponse.text());
+                deviceId = String(await idResponse.json());
+                if(!/^[1-9][0-9]*$/.test(deviceId)) throw new Error('Database ne valid fingerprint ID nahi diya.');
+            }
             Object.assign(payload, { staff_id: 'STF-' + Math.floor(100000 + Math.random() * 900000), leaves_count: 0, bonus: 0, fine: 0, net_salary: base });
-            res = await fetch(`${c.url}/rest/v1/staff`, { method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }), body: JSON.stringify(payload) });
+            res = await fetch(`${c.url}/rest/v1/staff`, { method: 'POST', headers: sbHeaders({ ...JSON_H, "Prefer": "return=representation" }), body: JSON.stringify(payload) });
+            if(!res.ok) throw new Error('Could not save: ' + await res.text());
+            const createdRows = await res.json();
+            if(!Array.isArray(createdRows) || !createdRows.length) throw new Error('Staff save ki tasdeeq nahi hui.');
+            let mappingError = '';
+            if(deviceId) {
+                const mapResponse = await fetch(`${c.url}/rest/v1/rpc/save_staff_attendance_device_map`, {
+                    method: 'POST', headers: sbHeaders(JSON_H),
+                    body: JSON.stringify({ p_mappings: [{ device_id: deviceId, staff_id: payload.staff_id, device_name: name }] })
+                });
+                if(!mapResponse.ok) mappingError = await mapResponse.text();
+                else if(Number(await mapResponse.json()) !== 1) mappingError = 'Database ne ID link save hone ki tasdeeq nahi ki.';
+            }
+            closeModal('staffModal');
+            await initStaff();
+            if(mappingError) toast(`Staff add ho gaya, lekin fingerprint ID ${deviceId} ka link save nahi hua: ${mappingError}`, false);
+            else toast(deviceId ? `Staff add ho gaya. Fingerprint machine mein ID ${deviceId} use karein.` : 'Staff added.');
+            return;
         }
         if(!res.ok) { hideLoading(); toast('Could not save: ' + await res.text(), false); return; }
         closeModal('staffModal');
         toast(editingStaffKey ? 'Staff updated.' : 'Staff added.');
         await initStaff();
-    } catch (e) { hideLoading(); console.error(e); toast('Could not connect to the database.', false); }
+    } catch (e) { hideLoading(); console.error(e); toast(e.message || 'Could not connect to the database.', false); }
 }
 function deleteStaff(key) {
     let s = staffByKey[key]; if(!s) return;
@@ -1380,7 +2158,7 @@ function deleteStaff(key) {
         try {
             let c = getSupabaseConfig();
             if(attendanceOk) {
-                let a = await sbProbe(`${c.url}/rest/v1/staff_attendance?select=id&staff_id=eq.${encodeURIComponent(s.staffId)}&limit=1`);
+                let a = await fetch(`${c.url}/rest/v1/staff_attendance?select=id&staff_id=eq.${encodeURIComponent(s.staffId)}&limit=1`, { headers: sbHeaders() });
                 if(!a.ok) { hideLoading(); toast('Could not check attendance history: ' + await a.text(), false); return; }
                 let attendance = await a.json();
                 if(Array.isArray(attendance) && attendance.length) {
@@ -1925,7 +2703,7 @@ function exportCsv(name, header, rows) {
     let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     a.download = `${name}-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
-function exportStaffCsv() { let l = staffList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('staff', ['Staff ID', 'Name', 'Designation', 'Joining date', 'Phone', 'Base salary', 'Status'], l.map(s => [s.staffId, s.name, s.designation, s.joining, s.phone, s.base, s.status])); }
+function exportStaffCsv() { let l = staffList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('staff', ['Staff ID', 'Fingerprint device ID', 'Name', 'Designation', 'Joining date', 'Phone', 'Base salary', 'Status'], l.map(s => [s.staffId, attendanceDeviceId(s.staffId), s.name, s.designation, s.joining, s.phone, s.base, s.status])); }
 function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Salary divisor', 'Attendance days', 'Absent days', 'Excused absences', 'Deductible absences', 'Absence deduction', 'Late marks', 'Excused lates', 'Deductible late marks', 'Late deduction', 'Security withheld', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.attendanceDays, p.absenceCount, p.excusedLeaves, p.leaves, p.leaveDed, p.lateCount + p.excusedLates, p.excusedLates, p.lateCount, p.lateDed, p.security, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
 function exportHistoryCsv() { let l = historyList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('salary-payments', ['Paid on', 'Salary month', 'Staff', 'Net paid', 'Account', 'Voucher'], l.map(p => [p.paidDate, p.month, p.name, p.net, p.mode, p.voucher])); }
 
