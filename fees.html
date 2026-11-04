@@ -39,12 +39,22 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
  table.rt td::before{content:attr(data-l);color:#94a3b8;font-weight:600;text-align:left}
  table.rt td.nl::before{content:none}
 }
+.ledger-plus{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;color:#1d4ed8;font-weight:800;line-height:1;cursor:pointer;margin-right:4px;vertical-align:middle}
+.ledger-plus:hover{background:#e8eefc}
 @media print{
- body *{visibility:hidden!important}
- #ledgerModal,#ledgerModal *{visibility:visible!important}
- #ledgerModal{position:absolute!important;left:0;top:0;width:100%;background:#fff!important;display:block!important;padding:0!important}
- #ledgerSheet{box-shadow:none!important;max-height:none!important;max-width:100%!important}
  .no-print{display:none!important}
+ /* while the ledger is open, print only the ledger: every other element is REMOVED from the layout, so there are no blank pages */
+ body:has(#ledgerModal.open) *:not(#ledgerModal):not(#ledgerModal *):not(:has(#ledgerModal)){display:none!important}
+ body:has(#ledgerModal.open) :has(> #ledgerModal){display:block!important;min-height:0!important;height:auto!important;overflow:visible!important;padding:0!important;margin:0!important}
+ body:has(#ledgerModal.open){background:#fff!important;height:auto!important;min-height:0!important}
+ #ledgerModal.open{position:static!important;display:block!important;background:#fff!important;padding:0!important;inset:auto!important;width:auto!important}
+ #ledgerSheet{box-shadow:none!important;border:0!important;max-height:none!important;max-width:100%!important;overflow:visible!important;width:100%!important;padding:0!important;font-size:11px}
+ #ledgerSheet .overflow-x-auto,#ledgerSheet #ledgerApplied{overflow:visible!important}
+ #ledgerSheet table{width:100%;page-break-inside:auto}
+ #ledgerSheet thead{display:table-header-group}
+ #ledgerSheet tr{break-inside:avoid;page-break-inside:avoid}
+ #ledgerSheet .ledger-detail{display:table-row!important}
+ @page{margin:12mm}
 }
 </style>
 </head>
@@ -132,7 +142,7 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
         <div class="flex items-center justify-between gap-2">
           <h3 class="font-bold text-indigo-900 text-sm md:text-base">Generated vouchers</h3>
           <div class="flex gap-2 flex-wrap justify-end">
-            <button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
+            <button onclick="openChallanModal()" class="btn b-ok" title="Print fee challans (Student / Office / Bank copy) for a class, the whole school or one student">🧾 Print challans</button><button onclick="openImport()" class="btn b-pri">📥 Import paid</button>
             <button onclick="openSync()" class="btn b-gh">🔁 Sync</button>
             <button id="viewBtn" onclick="toggleView()" class="btn b-gh">👥 Student summary</button>
             <button onclick="downloadArrearsReconciliation()" class="btn b-gh">🧾 2025 arrears check</button>
@@ -179,7 +189,7 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
   </div>
   <div id="ledgerApplied" class="overflow-x-auto"></div>
   <div id="ledgerTxnView" style="display:none">
-  <div class="font-bold text-xs text-indigo-950 mb-1">Transaction statement</div>
+  <div class="flex items-center justify-between mb-1"><div class="font-bold text-xs text-indigo-950">Transaction statement</div><div class="no-print flex gap-3 text-[11px] font-semibold text-indigo-700"><button type="button" onclick="toggleAllReceipts(true)" class="underline">Expand all</button><button type="button" onclick="toggleAllReceipts(false)" class="underline">Collapse all</button></div></div>
   <div class="overflow-x-auto mb-3"><table class="w-full text-xs text-left">
     <thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr></thead>
     <tbody id="ledgerTableBody"></tbody></table></div>
@@ -238,6 +248,35 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
   <div class="flex justify-end gap-2 pt-2 border-t"><button type="button" onclick="closeStuBulk()" class="btn b-gh">Cancel</button><button type="button" onclick="submitStuBulk()" class="btn b-ok">Save &amp; distribute</button></div>
 </div></div>
 
+
+<!-- Fee challans: A4 landscape, Student / Office / Bank copy -->
+<div id="challanModal" class="modal no-print"><div class="sheet space-y-3" style="max-width:46rem">
+  <div class="flex items-start justify-between gap-2 border-b pb-2"><div><h3 class="font-bold text-indigo-800">🧾 Print fee challans</h3><p class="text-xs text-slate-500">A4 landscape. Arrears are everything still unpaid up to the date you choose; a minus amount means fee paid in advance.</p></div><button type="button" onclick="closeChallanModal()" class="btn b-gh">✕</button></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem">
+    <div><label class="lbl">Class</label><select id="chClass" onchange="chClassChanged()" class="inp"></select></div>
+    <div><label class="lbl">One student only (optional)</label><input id="chStudent" list="chStudentList" oninput="chRefresh()" placeholder="Leave empty for everyone" class="inp"><datalist id="chStudentList"></datalist></div>
+    <div><label class="lbl">Challan for the month of</label><select id="chMonth" onchange="chMonthChanged()" class="inp"></select></div>
+    <div><label class="lbl">Arrears up to (date)</label><input type="date" id="chAsOf" onchange="chRefresh()" class="inp"></div>
+    <div><label class="lbl">Due date</label><input type="date" id="chDue" class="inp"></div>
+    <div><label class="lbl">Validity date</label><input type="date" id="chValid" class="inp"></div>
+    <div><label class="lbl">Late fine (Rs.) added after due date</label><input type="number" id="chFine" min="0" oninput="chRefresh()" class="inp"></div>
+    <div><label class="lbl">Copies on each page</label><select id="chCopies" onchange="chRefresh()" class="inp"><option value="3">3 (Student, Office, Bank)</option><option value="2">2 (Student, Office)</option><option value="1">1 (Student)</option></select></div>
+  </div>
+  <div class="text-xs" style="display:flex;flex-wrap:wrap;gap:.4rem 1.2rem">
+    <label class="flex items-center gap-1.5"><input type="checkbox" id="chLeft" onchange="chRefresh()"> Include left students</label>
+    <label class="flex items-center gap-1.5"><input type="checkbox" id="chNoVoucher" onchange="chRefresh()"> Include students with no voucher for this month</label>
+    <label class="flex items-center gap-1.5"><input type="checkbox" id="chZero" onchange="chRefresh()"> Include students with nothing to pay</label>
+  </div>
+  <details class="text-xs"><summary class="cursor-pointer font-semibold text-indigo-700">Challan wording (school name, top box, notes) — remembered for next time</summary>
+    <div class="space-y-2 mt-2">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem"><div><label class="lbl">School name</label><input id="chSchool" class="inp"></div><div><label class="lbl">City</label><input id="chCity" class="inp"></div><div><label class="lbl">Top box (account / bank details)</label><input id="chAccount" class="inp"></div></div>
+      <div><label class="lbl">Notes (one per line)</label><textarea id="chNotes" rows="5" class="inp"></textarea></div>
+    </div></details>
+  <div id="chSummary" class="text-sm" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:.6rem;padding:.55rem .7rem"></div>
+  <div style="max-height:30vh;overflow-y:auto;overflow-x:hidden"><table class="w-full text-xs"><thead class="bg-slate-50 text-slate-600"><tr><th class="p-1.5 text-left">Class</th><th class="p-1.5 text-left">Student</th><th class="p-1.5 text-right">Arrears</th><th class="p-1.5 text-right">This month</th><th class="p-1.5 text-right">Payable</th></tr></thead><tbody id="chPreview"></tbody></table></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button type="button" onclick="closeChallanModal()" class="btn b-gh">Cancel</button><button type="button" onclick="printChallans()" class="btn b-ok">🖨️ Print challans</button></div>
+</div></div>
+
 <div id="importModal" class="modal no-print"><div class="sheet max-w-4xl space-y-3">
   <h3 class="font-bold text-indigo-800 border-b pb-2">📥 Import paid fees (Excel / CSV)</h3>
   <p class="text-xs text-slate-500">Columns: voucher_id (Admission No), from_account (name), to_account, amount_in, date, remarks (class). Each payment goes to the tuition voucher of the month of its received date, and that same date is saved in Accounts.</p>
@@ -279,6 +318,7 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Save discount</button></div>
 </div></div>
 
-<script src="js/pages/fees.js?v=20261105-1"></script>
+<script src="js/pages/fees.js?v=20261106-1"></script>
+<script src="js/pages/challan.js?v=20261107-1"></script>
 </body>
 </html>

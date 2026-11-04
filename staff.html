@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Concept School Shibra Campus - Staff & Payroll</title>
-    <script>window.__show=function(){document.documentElement.style.visibility='visible'};</script>
-    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="document.documentElement.style.visibility='hidden';setTimeout(__show,4000);var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
-    <link rel="stylesheet" href="css/theme.css?v=20261104-1">
-    <script src="js/core/config.js?v=20261104-1"></script><script src="js/core/cache.js?v=20261104-1"></script><script src="js/core/auth.js?v=20261104-1"></script><script src="js/core/permissions.js?v=20261104-1"></script><script src="js/core/data.js?v=20261104-1"></script><script src="js/core/settings.js?v=20261104-1"></script>
-    <script src="js/core/db.js?v=20261104-1"></script>
-    <script src="js/core/nav.js?v=20261104-1"></script>
-    <script src="js/core/ui.js?v=20261104-1"></script>
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <link rel="stylesheet" href="css/theme.css?v=20261030-1">
+    <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/db.js?v=20261029-1"></script>
+    <script src="js/core/nav.js?v=20261029-1"></script>
+    <script src="js/core/ui.js?v=20261029-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
         .tab-off { background:#fff; color:#475569; border-color:#e2e8f0; }
@@ -97,7 +97,7 @@
                     <button onclick="shiftMonth(1)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold" aria-label="Next month">Next ›</button>
                     <button onclick="setThisMonth()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-semibold">This month</button>
                     <button onclick="initStaff()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">🔄 Refresh</button>
-                    <p class="text-[11px] text-slate-400 basis-full sm:basis-auto sm:ml-auto">The month applies to Overview and Payroll. Staff and History have their own filters.</p>
+                    <p class="text-[11px] text-slate-400 basis-full sm:basis-auto sm:ml-auto">The month applies to Overview, Payroll and the default attendance period. Attendance dates can be changed below.</p>
                 </div>
             </div>
 
@@ -163,7 +163,7 @@
                 <div class="md-table hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto print-card scroll-area max-h-[640px]">
                     <table class="w-full text-left border-collapse text-xs">
                         <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b">
-                            <tr><th class="p-2.5">Staff</th><th class="p-2.5">Designation</th><th class="p-2.5">Joined</th><th class="p-2.5">Phone</th><th class="p-2.5 text-right">Base salary</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
+                            <tr><th class="p-2.5">Staff</th><th class="p-2.5">Fingerprint ID</th><th class="p-2.5">Designation</th><th class="p-2.5">Joined</th><th class="p-2.5">Phone</th><th class="p-2.5 text-right">Base salary</th><th class="p-2.5">Status</th><th class="p-2.5 no-print"></th></tr>
                         </thead>
                         <tbody id="sBody"></tbody>
                         <tfoot id="sFoot" class="sticky bottom-0 bg-slate-100 font-bold"></tfoot>
@@ -202,10 +202,42 @@
                             </div>
                         </div>
                         <button onclick="previewAttendanceReport()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">📥 Read & preview report</button>
-                        <button id="importAttendanceConfirm" onclick="confirmAttendanceReportImport()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">Import unmarked dates</button>
+                        <button id="importAttendanceConfirm" onclick="confirmAttendanceReportImport()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">Import records + fill missing times</button>
                     </div>
-                    <p class="text-[11px] text-slate-500 mt-2">Imports scheduled dates only: no punch = Absent, late minutes = Late, business trip = Present. Existing attendance is kept unchanged. Closed-day and role permissions still apply.</p>
+                    <p class="text-[11px] text-slate-500 mt-2">No punch = Absent, late minutes = Late, business trip = Present. Preview mein device In/Out times verify karein. Import nayi attendance add karega aur purane records mein sirf missing punch times fill karega; saved status, remarks, exemptions, aur punch times change nahi honge.</p>
                     <div id="attendanceReportPreview" class="hidden mt-3"></div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label for="attendanceRangePreset" class="block text-[11px] font-medium text-slate-500 mb-1">Quick period</label>
+                            <select id="attendanceRangePreset" onchange="setAttendanceRangePreset(this.value)" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                                <option value="salary_month">Selected salary month</option>
+                                <option value="today">Today</option><option value="yesterday">Yesterday</option>
+                                <option value="last_week">Last 7 days</option><option value="this_month">This month</option>
+                                <option value="last_month">Last month</option><option value="custom">Custom dates</option>
+                            </select>
+                        </div>
+                        <div><label for="attendanceRangeFrom" class="block text-[11px] font-medium text-slate-500 mb-1">From</label><input id="attendanceRangeFrom" type="date" onchange="attendanceRangeChanged()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"></div>
+                        <div><label for="attendanceRangeTo" class="block text-[11px] font-medium text-slate-500 mb-1">To</label><input id="attendanceRangeTo" type="date" onchange="attendanceRangeChanged()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"></div>
+                        <button onclick="loadAttendanceRange()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">Show attendance</button>
+                        <span id="attendanceRangeSummary" class="text-xs text-slate-500 sm:ml-auto"></span>
+                    </div>
+                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Staff attendance status filter">
+                            <span class="mr-1 text-[11px] text-slate-500">Staff:</span>
+                            <button type="button" data-attendance-staff-filter="active" onclick="setAttendanceStaffFilter('active')" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">Active</button>
+                            <button type="button" data-attendance-staff-filter="inactive" onclick="setAttendanceStaffFilter('inactive')" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">Inactive</button>
+                            <button type="button" data-attendance-staff-filter="all" onclick="setAttendanceStaffFilter('all')" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">All</button>
+                        </div>
+                        <div>
+                            <label for="attendanceDeleteMonth" class="mb-1 block text-[11px] font-medium text-slate-500">Month to clear</label>
+                            <input id="attendanceDeleteMonth" type="month" class="rounded-lg border bg-white px-3 py-2 text-sm outline-none">
+                        </div>
+                        <button type="button" onclick="deleteSelectedMonthAttendance()" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100">Delete selected month attendance</button>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-2">Staff ke naam par click karke date range ki attendance edit karein. Import pehle se saved attendance ko overwrite nahi karta; fresh import se pehle report wala month Month to clear mein select karke delete karein. Late marks red mein highlight hain.</p>
+                    <div id="attendanceRangeTable" class="mt-3"></div>
                 </div>
                 <div id="attendanceNotReady" class="hidden bg-white rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Attendance setup is required. Run the one-time SQL shown at the top of the page, then refresh.</div>
                 <div id="attendanceList" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
@@ -298,6 +330,35 @@
             <div class="p-5 border-t flex justify-end gap-2 sticky bottom-0 bg-white">
                 <button onclick="closeModal('staffModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
                 <button onclick="saveStaff()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="staffAttendanceMonthModal" class="modal fixed inset-0 bg-black/60 z-[85] hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-6xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] flex flex-col">
+            <div class="p-5 border-b flex justify-between items-center">
+                <div><h3 id="staffAttendanceMonthTitle" class="text-lg font-bold text-indigo-950">Staff attendance</h3><p id="staffAttendanceMonthSubtitle" class="text-xs text-slate-500"></p></div>
+                <button onclick="closeModal('staffAttendanceMonthModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="flex flex-wrap items-end gap-3 border-b bg-slate-50 p-4">
+                <div>
+                    <label for="staffAttendanceMonthPreset" class="mb-1 block text-[11px] font-medium text-slate-500">Quick period</label>
+                    <select id="staffAttendanceMonthPreset" onchange="setStaffAttendanceMonthPreset(this.value)" class="rounded-lg border bg-white px-3 py-2 text-sm outline-none">
+                        <option value="salary_month">Selected salary month</option>
+                        <option value="today">Today</option><option value="yesterday">Yesterday</option>
+                        <option value="last_week">Last 7 days</option><option value="this_month">This month</option>
+                        <option value="last_month">Last month</option><option value="custom">Custom dates</option>
+                    </select>
+                </div>
+                <div><label for="staffAttendanceMonthFrom" class="mb-1 block text-[11px] font-medium text-slate-500">From</label><input id="staffAttendanceMonthFrom" type="date" onchange="staffAttendanceMonthRangeChanged()" class="rounded-lg border bg-white px-3 py-2 text-sm outline-none"></div>
+                <div><label for="staffAttendanceMonthTo" class="mb-1 block text-[11px] font-medium text-slate-500">To</label><input id="staffAttendanceMonthTo" type="date" onchange="staffAttendanceMonthRangeChanged()" class="rounded-lg border bg-white px-3 py-2 text-sm outline-none"></div>
+                <button type="button" onclick="loadStaffAttendanceMonthRange()" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Show dates</button>
+                <span id="staffAttendanceMonthRangeSummary" class="text-xs text-slate-500"></span>
+            </div>
+            <div id="staffAttendanceMonthRows" class="p-4 overflow-auto flex-1"></div>
+            <div class="p-4 border-t flex justify-end gap-2">
+                <button onclick="closeModal('staffAttendanceMonthModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Close</button>
+                <button id="saveStaffAttendanceMonth" onclick="saveStaffAttendanceMonth()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save attendance changes</button>
             </div>
         </div>
     </div>
@@ -463,6 +524,6 @@
     <!-- SETTINGS -->
     
 
-<script src="js/pages/staff.js?v=20261104-1"></script>
+<script src="js/pages/staff.js?v=20261104-3"></script>
 </body>
 </html>

@@ -70,3 +70,12 @@ screen while the next page loaded.
 Changed: the sidebar is drawn as soon as its container is read (first frame) and redrawn only if permissions arrive late;
 the page is no longer hidden while loading (only if the stylesheet truly fails); `@view-transition` makes Chrome / Edge / Safari keep
 the old page until the new one is ready and cross-fade the content while the sidebar stays still.
+
+## Fee challans (Fee Vouchers -> "Print challans")
+A4 landscape, three copies per student (Student / Office / Bank), modelled on the school's own challan.
+Choose a class (or the whole school) or one student, the month the challan is for, and the "arrears up to" date.
+Arrears = every item still unpaid for earlier months up to that date; a minus amount is fee paid in advance.
+Amount payable = arrears + that month's fee (never below 0). Skips students with no voucher for the month, nothing to pay, or who have left (each can be included).
+More than 11 lines are merged ("Earlier dues (n items)") so a challan always fits one page. Wording, top box, notes, fine and copies are remembered.
+Files: js/pages/challan.js, assets/logo.png (taken from the school's sample challan), fees.html (button + popup).
+Note: the students table has no father's-name column, so the challan shows the contact number instead.

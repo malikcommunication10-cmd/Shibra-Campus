@@ -45,8 +45,34 @@ def main():
               const t=(v,a,s)=>({voucher_id:v+'-'+s,date:'2026-10-05',amount_in:a,to_account:'cash',description:'Bulk payment via FIFO',remarks:'Bulk payment via FIFO'});
               accountsDataMap={'V-101':{transactions:[t('V-101',4000,'1730000000000-1')]},'V-102':{transactions:[t('V-102',4000,'1730000000000-2')]},'V-103':{transactions:[t('V-103',2000,'1730000000000-3')]}};
               openStudentLedger('Ali Khan','101');
-              return {rows:[...document.querySelectorAll('#ledgerTableBody tr')].length, bal:document.getElementById('ledgerTotalBalance').innerText, rc:LEDGER_CTX.receipts.length, amt:LEDGER_CTX.receipts[0].amt};}""")
+              return {rows:[...document.querySelectorAll('#ledgerTableBody tr:not(.ledger-detail)')].length, bal:document.getElementById('ledgerTotalBalance').innerText, rc:LEDGER_CTX.receipts.length, amt:LEDGER_CTX.receipts[0].amt};}""")
             check('3 charge rows + 1 receipt row', out['rows'] == 4, out); check('receipt = 10,000', out['amt'] == 10000, out); check('balance = 2,000', '2,000' in out['bal'], out)
+            v = pg.evaluate("()=>({m:getComputedStyle($('ledgerApplied')).display,t:getComputedStyle($('ledgerTxnView')).display,b:$('ledgerViewBtn').innerText})")
+            check('ledger opens on the month-wise view only', v['m'] != 'none' and v['t'] == 'none' and 'Transaction statement' in v['b'], v)
+            pg.click('#ledgerViewBtn'); pg.wait_for_timeout(80)
+            v = pg.evaluate("()=>({m:getComputedStyle($('ledgerApplied')).display,t:getComputedStyle($('ledgerTxnView')).display,b:$('ledgerViewBtn').innerText,rows:document.querySelectorAll('#ledgerTableBody tr:not(.ledger-detail)').length})")
+            check('button switches to the transaction statement only', v['m'] == 'none' and v['t'] != 'none' and 'Monthly' in v['b'] and v['rows'] == 4, v)
+            pg.emulate_media(media='print')
+            v = pg.evaluate("()=>({m:getComputedStyle($('ledgerApplied')).display,t:getComputedStyle($('ledgerTxnView')).display,btn:getComputedStyle($('ledgerViewBtn').parentElement).display})")
+            check('printing the transaction view leaves out the monthly table and the buttons', v['m'] == 'none' and v['t'] != 'none' and v['btn'] == 'none', v)
+            pg.emulate_media(media='screen'); pg.click('#ledgerViewBtn'); pg.wait_for_timeout(80)
+            check('button switches back to the monthly view', pg.evaluate("getComputedStyle($('ledgerTxnView')).display") == 'none')
+            pg.evaluate("()=>{openStudentLedger('Ali Khan','101')}"); pg.click('#ledgerViewBtn'); pg.evaluate("()=>{openStudentLedger('Ali Khan','101')}")
+            check('re-opening the ledger always starts on the monthly view', pg.evaluate("getComputedStyle($('ledgerTxnView')).display") == 'none')
+            pg.click('#ledgerViewBtn'); pg.wait_for_timeout(80)
+            pr = pg.evaluate("""()=>[...document.querySelectorAll('#ledgerTableBody tr:not(.ledger-detail)')].filter(r=>/Payment received/.test(r.innerText)).map(r=>Math.round(r.getBoundingClientRect().height))""")
+            check('each payment is ONE short line (collapsed)', len(pr) == 1 and pr[0] < 50, pr)
+            check('payment details are hidden until "+" is pressed', pg.evaluate("getComputedStyle($('rcd-0')).display") == 'none')
+            pg.click('#rcb-0'); check('"+" opens the details and becomes "−"', pg.evaluate("getComputedStyle($('rcd-0')).display") != 'none' and pg.evaluate("$('rcb-0').innerText") == '−')
+            pg.click('#rcb-0'); pg.click('#ledgerViewBtn'); pg.wait_for_timeout(50)
+            # print: 1,500 voucher rows behind the popup used to make hundreds of blank pages once the page narrowed to A4 width
+            pg.evaluate("""()=>{ const mk=(i)=>({voucher_id:'V-9'+i,student_name:'Some Student '+i,admis_no:'9'+i,class:'5',period:'Oct',type:'tuition fee',payable:2800,net:2800,discount:0,totalPaid:0,siblings:''});
+              const rows=allFeesCache.slice(); for(let i=0;i<1500;i++)rows.push(mk(i)); renderFeesTable(rows); }""")
+            pg.click('#ledgerViewBtn'); pg.emulate_media(media='print')
+            import re as _re
+            pdf = pg.pdf(format='A4', print_background=True, margin={'top': '12mm', 'bottom': '12mm', 'left': '15mm', 'right': '15mm'})
+            npages = len(_re.findall(rb'/Type\s*/Page[^s]', pdf)); pg.emulate_media(media='screen')
+            check('printing the ledger gives 1-2 pages, not hundreds of blank ones', 1 <= npages <= 2, npages)
             pg.evaluate("()=>{printReceipt(0)}"); pg.wait_for_timeout(120)
             txt = pg.evaluate("document.querySelector('iframe').contentDocument.body.innerText")
             check('printed receipt has number, words and balance', 'RC-101-20261005' in txt and 'Ten Thousand' in txt and 'PKR 2,000' in txt, txt[:160])
@@ -250,6 +276,36 @@ def main():
             r = pg.evaluate("""()=>{ ME={perms:{pages:{students:'v',fees:'v'}},email:'a@b.c',name:'A',role:'Admin'}; document.dispatchEvent(new CustomEvent('shibra:me-ready'));
               return {links:[...document.querySelectorAll('#appNav a')].map(a=>a.getAttribute('href')),tops:document.querySelectorAll('#appTop').length,backs:document.querySelectorAll('#appBackdrop').length}; }""")
             check('permissions arriving late redraw the menu once, without duplicates', r['links'] == ['students.html', 'fees.html'] and r['tops'] == 1 and r['backs'] == 1, r); c.close()
+
+            print('12. Fee challans (A4 landscape, 3 copies)')
+            errs = []; pg = new_page(b, errs, 'fees')
+            pg.evaluate("""()=>{ SCHOOL_YEAR=2026;
+              const row=(adm,name,cls,per,type,net,paid)=>({voucher_id:'V-'+adm+per+type,admis_no:adm,student_name:name,class:cls,period:per,type,payable:net,net,discount:0,totalPaid:paid,siblings:''});
+              allFeesCache=[row('731','Aleezy','Pre-Nursery - A','September 2026','annual fund',5000,0),row('731','Aleezy','Pre-Nursery - A','September 2026','tuition fee',2400,0),
+                row('731','Aleezy','Pre-Nursery - A','October 2026','tuition fee',3000,0),row('731','Aleezy','Pre-Nursery - A','November 2026','tuition fee',3000,0),
+                row('900','Overpaid','Class 1','October 2026','tuition fee',3000,3500),row('900','Overpaid','Class 1','November 2026','tuition fee',3000,0),
+                row('901','No Nov Voucher','Class 1','October 2026','tuition fee',3000,0),
+                row('902','Left Student','Class 1','October 2026','tuition fee',3000,0),row('902','Left Student','Class 1','November 2026','tuition fee',3000,0),
+                row('903','Fully Paid','Class 1','October 2026','tuition fee',3000,3000),row('903','Fully Paid','Class 1','November 2026','tuition fee',3000,3000)];
+              ['January','February','March','April','May','June','July','August','September','October'].forEach(m=>['tuition fee','annual fund'].forEach(t=>allFeesCache.push(row('950','Long Dues','Class 2',m+' 2026',t,1000,0))));
+              allFeesCache.push(row('950','Long Dues','Class 2','November 2026','tuition fee',1000,0));
+              allStudentsCache=[{admis_no:'731',status:'Active',sr_no:1,contact_no_father:'0300-1234567'},{admis_no:'902',status:'Left'}]; }""")
+            plan = pg.evaluate("""()=>{ openChallanModal(); const f=chForm(); const pl=challanPlan(f);
+              return {month:f.month,asOf:f.asOf,due:f.due,valid:f.valid,sk:pl.skipped,by:Object.fromEntries(pl.list.map(c=>[c.name,{arr:c.arrTotal,fee:c.feeTotal,pay:c.payable,lines:c.lines.length,first:c.lines[0].label}]))}}""")
+            check('defaults: on 29 Oct the challan is for November, due 1 Nov, valid to 28 Nov', plan['month'] == 11 and plan['due'] == '2026-11-01' and plan['valid'] == '2026-11-28' and plan['asOf'] == '2026-10-29', plan)
+            check('arrears up to the date + this month\'s fee = amount payable (10,400 + 3,000 = 13,400)', plan['by']['Aleezy'] == {'arr': 10400, 'fee': 3000, 'pay': 13400, 'lines': 4, 'first': 'Annual Fund - September 2026'}, plan['by'].get('Aleezy'))
+            check('minus (advance) arrears reduce the payable: -500 + 3,000 = 2,500', plan['by']['Overpaid']['arr'] == -500 and plan['by']['Overpaid']['pay'] == 2500, plan['by'].get('Overpaid'))
+            check('skips: no voucher for the month, nothing to pay, left students', plan['sk']['nothing'] == 1 and plan['sk']['left'] == 1 and plan['sk']['noVoucher'] == 1, plan['sk'])
+            check('a student with 20 old dues is merged to at most 11 lines', plan['by']['Long Dues']['lines'] <= 11 and plan['by']['Long Dues']['first'].startswith('Earlier dues'), plan['by'].get('Long Dues'))
+            narrow = pg.evaluate("""()=>{ const f=chForm(); f.cls='Class 1'; const a=challanPlan(f).list.map(c=>c.name); f.cls='ALL'; f.student='aleezy'; const b2=challanPlan(f).list.map(c=>c.name); return {a,b2}; }""")
+            check('class filter and one-student filter work', narrow['a'] == ['Overpaid'] and narrow['b2'] == ['Aleezy'], narrow)
+            html = pg.evaluate("()=>{const f=chForm();return challanHtml(challanPlan(f),f)}")
+            pg2 = b.new_page(); pg2.route('**/*', lambda r: r.continue_() if f'localhost:{PORT}' in r.request.url else r.abort()); pg2.goto(f'http://localhost:{PORT}/login.html'); pg2.set_content(html, wait_until='load'); pg2.wait_for_timeout(300)
+            pdf = pg2.pdf(landscape=True, format='A4', print_background=True, prefer_css_page_size=True); npg = len(_re.findall(rb'/Type\s*/Page[^s]', pdf))
+            check('3 challans (Aleezy, Overpaid, Long Dues) = exactly 3 landscape A4 pages', npg == 3, npg)
+            check('every page shows Student, Office and Bank copy', pg2.evaluate("document.querySelectorAll('.copy').length") == 9 and 'BANK COPY' in pg2.inner_text('body'))
+            check('logo is on every copy', pg2.evaluate("[...document.images].every(i=>i.naturalWidth>0)")); pg2.close()
+            check('no errors', not errs, errs); pg.close()
 
             b.close()
     finally:
