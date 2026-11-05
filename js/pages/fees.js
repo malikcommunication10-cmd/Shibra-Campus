@@ -300,7 +300,7 @@ function renderFeesTable(rowsIn){
  <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(g.paid)}${g.dates?`<div class="font-mono font-normal text-[10px] text-indigo-700">${esc(g.dates)}</div>`:''}</td>
  <td data-l="Balance" class="${bc}">${bt}</td>
  <td data-l="Status"><span class="badge ${badge}">${g.status}</span></td>
- <td class="nl"><div class="flex flex-wrap gap-1"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok" style="padding:.35rem .5rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh" style="padding:.35rem .5rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh" style="padding:.35rem .5rem" title="Add another fee to this voucher">➕ Item</button></div></td></tr>`;
+ <td data-l="Action" class="nl" style="min-width:270px"><div style="display:flex;flex-wrap:nowrap;gap:.25rem;white-space:nowrap"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok" style="padding:.3rem .38rem;font-size:.68rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh" style="padding:.3rem .38rem;font-size:.68rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh" style="padding:.3rem .38rem;font-size:.68rem" title="Add another fee to this voucher">➕ Item</button><button onclick="printStudentChallan('${encodeURIComponent(g.adm||'')}','${encodeURIComponent(g.student||'')}','${encodeURIComponent(g.cls||'')}','${encodeURIComponent(g.period||'')}')" class="btn b-gh" style="padding:.3rem .38rem;font-size:.68rem" title="Print a fee challan for this student and voucher month">🖨️ Print</button></div></td></tr>`;
   });
   tb.innerHTML=html;
   $('stCount').innerText=groups.filter(g=>!g._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
@@ -501,18 +501,20 @@ function openStudentLedger(name,adm){
   ev.forEach(e=>{
     run=Math.round((run+e.debit-e.credit)*100)/100;tc+=e.debit;tp+=e.credit;if(e.receipt)e.receipt.bal=run;
     const fut=e.debit>0&&e.date.slice(0,7)>curYm;if(fut)future=true;if(e.debit>0&&!fut)dueCh+=e.debit;
-    let vcell=esc(e.vid)||'-',pcell=esc(e.period)||'-',dcell=e.desc;
+    let vcell=esc(e.vid)||'-',pcell=esc(e.period)||'-',dcell=e.desc,detail='';
     if(e.receipt){
-      const r=e.receipt,multi=r.parts.length>1;
-      vcell=[...new Set(r.parts.map(p=>p.vid))].map(esc).join('<br>');pcell='';
-      dcell=`<div class="font-bold text-emerald-700">Payment received${r.acct?` <span class="font-normal text-slate-500">· ${esc(tcase(r.acct))}</span>`:''}</div>`
+      // one single line per receipt; the "+" opens the breakdown (and prints it expanded)
+      const r=e.receipt,vids=[...new Set(r.parts.map(p=>p.vid))],n=r.parts.length;
+      vcell=esc(vids[0])+(vids.length>1?` <span class="text-slate-400">+${vids.length-1}</span>`:'');pcell='';
+      dcell=`<button type="button" class="ledger-plus no-print" id="rcb-${r.no}" onclick="toggleReceiptDetail(${r.no})" aria-expanded="false" title="Show how this payment was applied">+</button> <b class="text-emerald-700">Payment received</b>${r.acct?` <span class="text-slate-500">· ${esc(tcase(r.acct))}</span>`:''} <span class="text-slate-400 text-[11px]">· applied to ${n} voucher${n>1?'s':''}${r.adv?' + advance':''}</span>`;
+      detail=`<tr id="rcd-${r.no}" class="ledger-detail border-b" style="display:none"><td></td><td colspan="6" class="p-2 pb-3 bg-emerald-50/50">`
         +(r.note&&!/^bulk payment/i.test(r.note)?`<div class="text-slate-500">${esc(r.note)}</div>`:'')
-        +`<div class="mt-1 text-[11px] text-slate-500">${multi||r.adv?'Applied to (oldest dues first):':'Applied to:'}</div>`
-        +r.parts.map(p=>`<div class="text-[11px]">• ${esc(p.period||'-')} ${esc(p.label)}: <b>PKR ${fmt(p.amt)}</b></div>`).join('')
+        +`<div class="text-[11px] text-slate-500">${n>1||r.adv?'Applied to (oldest dues first):':'Applied to:'}</div>`
+        +r.parts.map(p=>`<div class="text-[11px]">• ${esc(p.period||'-')} ${esc(p.label)} <span class="font-mono text-slate-400">${esc(p.vid)}</span>: <b>PKR ${fmt(p.amt)}</b></div>`).join('')
         +(r.adv?'<div class="text-[11px] text-amber-700">• Includes advance for coming months</div>':'')
-        +`<button type="button" onclick="printReceipt(${r.no})" class="no-print mt-1.5 px-2 py-1 rounded border bg-white text-[11px] font-semibold text-indigo-700">🖨️ Print receipt</button>`;
+        +`<button type="button" onclick="printReceipt(${r.no})" class="no-print mt-1.5 px-2 py-1 rounded border bg-white text-[11px] font-semibold text-indigo-700">🖨️ Print receipt</button></td></tr>`;
     }
-    html+=`<tr class="border-b align-top ${e.ord?'bg-emerald-50/40':'bg-slate-50/70'} ${fut?'opacity-60':''}"><td class="p-2 font-mono ${e.ord?'':'text-slate-400'}">${e.ord?e.date:e.date.slice(0,7)}</td><td class="p-2 font-mono text-indigo-900">${vcell}</td><td class="p-2 text-indigo-600">${pcell}</td><td class="p-2 text-slate-600">${dcell}</td><td class="p-2 font-bold">${e.debit?'PKR '+fmt(e.debit):''}</td><td class="p-2 font-bold text-emerald-600">${e.credit?'PKR '+fmt(e.credit):''}</td><td class="p-2 font-bold ${run>0?'text-rose-600':'text-emerald-600'}">${run<0?'Adv '+fmt(-run):'PKR '+fmt(run)}</td></tr>`;
+    html+=`<tr class="${detail?'':'border-b '}align-top ${e.ord?'bg-emerald-50/40':'bg-slate-50/70'} ${fut?'opacity-60':''}"><td class="p-2 font-mono whitespace-nowrap ${e.ord?'':'text-slate-400'}">${e.ord?e.date:e.date.slice(0,7)}</td><td class="p-2 font-mono text-indigo-900 whitespace-nowrap">${vcell}</td><td class="p-2 text-indigo-600">${pcell}</td><td class="p-2 text-slate-600">${dcell}</td><td class="p-2 font-bold whitespace-nowrap">${e.debit?'PKR '+fmt(e.debit):''}</td><td class="p-2 font-bold text-emerald-600 whitespace-nowrap">${e.credit?'PKR '+fmt(e.credit):''}</td><td class="p-2 font-bold whitespace-nowrap ${run>0?'text-rose-600':'text-emerald-600'}">${run<0?'Adv '+fmt(-run):'PKR '+fmt(run)}</td></tr>`+detail;
   });
   $('ledgerTableBody').innerHTML=html||'<tr><td colspan="7" class="p-4 text-center text-slate-400">No vouchers found for this student.</td></tr>';
   // month-wise position: shows parents exactly which month each rupee cleared
@@ -908,3 +910,12 @@ function setLedgerView(view) {
   const sheet = $('ledgerSheet'); if (sheet) sheet.scrollTop = 0;
 }
 function toggleLedgerView() { setLedgerView(LEDGER_VIEW === 'monthly' ? 'txn' : 'monthly'); }
+
+/* ---------- Transaction statement: one line per payment, "+" opens the details ---------- */
+function toggleReceiptDetail(i, force) {
+  const row = $('rcd-' + i), btn = $('rcb-' + i); if (!row) return;
+  const open = force !== undefined ? force : row.style.display === 'none';
+  row.style.display = open ? '' : 'none';
+  if (btn) { btn.innerText = open ? '−' : '+'; btn.setAttribute('aria-expanded', open ? 'true' : 'false'); btn.title = open ? 'Hide details' : 'Show how this payment was applied'; }
+}
+function toggleAllReceipts(open) { document.querySelectorAll('#ledgerTableBody tr.ledger-detail').forEach(r => toggleReceiptDetail(r.id.replace('rcd-', ''), open)); }
