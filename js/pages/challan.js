@@ -115,6 +115,24 @@ function challanHtml(plan, o) {
 
 /* ---------- 3. the popup ---------- */
 const chEl = id => document.getElementById(id);
+function studentChallanOptions(adm, name, cls, period) {
+    const periodText = String(period || '').trim().toLowerCase();
+    let monthIndex = CHALLAN_MONTHS.findIndex(month =>
+        periodText.includes(month.toLowerCase()) || periodText.includes(month.slice(0, 3).toLowerCase()));
+    if (monthIndex < 0 && typeof parsePeriod === 'function') {
+        monthIndex = CHALLAN_MONTHS.indexOf(parsePeriod(period));
+    }
+    if (monthIndex < 0) throw new Error(`Could not determine the fee month for ${period || 'this voucher'}.`);
+    const month = monthIndex + 1, settings = chSettings(), asOf = typeof sbToday === 'function' ? sbToday() : today();
+    const monthText = String(month).padStart(2, '0');
+    return {
+        cls: String(cls || 'ALL').trim(), student: String(adm || name || '').trim(), month, asOf,
+        due: `${SCHOOL_YEAR}-${monthText}-01`, valid: `${SCHOOL_YEAR}-${monthText}-28`,
+        fine: Number(settings.fine) || 0, copies: Number(settings.copies) || 3,
+        includeLeft: true, includeNoVoucher: false, includeZero: true,
+        account: settings.account, notes: settings.notes, school: settings.school, city: settings.city
+    };
+}
 function chForm() {
     const s = chSettings();
     return { cls: chEl('chClass').value, student: chEl('chStudent').value, month: +chEl('chMonth').value, asOf: chEl('chAsOf').value, due: chEl('chDue').value, valid: chEl('chValid').value,
@@ -154,13 +172,21 @@ function chRefresh() {
         + (plan.list.length > 8 ? `<tr><td colspan="5" class="p-1.5 text-slate-400">… and ${fmt(plan.list.length - 8)} more</td></tr>` : '') || '<tr><td colspan="5" class="p-3 text-center text-slate-400">No student matches these choices.</td></tr>';
 }
 const closeChallanModal = () => chEl('challanModal').classList.remove('open');
-async function printChallans() {
-    const f = chForm(); f.student = f.student.replace(/\s*\(Adm .*\)$/, '');
-    const plan = challanPlan(f);
+async function printChallanPlan(plan, f) {
     if (!plan.list.length) { showAlert('There are no challans to print for these choices.'); return; }
     try { localStorage.setItem(CHALLAN_KEY, JSON.stringify({ school: f.school, city: f.city, account: f.account, fine: f.fine, copies: f.copies, notes: f.notes })); } catch (e) {}
     const fr = document.createElement('iframe'); fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(fr);
     fr.contentDocument.open(); fr.contentDocument.write(challanHtml(plan, f)); fr.contentDocument.close();
     await Promise.all([...fr.contentDocument.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
     setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(() => fr.remove(), 120000); }, 200);
+}
+async function printChallans() {
+    const f = chForm(); f.student = f.student.replace(/\s*\(Adm .*\)$/, '');
+    return printChallanPlan(challanPlan(f), f);
+}
+function printStudentChallan(adm, name, cls, period) {
+    let f;
+    try { f = studentChallanOptions(decodeURIComponent(adm), decodeURIComponent(name), decodeURIComponent(cls), decodeURIComponent(period)); }
+    catch (error) { showAlert(error.message || 'Could not prepare this student’s fee challan.'); return; }
+    return printChallanPlan(challanPlan(f), f);
 }
