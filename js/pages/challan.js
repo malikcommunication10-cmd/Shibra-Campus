@@ -131,6 +131,9 @@ function openChallanModal() {
     chEl('chMonth').innerHTML = CHALLAN_MONTHS.map((m, i) => `<option value="${i + 1}">${m} ${SCHOOL_YEAR}</option>`).join('');
     const nowM = +td.slice(5, 7), sameYear = String(SCHOOL_YEAR) === td.slice(0, 4);
     chEl('chMonth').value = String(sameYear ? Math.min(12, nowM + 1) : 1);
+    // the voucher list's "To month" filter decides the challan month: nothing after it is shown or counted
+    const toSel = document.getElementById('toMonth'), toM = toSel ? +toSel.value : 0;
+    if (toM >= 1 && toM <= 12) chEl('chMonth').value = String(toM);
     chEl('chAsOf').value = td; chEl('chStudent').value = '';
     chEl('chFine').value = s.fine; chEl('chCopies').value = String(s.copies); chEl('chAccount').value = s.account; chEl('chNotes').value = s.notes; chEl('chSchool').value = s.school; chEl('chCity').value = s.city;
     chEl('chLeft').checked = false; chEl('chNoVoucher').checked = false; chEl('chZero').checked = false;
