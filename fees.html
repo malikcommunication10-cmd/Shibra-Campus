@@ -263,7 +263,7 @@ table.rt td[data-l="Voucher"],table.rt td[data-l="Payable"],table.rt td[data-l="
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem">
     <div><label class="lbl">Class</label><select id="chClass" onchange="chClassChanged()" class="inp"></select></div>
     <div><label class="lbl">One student only (optional)</label><input id="chStudent" list="chStudentList" oninput="chRefresh()" placeholder="Leave empty for everyone" class="inp"><datalist id="chStudentList"></datalist></div>
-    <div><label class="lbl">Challan for the month of</label><select id="chMonth" onchange="chMonthChanged()" class="inp"></select></div>
+    <div><label class="lbl">Challan for the month of</label><select id="chMonth" onchange="chMonthChanged()" class="inp"></select><div style="font-size:10px;color:#94a3b8;margin-top:2px">Follows the “To month” filter of the list. Nothing after this month is shown or counted.</div></div>
     <div><label class="lbl">Arrears up to (date)</label><input type="date" id="chAsOf" onchange="chRefresh()" class="inp"></div>
     <div><label class="lbl">Due date</label><input type="date" id="chDue" class="inp"></div>
     <div><label class="lbl">Validity date</label><input type="date" id="chValid" class="inp"></div>
@@ -327,6 +327,6 @@ table.rt td[data-l="Voucher"],table.rt td[data-l="Payable"],table.rt td[data-l="
 </div></div>
 
 <script src="js/pages/fees.js?v=20261108-1"></script>
-<script src="js/pages/challan.js?v=20261108-1"></script>
+<script src="js/pages/challan.js?v=20261109-1"></script>
 </body>
 </html>
