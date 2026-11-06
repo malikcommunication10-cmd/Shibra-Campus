@@ -28,9 +28,17 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-se
 .badge{display:inline-block;padding:.1rem .55rem;border-radius:999px;font-size:.68rem;font-weight:700}
 .nav a{display:flex;gap:.6rem;align-items:center;padding:.6rem .8rem;border-radius:.6rem;color:#c7d2fe;font-size:.85rem}
 .nav a:hover{background:rgba(255,255,255,.08)}.nav a.on{background:#4338ca;color:#fff;font-weight:600}
-table.rt th{padding:.65rem .6rem;font-size:.7rem;font-weight:700;color:#475569;text-align:left;white-space:nowrap}
-table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9;vertical-align:top;overflow-wrap:anywhere}
-table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Balance"],table.rt td[data-l="Status"],.badge{white-space:nowrap}
+table.rt th{padding:.65rem .45rem;font-size:.7rem;font-weight:700;color:#475569;text-align:left;white-space:nowrap}
+table.rt td{padding:.6rem .45rem;font-size:.78rem;border-top:1px solid #f1f5f9;vertical-align:middle;overflow-wrap:anywhere}
+table.rt td[data-l="Voucher"],table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Balance"],table.rt td[data-l="Status"],.badge{white-space:nowrap}
+.act{display:flex;flex-wrap:nowrap;gap:4px;align-items:center;white-space:nowrap}
+.act .btn{padding:.35rem .5rem;flex:0 0 auto}
+#voucherView{container-type:inline-size;container-name:vv}
+@container vv (max-width: 1010px){.act-lbl{display:none}}
+@container vv (max-width: 760px){table.rt td[data-l="Items"],table.rt thead th:nth-child(4){display:none}
+ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Balance"]{white-space:normal}
+ .act .btn{padding:.35rem .4rem}}
+@media (max-width:767px){.act{flex-wrap:wrap}.act-lbl{display:inline!important}}
 @media(max-width:767px){
  table.rt thead{display:none}
  table.rt,table.rt tbody{display:block}
@@ -38,7 +46,6 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
  table.rt td{display:flex;justify-content:space-between;gap:1rem;border:0;padding:.3rem 0;text-align:right}
  table.rt td::before{content:attr(data-l);color:#94a3b8;font-weight:600;text-align:left}
  table.rt td.nl::before{content:none}
- table.rt td[data-l="Action"]{display:block;min-width:270px}
 }
 .ledger-plus{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;color:#1d4ed8;font-weight:800;line-height:1;cursor:pointer;margin-right:4px;vertical-align:middle}
 .ledger-plus:hover{background:#e8eefc}
@@ -166,11 +173,11 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
         </div>
         <label class="md:hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" onchange="toggleSelectAll(this)"> Select all</label>
       </div>
-      <div id="voucherView" class="md:max-h-[70vh]" style="overflow-x:auto;overflow-y:auto">
+      <div id="voucherView" class="md:max-h-[70vh]" style="overflow-x:hidden;overflow-y:auto">
         <table class="rt w-full border-collapse">
           <thead class="bg-slate-50 sticky top-0"><tr>
             <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
-            <th>Voucher</th><th>Student</th><th>Items</th><th>Payable</th><th>Paid</th><th>Balance</th><th>Status</th><th style="min-width:270px">Action</th></tr></thead>
+            <th>Voucher</th><th>Student</th><th>Items</th><th>Payable</th><th>Paid</th><th>Balance</th><th>Status</th><th>Action</th></tr></thead>
           <tbody id="feesTableBody"><tr><td colspan="9" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
         </table>
       </div>
@@ -319,7 +326,7 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Save discount</button></div>
 </div></div>
 
-<script src="js/pages/fees.js?v=20261106-2"></script>
-<script src="js/pages/challan.js?v=20261107-2"></script>
+<script src="js/pages/fees.js?v=20261108-1"></script>
+<script src="js/pages/challan.js?v=20261108-1"></script>
 </body>
 </html>
