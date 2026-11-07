@@ -25,6 +25,7 @@ create table if not exists public.payroll (
   excused_leaves integer not null default 0,
   late_count integer not null default 0,
   excused_lates integer not null default 0,
+  late_deduction_days integer,
   late_deduction numeric not null default 0,
   attendance_days integer not null default 0,
   salary_days integer not null default 30,
@@ -47,6 +48,7 @@ alter table public.payroll
   add column if not exists excused_leaves integer not null default 0,
   add column if not exists late_count integer not null default 0,
   add column if not exists excused_lates integer not null default 0,
+  add column if not exists late_deduction_days integer,
   add column if not exists late_deduction numeric not null default 0,
   add column if not exists attendance_days integer not null default 0,
   add column if not exists salary_days integer not null default 30,
@@ -63,6 +65,50 @@ create policy shibra_update on public.payroll for update to authenticated using 
 create policy shibra_delete on public.payroll for delete to authenticated using (public.app_has_page_permission('staff', 'd'));
 grant select, insert, update, delete on public.payroll to authenticated;
 grant usage, select on sequence public.payroll_id_seq to authenticated;
+
+create or replace function public.enforce_payroll_deduction_waiver_admin()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+declare
+  old_waived_leaves integer := 0;
+  old_waived_lates integer := 0;
+  new_waived_leaves integer;
+  new_waived_lates integer;
+begin
+  new_waived_leaves := greatest(0, coalesce(new.absence_count, 0) - coalesce(new.excused_leaves, 0) - coalesce(new.leaves, 0));
+  new_waived_lates := greatest(0, floor(greatest(0, coalesce(new.late_count, 0)) / 3.0)::integer - coalesce(new.late_deduction_days, floor(greatest(0, coalesce(new.late_count, 0)) / 3.0)::integer));
+
+  if tg_op = 'UPDATE' then
+    old_waived_leaves := greatest(0, coalesce(old.absence_count, 0) - coalesce(old.excused_leaves, 0) - coalesce(old.leaves, 0));
+    old_waived_lates := greatest(0, floor(greatest(0, coalesce(old.late_count, 0)) / 3.0)::integer - coalesce(old.late_deduction_days, floor(greatest(0, coalesce(old.late_count, 0)) / 3.0)::integer));
+  end if;
+
+  if not public.app_is_admin() then
+    if tg_op = 'UPDATE' and (
+      new.absence_count is distinct from old.absence_count
+      or new.excused_leaves is distinct from old.excused_leaves
+      or new.late_count is distinct from old.late_count
+      or new.excused_lates is distinct from old.excused_lates
+    ) then
+      raise exception 'Only an Admin can change payroll attendance counts.';
+    end if;
+    if new_waived_leaves > old_waived_leaves or new_waived_lates > old_waived_lates then
+      raise exception 'Only an Admin can waive off/leave or late deductions.';
+    end if;
+  elsif (new_waived_leaves > old_waived_leaves or new_waived_lates > old_waived_lates)
+    and nullif(btrim(coalesce(new.notes, '')), '') is null then
+    raise exception 'A reason is required when waiving payroll deductions.';
+  end if;
+
+  return new;
+end;
+$$;
+drop trigger if exists payroll_deduction_waiver_admin_guard on public.payroll;
+create trigger payroll_deduction_waiver_admin_guard
+before insert or update on public.payroll
+for each row execute function public.enforce_payroll_deduction_waiver_admin();
 
 -- 3) Daily staff attendance
 create table if not exists public.staff_attendance (
@@ -568,16 +614,30 @@ function serviceLength(joinDate) {
     return y ? `${y} yr${y > 1 ? 's' : ''}${m ? ' ' + m + ' mo' : ''}` : (m ? `${m} mo` : 'New');
 }
 const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-function calcPay(base, leaves, bonus, fine, adv, lateCount = 0, salaryDays = PAYROLL_DIVISOR, security = 0) {
+function calcPay(base, leaves, bonus, fine, adv, lateCount = 0, salaryDays = PAYROLL_DIVISOR, security = 0, lateDeductionDays = null) {
     let daily = base / PAYROLL_DIVISOR, billable = Math.max(0, leaves);
     let ded = Math.round(daily * billable);
-    let lateDed = Math.round(daily * Math.floor(Math.max(0, lateCount) / 3));
+    let lateDays = lateDeductionDays === null || lateDeductionDays === undefined
+        ? Math.floor(Math.max(0, lateCount) / 3)
+        : Math.max(0, Number(lateDeductionDays) || 0);
+    let lateDed = Math.round(daily * lateDays);
     let salaryAmount = Math.round(daily * Math.min(PAYROLL_DIVISOR, Math.max(0, salaryDays)));
     let beforeSecurity = Math.max(0, Math.round(salaryAmount - ded - lateDed + bonus - fine - adv));
-    return { daily, billable, ded, lateDed, salaryAmount, beforeSecurity, security: Math.max(0, security), net: Math.max(0, beforeSecurity - Math.max(0, security)) };
+    return { daily, billable, ded, lateDays, lateDed, salaryAmount, beforeSecurity, security: Math.max(0, security), net: Math.max(0, beforeSecurity - Math.max(0, security)) };
 }
 function qualifiesForNoLeaveBonus(absenceCount, excusedLeaves, leaveDays) {
     return Number(absenceCount) === 0 && Number(excusedLeaves) === 0 && Number(leaveDays) === 0;
+}
+function payrollLateDeductionDays(payrollRow) {
+    return payrollRow.lateDeductionDays === null || payrollRow.lateDeductionDays === undefined
+        ? Math.floor(Math.max(0, payrollRow.lateCount) / 3)
+        : payrollRow.lateDeductionDays;
+}
+function payrollWaivedLeaveDays(payrollRow) {
+    return Math.max(0, payrollRow.absenceCount - payrollRow.excusedLeaves - payrollRow.leaves);
+}
+function payrollWaivedLateDays(payrollRow) {
+    return Math.max(0, Math.floor(Math.max(0, payrollRow.lateCount) / 3) - payrollLateDeductionDays(payrollRow));
 }
 
 // ====================================================================================
@@ -598,6 +658,8 @@ function normPay(r) {
         absenceCount: parseInt(r.absence_count, 10) || parseInt(r.leaves, 10) || 0,
         excusedLeaves: parseInt(r.excused_leaves, 10) || 0,
         lateCount: parseInt(r.late_count, 10) || 0, excusedLates: parseInt(r.excused_lates, 10) || 0,
+        lateDeductionDays: r.late_deduction_days === null || r.late_deduction_days === undefined
+            ? null : (parseInt(r.late_deduction_days, 10) || 0),
         lateDed: parseFloat(r.late_deduction) || 0, attendanceDays: parseInt(r.attendance_days, 10) || 0,
         salaryDays: r.salary_days === null || r.salary_days === undefined ? PAYROLL_DIVISOR : (parseInt(r.salary_days, 10) || 0),
         security: parseFloat(r.security_deduction) || 0,
@@ -614,7 +676,7 @@ async function repairUnpaidLeaveBonuses(rows) {
     )) {
         const corrected = calcPay(
             payrollRow.base, payrollRow.leaves, 0, payrollRow.fine, payrollRow.advance,
-            payrollRow.lateCount, payrollRow.salaryDays, payrollRow.security
+            payrollRow.lateCount, payrollRow.salaryDays, payrollRow.security, payrollRow.lateDeductionDays
         );
         try {
             const c = getSupabaseConfig();
@@ -653,7 +715,7 @@ async function initStaff() {
             ERP.db.request('staff', 'select=*'),
             ERP.db.request('payroll', 'select=*'),
             fetch(`${c.url}/rest/v1/staff?select=phone,status,leaving_date,notes&limit=1`, { headers: sbHeaders() }),
-            fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction,attendance_days,salary_days,security_deduction&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/payroll?select=working_days,absence_count,excused_leaves,late_count,excused_lates,late_deduction_days,late_deduction,attendance_days,salary_days,security_deduction&limit=1`, { headers: sbHeaders() }),
             fetch(`${c.url}/rest/v1/staff_attendance?select=id,absence_exempt,late_exempt,time_in,time_out&limit=1`, { headers: sbHeaders() }),
             ERP.db.request('staff_security_ledger', 'select=*'),
             ERP.db.request('staff_salary_increments', 'select=*'),
@@ -2198,9 +2260,9 @@ function renderPayroll() {
         : `<button onclick="openAdjust(${js(p.id)})" title="Adjust salary" class="px-1.5 hover:bg-slate-100 rounded">✏️</button><button onclick="openPay(${js(p.id)})" class="px-2 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold">Pay</button><button onclick="printSlip(${js(p.id)})" title="Salary slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button><button onclick="removePayrollRow(${js(p.id)})" title="Remove from this month" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`;
     $('prBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50 align-top">
         <td class="p-2.5"><div class="flex items-center gap-2">${avatar(p.name)}<div><div class="font-semibold text-slate-800">${esc(p.name)}</div><div class="text-[11px] text-slate-400">${esc(p.designation)}</div></div></div></td>
-        <td class="p-2.5 text-right">${fmt(p.base)}</td><td class="p-2.5 text-right">${p.absenceCount ? `${fmt(p.absenceCount)}${p.excusedLeaves ? ` (${fmt(p.excusedLeaves)} excused)` : ''}` : '-'}</td>
+        <td class="p-2.5 text-right">${fmt(p.base)}</td><td class="p-2.5 text-right">${p.absenceCount ? `${fmt(p.absenceCount)}${p.excusedLeaves ? ` (${fmt(p.excusedLeaves)} excused)` : ''}${payrollWaivedLeaveDays(p) ? ` (${fmt(payrollWaivedLeaveDays(p))} waived)` : ''}` : '-'}</td>
         <td class="p-2.5 text-right text-rose-600">${p.leaveDed ? fmt(p.leaveDed) : '-'}</td><td class="p-2.5 text-right">${p.lateCount + p.excusedLates ? `${fmt(p.lateCount + p.excusedLates)}${p.excusedLates ? ` (${fmt(p.excusedLates)} excused)` : ''}` : '-'}</td>
-        <td class="p-2.5 text-right text-rose-600">${p.lateDed ? fmt(p.lateDed) : '-'}</td><td class="p-2.5 text-right text-rose-600">${p.security ? fmt(p.security) : '-'}</td><td class="p-2.5 text-right text-emerald-600">${p.bonus ? fmt(p.bonus) : '-'}</td>
+        <td class="p-2.5 text-right text-rose-600" title="${payrollWaivedLateDays(p) ? `${fmt(payrollWaivedLateDays(p))} late deduction day(s) waived by Admin` : ''}">${p.lateDed ? `${fmt(p.lateDed)}${payrollWaivedLateDays(p) ? `<div class="text-[10px] text-emerald-700">${fmt(payrollWaivedLateDays(p))} day(s) waived</div>` : ''}` : '-'}</td><td class="p-2.5 text-right text-rose-600">${p.security ? fmt(p.security) : '-'}</td><td class="p-2.5 text-right text-emerald-600">${p.bonus ? fmt(p.bonus) : '-'}</td>
         <td class="p-2.5 text-right text-rose-600">${p.fine ? fmt(p.fine) : '-'}</td><td class="p-2.5 text-right text-amber-600">${p.advance ? fmt(p.advance) : '-'}</td>
         <td class="p-2.5 text-right font-extrabold whitespace-nowrap">PKR ${fmt(p.net)}</td>
         <td class="p-2.5">${statusBadge(p.status)}${p.paidDate ? `<div class="text-[11px] text-slate-400 mt-0.5">${fmtDate(p.paidDate)}</div>` : ''}</td>
@@ -2211,7 +2273,7 @@ function renderPayroll() {
     $('prCards2').innerHTML = list.length ? list.map(p => `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex items-start justify-between gap-2"><div class="flex items-center gap-3 min-w-0">${avatar(p.name)}<div class="min-w-0"><div class="font-bold text-slate-800 text-sm truncate">${esc(p.name)}</div><div class="text-xs text-slate-500">${esc(p.designation)}</div></div></div>${statusBadge(p.status)}</div>
         <div class="grid grid-cols-3 gap-1 mt-3 text-center text-[11px]"><div><div class="text-slate-400">Base</div><b>${fmt(p.base)}</b></div><div><div class="text-slate-400">Absent / late</div><b>${fmt(p.absenceCount)} / ${fmt(p.lateCount + p.excusedLates)}</b></div><div><div class="text-slate-400">Bonus</div><b class="text-emerald-600">${fmt(p.bonus)}</b></div></div>
-        <div class="mt-2 text-[11px] text-slate-500">Absence ${fmt(p.leaveDed)} · Late ${fmt(p.lateDed)} · Security ${fmt(p.security)} · Fine + advance ${fmt(p.fine + p.advance)}</div>
+        <div class="mt-2 text-[11px] text-slate-500">Off ${fmt(p.leaveDed)}${payrollWaivedLeaveDays(p) ? ` (${fmt(payrollWaivedLeaveDays(p))} waived)` : ''} · Late ${fmt(p.lateDed)}${payrollWaivedLateDays(p) ? ` (${fmt(payrollWaivedLateDays(p))} days waived)` : ''} · Security ${fmt(p.security)} · Fine + advance ${fmt(p.fine + p.advance)}</div>
         <div class="flex items-end justify-between mt-2"><div class="text-xs text-slate-500">${p.attendanceDays ? `${p.attendanceDays} marked days` : ''}${p.paidDate ? `<div>Paid ${fmtDate(p.paidDate)}</div>` : ''}</div><div class="text-xl font-extrabold">PKR ${fmt(p.net)}</div></div>
         <div class="flex justify-end items-center gap-1 mt-2 border-t pt-2">${acts(p)}</div></div>`).join('')
         : `<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet.` : 'Payroll table not set up yet.'}</div>`;
@@ -2253,7 +2315,8 @@ async function generatePayroll() {
             const deductibleLeaves = absences - excusedLeaves;
             return { staff: salaryStaff, expectedDates, byDate, markedDays: staffRows.length, missingDays: expectedDates.length - staffRows.length,
                 absenceCount: absences, excusedLeaves, defaultLeaves: deductibleLeaves, lateCount: staffRows.filter(r => r.status === 'late' && !r.late_exempt).length,
-                excusedLates: staffRows.filter(r => r.status === 'late' && r.late_exempt).length };
+                excusedLates: staffRows.filter(r => r.status === 'late' && r.late_exempt).length,
+                defaultLateDeductionDays: Math.floor(staffRows.filter(r => r.status === 'late' && !r.late_exempt).length / 3) };
         });
         renderPayrollGeneration(month);
         openModal('genPayrollModal');
@@ -2266,24 +2329,28 @@ async function generatePayroll() {
 
 function renderPayrollGeneration(month) {
     $('genPayrollSub').innerText = `${monthLabel(month)} · ${payrollGenDrafts.length} staff · daily rate is base salary ÷ 30`;
+    const isAdmin = ME && ME.role === 'Admin';
     $('genPayrollRows').innerHTML = payrollGenDrafts.map((draft, index) => `
         <article class="border rounded-xl p-3 space-y-2">
             <div class="flex flex-wrap items-baseline justify-between gap-1">
                 <b class="text-sm text-slate-800">${esc(draft.staff.name)} · PKR ${fmt(draft.staff.base)} base</b>
                 <span class="text-[11px] text-slate-500">${draft.markedDays} dates already marked · ${draft.missingDays} unmarked workdays will be saved as Present · ${draft.absenceCount} absent / ${draft.lateCount + draft.excusedLates} late</span>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-[120px_150px_180px_1fr] gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 <label class="text-xs text-slate-600">Salary days (0–30)
                     <input data-gen-days="${index}" type="number" min="0" max="30" step="1" value="30" class="mt-1 w-full border rounded-lg p-2 text-sm">
                 </label>
-                <label class="text-xs text-slate-600">Deductible leave days
-                    <input data-gen-leaves="${index}" type="number" min="0" max="30" step="1" value="${draft.defaultLeaves}" class="mt-1 w-full border rounded-lg p-2 text-sm">
+                <label class="text-xs text-slate-600">${isAdmin ? 'Deductible off/leave days (Admin can waive)' : 'Deductible off/leave days'}
+                    <input data-gen-leaves="${index}" type="number" min="0" max="${draft.defaultLeaves}" step="1" value="${draft.defaultLeaves}" ${isAdmin ? '' : 'readonly'} class="mt-1 w-full border rounded-lg p-2 text-sm ${isAdmin ? '' : 'bg-slate-100'}">
+                </label>
+                <label class="text-xs text-slate-600">${isAdmin ? 'Late deduction days (Admin can waive)' : 'Late deduction days'}
+                    <input data-gen-late-days="${index}" type="number" min="0" max="${draft.defaultLateDeductionDays}" step="1" value="${draft.defaultLateDeductionDays}" ${isAdmin ? '' : 'readonly'} class="mt-1 w-full border rounded-lg p-2 text-sm ${isAdmin ? '' : 'bg-slate-100'}">
                 </label>
                 <label class="text-xs text-slate-600">Security deduction (PKR)
                     <input data-gen-security="${index}" type="number" min="0" step="0.01" value="0" class="mt-1 w-full border rounded-lg p-2 text-sm">
                 </label>
-                <label class="text-xs text-slate-600">Remarks
-                    <input data-gen-note="${index}" type="text" maxlength="300" class="mt-1 w-full border rounded-lg p-2 text-sm" placeholder="Reason for a manual adjustment">
+                <label class="text-xs text-slate-600">${isAdmin ? 'Remarks (required for waived days)' : 'Remarks'}
+                    <input data-gen-note="${index}" type="text" maxlength="300" class="mt-1 w-full border rounded-lg p-2 text-sm" placeholder="${isAdmin ? 'Reason for waiving leave/late deduction' : 'Reason for a manual adjustment'}">
                 </label>
             </div>
         </article>`).join('');
@@ -2295,14 +2362,22 @@ async function confirmGeneratePayroll() {
         const base = payrollGenDrafts[index];
         const daysValue = $(`genPayrollRows`).querySelector(`[data-gen-days="${index}"]`).value;
         const leavesValue = $(`genPayrollRows`).querySelector(`[data-gen-leaves="${index}"]`).value;
+        const lateDaysValue = $(`genPayrollRows`).querySelector(`[data-gen-late-days="${index}"]`).value;
         const securityValue = $(`genPayrollRows`).querySelector(`[data-gen-security="${index}"]`).value;
         const note = $(`genPayrollRows`).querySelector(`[data-gen-note="${index}"]`).value.trim();
-        const salaryDays = Number(daysValue), leaves = Number(leavesValue), security = Number(securityValue);
+        const salaryDays = Number(daysValue), leaves = Number(leavesValue), lateDeductionDays = Number(lateDaysValue), security = Number(securityValue);
+        const isAdmin = ME && ME.role === 'Admin';
         if(!Number.isInteger(salaryDays) || salaryDays < 0 || salaryDays > PAYROLL_DIVISOR) {
             toast(`${base.staff.name}: salary days must be a whole number from 0 to 30.`, false); return;
         }
-        if(!Number.isInteger(leaves) || leaves < 0 || leaves > PAYROLL_DIVISOR || leaves > salaryDays) {
-            toast(`${base.staff.name}: deductible leave days must be a whole number no greater than salary days.`, false); return;
+        if(!Number.isInteger(leaves) || leaves < 0 || leaves > base.defaultLeaves || leaves > salaryDays) {
+            toast(`${base.staff.name}: deductible leave days must be a whole number from 0 to ${Math.min(base.defaultLeaves, salaryDays)}.`, false); return;
+        }
+        if(!Number.isInteger(lateDeductionDays) || lateDeductionDays < 0 || lateDeductionDays > base.defaultLateDeductionDays) {
+            toast(`${base.staff.name}: late deduction days must be a whole number from 0 to ${base.defaultLateDeductionDays}.`, false); return;
+        }
+        if(!isAdmin && (leaves !== base.defaultLeaves || lateDeductionDays !== base.defaultLateDeductionDays)) {
+            toast(`${base.staff.name}: sirf Admin off/late deductions waive kar sakta hai.`, false); return;
         }
         if(!Number.isFinite(security) || security < 0) {
             toast(`${base.staff.name}: security deduction must be zero or a positive amount.`, false); return;
@@ -2310,14 +2385,15 @@ async function confirmGeneratePayroll() {
         if(Math.round(security * 100) / 100 !== security) {
             toast(`${base.staff.name}: security deduction must have at most two decimal places.`, false); return;
         }
-        const preview = calcPay(base.staff.base, leaves, 0, 0, 0, base.lateCount, salaryDays);
+        const preview = calcPay(base.staff.base, leaves, 0, 0, 0, base.lateCount, salaryDays, 0, lateDeductionDays);
         if(security > preview.beforeSecurity) {
             toast(`${base.staff.name}: security deduction cannot exceed salary payable before security (PKR ${fmt(preview.beforeSecurity)}).`, false); return;
         }
-        if((salaryDays !== PAYROLL_DIVISOR || leaves !== base.defaultLeaves || security > 0) && !note) {
-            toast(`${base.staff.name}: enter a reason for a manual salary or security deduction.`, false); return;
+        if((salaryDays !== PAYROLL_DIVISOR || leaves !== base.defaultLeaves ||
+            lateDeductionDays !== base.defaultLateDeductionDays || security > 0) && !note) {
+            toast(`${base.staff.name}: waived days ya manual salary/security adjustment ke liye reason likhein.`, false); return;
         }
-        drafts.push({ ...base, salaryDays, leaves, security, note });
+        drafts.push({ ...base, salaryDays, leaves, lateDeductionDays, security, note });
     }
 
     closeModal('genPayrollModal');
@@ -2346,16 +2422,22 @@ async function confirmGeneratePayroll() {
             const bonus = qualifiesForNoLeaveBonus(draft.absenceCount, draft.excusedLeaves, draft.leaves) && draft.salaryDays > 0
                 ? Math.round(s.base / PAYROLL_DIVISOR)
                 : 0;
-            const calc = calcPay(s.base, draft.leaves, bonus, 0, 0, draft.lateCount, draft.salaryDays, draft.security);
+            const calc = calcPay(s.base, draft.leaves, bonus, 0, 0, draft.lateCount, draft.salaryDays, draft.security, draft.lateDeductionDays);
             const autoNote = draft.missingDays ? `${draft.missingDays} unmarked workday(s) were marked Present.` : '';
+            const waivedLeaveDays = Math.max(0, draft.defaultLeaves - draft.leaves);
+            const waivedLateDays = Math.max(0, draft.defaultLateDeductionDays - draft.lateDeductionDays);
+            const waiverNote = [
+                waivedLeaveDays ? `Admin waived ${waivedLeaveDays} off/leave deduction day(s).` : '',
+                waivedLateDays ? `Admin waived ${waivedLateDays} late deduction day(s).` : ''
+            ].filter(Boolean).join(' ');
             const note = [draft.note ? `Manual payroll adjustment: ${draft.note}` : '', autoNote].filter(Boolean).join(' ');
             return { staff_id: s.staffId, staff_name: s.name, designation: s.designation, month, base_salary: s.base,
                 leaves: draft.leaves, absence_count: draft.absenceCount, excused_leaves: draft.excusedLeaves,
                 leave_deduction: calc.ded, working_days: PAYROLL_DIVISOR, salary_days: draft.salaryDays,
                 security_deduction: draft.security,
-                late_count: draft.lateCount, excused_lates: draft.excusedLates, late_deduction: calc.lateDed,
+                late_count: draft.lateCount, excused_lates: draft.excusedLates, late_deduction_days: draft.lateDeductionDays, late_deduction: calc.lateDed,
                 attendance_days: draft.markedDays + draft.missingDays, bonus, fine: 0, advance: 0,
-                net_salary: calc.net, status: 'Unpaid', notes: note || null };
+                net_salary: calc.net, status: 'Unpaid', notes: [note, waiverNote].filter(Boolean).join(' ') || null };
         });
         const response = await fetch(`${c.url}/rest/v1/payroll?on_conflict=staff_id,month`, {
             method: 'POST', headers: sbHeaders({ ...JSON_H, Prefer: 'resolution=ignore-duplicates,return=representation' }),
@@ -2394,13 +2476,21 @@ async function confirmGeneratePayroll() {
 function openAdjust(id) {
     let p = payById[id]; if(!p || p.status === 'Paid') return;
     adjId = id;
+    const isAdmin = ME && ME.role === 'Admin';
     $('adjTitle').innerText = 'Adjust salary'; $('adjSub').innerText = `${p.name} · ${monthLabel(p.month)}`;
-    $('adjBase').value = p.base; $('adjSalaryDays').value = p.salaryDays; $('adjLeaves').value = p.leaves; $('adjSecurity').value = p.security; $('adjLate').value = p.lateCount; $('adjBonus').value = p.bonus; $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
+    const defaultLateDeductionDays = Math.floor(Math.max(0, p.lateCount) / 3);
+    $('adjBase').value = p.base; $('adjSalaryDays').value = p.salaryDays; $('adjLeaves').value = p.leaves;
+    $('adjLeaves').disabled = !isAdmin;
+    $('adjLateDeductionDays').value = p.lateDeductionDays === null ? defaultLateDeductionDays : p.lateDeductionDays;
+    $('adjLateDeductionDays').max = defaultLateDeductionDays;
+    $('adjLateDeductionDays').disabled = !isAdmin;
+    $('adjSecurity').value = p.security; $('adjLate').value = p.lateCount; $('adjBonus').value = p.bonus;
+    $('adjFine').value = p.fine; $('adjAdv').value = p.advance; $('adjNotes').value = p.notes;
     let s = staff.find(x => x.staffId === p.staffId), hint = $('adjJoinHint');
     if(s && s.joining && s.joining > monthStart(p.month) && s.joining <= monthEnd(p.month)) { hint.innerText = `${p.name} joined on ${fmtDate(s.joining)} — adjust the base salary if this month should be pro-rata.`; hint.classList.remove('hidden'); } else hint.classList.add('hidden');
     calcAdj(); openModal('adjModal');
 }
-function adjVals() { return { base: parseFloat($('adjBase').value) || 0, salaryDays: parseFloat($('adjSalaryDays').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, security: parseFloat($('adjSecurity').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
+function adjVals() { return { base: parseFloat($('adjBase').value) || 0, salaryDays: parseFloat($('adjSalaryDays').value) || 0, leaves: parseFloat($('adjLeaves').value) || 0, lateDeductionDays: parseFloat($('adjLateDeductionDays').value) || 0, security: parseFloat($('adjSecurity').value) || 0, bonus: parseFloat($('adjBonus').value) || 0, fine: parseFloat($('adjFine').value) || 0, adv: parseFloat($('adjAdv').value) || 0 }; }
 function calcAdj() {
     let v = adjVals(), p = payById[adjId];
     const bonusEligible = !!p && qualifiesForNoLeaveBonus(p.absenceCount, p.excusedLeaves, v.leaves);
@@ -2410,12 +2500,12 @@ function calcAdj() {
     $('adjBonusRule').innerText = bonusEligible
         ? 'Available only when no leave is recorded.'
         : 'No bonus: at least one leave is recorded.';
-    let r = calcPay(v.base, v.leaves, bonus, v.fine, v.adv, p ? p.lateCount : 0, v.salaryDays, v.security);
+    let r = calcPay(v.base, v.leaves, bonus, v.fine, v.adv, p ? p.lateCount : 0, v.salaryDays, v.security, v.lateDeductionDays);
     r.bonus = bonus;
     $('bdBase').innerText = fmt(v.base); $('bdLeave').innerText = '− ' + fmt(r.ded);
     $('bdLeaveLbl').innerText = `Leave deduction (${fmt(r.billable)} day${r.billable === 1 ? '' : 's'} × ${fmt(Math.round(r.daily))})`;
     $('bdLate').innerText = '− ' + fmt(r.lateDed);
-    $('bdLateLbl').innerText = `Late deduction (${p ? p.lateCount : 0} late mark(s), one day per 3)`;
+    $('bdLateLbl').innerText = `Late deduction (${fmt(r.lateDays)} day(s) applied of ${p ? Math.floor(p.lateCount / 3) : 0} default)`;
     $('bdSecurity').innerText = '− ' + fmt(v.security);
     $('bdBonus').innerText = '+ ' + fmt(r.bonus); $('bdFine').innerText = '− ' + fmt(v.fine + v.adv); $('bdNet').innerText = 'PKR ' + fmt(r.net);
     return r;
@@ -2430,26 +2520,42 @@ async function saveAdjust() {
     if(!Number.isInteger(v.leaves) || v.leaves < 0 || v.leaves > PAYROLL_DIVISOR || v.leaves > v.salaryDays) {
         toast('Deductible leave days must be a whole number no greater than salary days.', false); return;
     }
+    const defaultLateDeductionDays = Math.floor(Math.max(0, p.lateCount) / 3);
+    if(!Number.isInteger(v.lateDeductionDays) || v.lateDeductionDays < 0 || v.lateDeductionDays > defaultLateDeductionDays) {
+        toast(`Late deduction days must be a whole number from 0 to ${defaultLateDeductionDays}.`, false); return;
+    }
+    if((!ME || ME.role !== 'Admin') &&
+        (v.leaves !== p.leaves || v.lateDeductionDays !== (p.lateDeductionDays === null ? defaultLateDeductionDays : p.lateDeductionDays))) {
+        toast('Off ya late deduction sirf Admin waive kar sakta hai.', false); return;
+    }
     if(!Number.isFinite(v.security) || v.security < 0) {
         toast('Security deduction must be zero or a positive amount.', false); return;
     }
     if(Math.round(v.security * 100) / 100 !== v.security) {
         toast('Security deduction must have at most two decimal places.', false); return;
     }
-    const beforeSecurity = calcPay(v.base, v.leaves, r.bonus, v.fine, v.adv, p.lateCount, v.salaryDays);
+    const beforeSecurity = calcPay(v.base, v.leaves, r.bonus, v.fine, v.adv, p.lateCount, v.salaryDays, 0, v.lateDeductionDays);
     if(v.security > beforeSecurity.beforeSecurity) {
         toast(`Security deduction cannot exceed salary payable before security (PKR ${fmt(beforeSecurity.beforeSecurity)}).`, false); return;
     }
-    if((v.salaryDays !== p.salaryDays || v.leaves !== p.leaves || v.security !== p.security) && !notes) {
-        toast('Enter a reason when changing salary days, leave deduction, or security deduction.', false); return;
+    if((v.salaryDays !== p.salaryDays || v.leaves !== p.leaves || v.security !== p.security ||
+        v.lateDeductionDays !== (p.lateDeductionDays === null ? defaultLateDeductionDays : p.lateDeductionDays)) && !notes) {
+        toast('Waived days ya salary/security adjustment ke liye reason likhein.', false); return;
     }
+    const waivedLeaveDays = Math.max(0, p.absenceCount - p.excusedLeaves - v.leaves);
+    const waivedLateDays = payrollWaivedLateDays({ ...p, lateDeductionDays: v.lateDeductionDays });
+    const waiverNote = [
+        waivedLeaveDays ? `Admin waived ${waivedLeaveDays} off/leave deduction day(s).` : '',
+        waivedLateDays ? `Admin waived ${waivedLateDays} late deduction day(s).` : ''
+    ].filter(Boolean).join(' ');
+    const payrollNotes = [notes || null, waiverNote || null].filter(Boolean).join(' ') || null;
     showLoading('Saving...');
     let rollbackSecurity = null;
     try {
         let c = getSupabaseConfig();
         rollbackSecurity = await saveSecurityDeduction(p, v.security, monthEnd(p.month), notes || p.notes);
         let res = await fetch(`${c.url}/rest/v1/payroll?id=eq.${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: sbHeaders({ ...JSON_H, "Prefer": "return=minimal" }),
-            body: JSON.stringify({ base_salary: v.base, leaves: v.leaves, absence_count: p.absenceCount, excused_leaves: p.excusedLeaves, leave_deduction: r.ded, working_days: PAYROLL_DIVISOR, salary_days: v.salaryDays, security_deduction: v.security, late_count: p.lateCount, excused_lates: p.excusedLates, late_deduction: r.lateDed, attendance_days: p.attendanceDays, bonus: r.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: notes || null }) });
+            body: JSON.stringify({ base_salary: v.base, leaves: v.leaves, absence_count: p.absenceCount, excused_leaves: p.excusedLeaves, leave_deduction: r.ded, working_days: PAYROLL_DIVISOR, salary_days: v.salaryDays, security_deduction: v.security, late_count: p.lateCount, excused_lates: p.excusedLates, late_deduction_days: v.lateDeductionDays, late_deduction: r.lateDed, attendance_days: p.attendanceDays, bonus: r.bonus, fine: v.fine, advance: v.adv, net_salary: r.net, notes: payrollNotes }) });
         if(!res.ok) {
             await rollbackSecurity();
             rollbackSecurity = null;
@@ -2704,7 +2810,7 @@ function exportCsv(name, header, rows) {
     a.download = `${name}-${todayStr()}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function exportStaffCsv() { let l = staffList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('staff', ['Staff ID', 'Fingerprint device ID', 'Name', 'Designation', 'Joining date', 'Phone', 'Base salary', 'Status'], l.map(s => [s.staffId, attendanceDeviceId(s.staffId), s.name, s.designation, s.joining, s.phone, s.base, s.status])); }
-function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Salary divisor', 'Attendance days', 'Absent days', 'Excused absences', 'Deductible absences', 'Absence deduction', 'Late marks', 'Excused lates', 'Deductible late marks', 'Late deduction', 'Security withheld', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.attendanceDays, p.absenceCount, p.excusedLeaves, p.leaves, p.leaveDed, p.lateCount + p.excusedLates, p.excusedLates, p.lateCount, p.lateDed, p.security, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate])); }
+function exportPayrollCsv() { let l = payrollList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('payroll-' + curMonth(), ['Staff', 'Designation', 'Month', 'Base', 'Salary divisor', 'Attendance days', 'Absent days', 'Excused absences', 'Waived off days', 'Deductible absences', 'Absence deduction', 'Late marks', 'Excused lates', 'Waived late deduction days', 'Deductible late days', 'Late deduction', 'Security withheld', 'Bonus', 'Fine', 'Advance', 'Net salary', 'Status', 'Paid date', 'Remarks'], l.map(p => [p.name, p.designation, p.month, p.base, p.workingDays, p.attendanceDays, p.absenceCount, p.excusedLeaves, payrollWaivedLeaveDays(p), p.leaves, p.leaveDed, p.lateCount + p.excusedLates, p.excusedLates, payrollWaivedLateDays(p), payrollLateDeductionDays(p), p.lateDed, p.security, p.bonus, p.fine, p.advance, p.net, p.status, p.paidDate, p.notes])); }
 function exportHistoryCsv() { let l = historyList(); if(!l.length) { toast('No records to export.', false); return; } exportCsv('salary-payments', ['Paid on', 'Salary month', 'Staff', 'Net paid', 'Account', 'Voucher'], l.map(p => [p.paidDate, p.month, p.name, p.net, p.mode, p.voucher])); }
 
 function printSlip(id) {
@@ -2725,10 +2831,13 @@ function printSlip(id) {
       ${row('Base salary', 'PKR ' + fmt(p.base))}
       ${row('Absent days (including excused)', fmt(p.absenceCount))}
       ${row('Excused absences', fmt(p.excusedLeaves))}
+      ${row('Off deduction days waived by Admin', fmt(payrollWaivedLeaveDays(p)))}
       ${row('Absence deduction', '− PKR ' + fmt(p.leaveDed), 'neg')}
       ${row('Late arrivals (including excused)', fmt(p.lateCount + p.excusedLates))}
       ${row('Excused late marks', fmt(p.excusedLates))}
+      ${row('Late deduction days waived by Admin', fmt(payrollWaivedLateDays(p)))}
       ${row('Late deduction', '− PKR ' + fmt(p.lateDed), 'neg')}
+      ${p.notes ? row('Remarks', esc(p.notes)) : ''}
       ${row('Security withheld (payable)', '− PKR ' + fmt(p.security), 'neg')}
       ${row('Bonus', '+ PKR ' + fmt(p.bonus), 'pos')}
       ${row('Fine', '− PKR ' + fmt(p.fine), 'neg')}
