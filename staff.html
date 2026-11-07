@@ -371,7 +371,7 @@
                 <button onclick="closeModal('genPayrollModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
             </div>
             <div class="p-5 space-y-3">
-                <p class="text-xs text-slate-600 bg-indigo-50 border border-indigo-100 rounded-xl p-3">Set salary days, deductible leave days and this month's security deduction for each staff member. Any leave, including a manually entered leave day, disqualifies the no-absence bonus. Security is withheld from salary and added to the school's payable liability. Unmarked workdays will be saved as Present without changing saved attendance. Add a reason for manual overrides.</p>
+                <p class="text-xs text-slate-600 bg-indigo-50 border border-indigo-100 rounded-xl p-3">Set salary days and security deduction for each staff member. Admin deductible off/leave days aur late deduction days ko kam ya zero kar sakta hai; har waiver ke liye Remarks mein reason lazmi hai. Actual attendance counts change nahi honge. Any recorded leave still disqualifies the no-absence bonus. Security is withheld from salary and added to the school's payable liability. Unmarked workdays will be saved as Present without changing saved attendance.</p>
                 <div id="genPayrollRows" class="space-y-3"></div>
             </div>
             <div class="p-5 border-t flex justify-end gap-2 sticky bottom-0 bg-white">
@@ -393,19 +393,19 @@
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Base salary</label><input id="adjBase" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Salary days (0–30)</label><input id="adjSalaryDays" type="number" min="0" max="30" step="1" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Deductible leave days</label><input id="adjLeaves" type="number" min="0" max="30" step="1" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Deductible off/leave days</label><input id="adjLeaves" type="number" min="0" max="30" step="1" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Security deduction (PKR)</label><input id="adjSecurity" type="number" min="0" step="0.01" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-xs font-medium text-slate-700 mb-1">Late marks</label><input id="adjLate" type="number" min="0" readonly class="w-full border rounded-lg p-2.5 text-sm bg-slate-100 outline-none"></div>
-                    <div class="text-[11px] text-slate-500 self-end pb-2">Daily rate = base salary ÷ 30</div>
+                    <div><label class="block text-xs font-medium text-slate-700 mb-1">Late deduction days (Admin can waive)</label><input id="adjLateDeductionDays" type="number" min="0" step="1" oninput="calcAdj()" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                 </div>
                 <div class="grid grid-cols-3 gap-3 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
                     <div><label class="block text-xs font-medium text-emerald-700 mb-1">Bonus (+)</label><input id="adjBonus" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"><p id="adjBonusRule" class="mt-1 text-[10px] text-slate-500"></p></div>
                     <div><label class="block text-xs font-medium text-rose-700 mb-1">Fine (−)</label><input id="adjFine" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"></div>
                     <div><label class="block text-xs font-medium text-amber-700 mb-1">Advance (−)</label><input id="adjAdv" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"></div>
                 </div>
-                <div><label class="block text-xs font-medium text-slate-700 mb-1">Remarks <span class="text-slate-400">(required when salary days or leave deduction is changed)</span></label><input id="adjNotes" type="text" maxlength="300" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
+                <div><label class="block text-xs font-medium text-slate-700 mb-1">Remarks <span class="text-slate-400">(waived off/late days ke liye reason zaroori)</span></label><input id="adjNotes" type="text" maxlength="300" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                 <div class="bg-slate-50 border rounded-xl p-4 text-sm space-y-1">
                     <div class="flex justify-between"><span class="text-slate-500">Base salary</span><b id="bdBase">0</b></div>
                     <div class="flex justify-between"><span class="text-slate-500" id="bdLeaveLbl">Leave deduction</span><b id="bdLeave" class="text-rose-600">0</b></div>
@@ -524,6 +524,6 @@
     <!-- SETTINGS -->
     
 
-<script src="js/pages/staff.js?v=20261104-3"></script>
+<script src="js/pages/staff.js?v=20261107-1"></script>
 </body>
 </html>
