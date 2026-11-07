@@ -28,6 +28,7 @@ let entries = [], entryById = {}, feesByVoucher = {};
 let fixedAssets = [], fixedAssetEvents = [], fixedAssetsLoaded = false;
 let BUSINESS_PARTNERS = [];
 let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
+let payrollWaiverCandidates = [], payrollWaiverRequests = [], payrollWaiverDataError = '';
 let dbLimit = 300;
 let dbSelectedEntries = new Set();
 let editingId = null, entryKind = 'receipt';
@@ -203,12 +204,140 @@ async function initAccounts() {
         billEntries = allE.filter(e => e.kind === 'bill_raised' || e.kind === 'bill_received');
         entries = allE.filter(e => e.kind !== 'bill_raised' && e.kind !== 'bill_received');
         if(!$('gFrom').value) applyPreset();
+        await loadPayrollWaiverData();
         renderAll();
     } catch (e) {
         console.error(e);
         toast('Could not load data. Check your internet connection or API settings.', false);
     }
     hideLoading();
+}
+
+async function loadPayrollWaiverData() {
+        payrollWaiverCandidates = [];
+        payrollWaiverRequests = [];
+        payrollWaiverDataError = '';
+        const config = getSupabaseConfig();
+        try {
+            const requestResponse = await ERP.db.request(
+                'payroll_waiver_requests',
+                'select=id,payroll_id,staff_name,month,current_leave_days,requested_leave_days,current_late_days,requested_late_days,reason,requested_by,status,reviewed_at,admin_note,created_at&order=created_at.desc'
+            );
+            if(!requestResponse.ok) throw new Error('Could not load waiver requests: ' + await requestResponse.text());
+            const requestRows = await requestResponse.json();
+            if(!Array.isArray(requestRows)) throw new Error('Waiver requests response was not a list.');
+            payrollWaiverRequests = requestRows;
+
+            if(can('accounts', 'a')) {
+                const candidateResponse = await fetch(`${config.url}/rest/v1/rpc/list_payroll_waiver_candidates`, {
+                    method: 'POST',
+                    headers: sbHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({})
+                });
+                if(!candidateResponse.ok) throw new Error('Could not load payroll waiver options: ' + await candidateResponse.text());
+                const candidates = await candidateResponse.json();
+                if(!Array.isArray(candidates)) throw new Error('Payroll waiver options response was not a list.');
+                payrollWaiverCandidates = candidates;
+            }
+        } catch(error) {
+            payrollWaiverDataError = error.message || 'Could not load payroll waiver data.';
+            console.error('Could not load payroll waiver data:', error);
+        }
+        renderPayrollWaiverTab();
+}
+
+function renderPayrollWaiverTab() {
+        const form = $('payrollWaiverRequestForm');
+        const canRequest = can('accounts', 'a');
+        form.classList.toggle('hidden', !canRequest);
+        const notice = $('payrollWaiverRequestNotice');
+        if(payrollWaiverDataError) {
+            notice.className = 'rounded-xl p-3 text-sm bg-amber-50 border border-amber-200 text-amber-900';
+            notice.textContent = `${payrollWaiverDataError} Check that the updated staff/payroll setup SQL has been run.`;
+            notice.classList.remove('hidden');
+        } else if(canRequest && !payrollWaiverCandidates.length) {
+            notice.className = 'rounded-xl p-3 text-sm bg-slate-50 border border-slate-200 text-slate-600';
+            notice.textContent = 'There are no unpaid payroll deductions available for a new request, or each eligible payroll already has a pending request.';
+            notice.classList.remove('hidden');
+        } else {
+            notice.classList.add('hidden');
+        }
+
+        const select = $('waiverPayroll');
+        if(select) {
+            const current = select.value;
+            select.innerHTML = payrollWaiverCandidates.length
+                ? '<option value="">- Select staff and month -</option>' + payrollWaiverCandidates.map(row =>
+                    `<option value="${esc(row.payroll_id)}">${esc(row.staff_name)} · ${esc(row.month)} · Off ${fmt(row.current_leave_days)} · Late ${fmt(row.current_late_days)}</option>`
+                ).join('')
+                : '<option value="">No eligible unpaid payroll</option>';
+            if(payrollWaiverCandidates.some(row => String(row.payroll_id) === current)) select.value = current;
+            updatePayrollWaiverSelection();
+        }
+
+        $('payrollWaiverRequestList').innerHTML = payrollWaiverRequests.length ? `
+            <div class="overflow-x-auto"><table class="w-full min-w-[700px] text-left text-xs">
+                <thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Staff / month</th><th class="p-2">Requested deduction days</th><th class="p-2">Reason</th><th class="p-2">Status</th><th class="p-2">Admin note</th></tr></thead>
+                <tbody>${payrollWaiverRequests.map(row => `<tr class="border-b align-top">
+                    <td class="p-2"><b>${esc(row.staff_name)}</b><div class="text-slate-500">${esc(row.month)}</div></td>
+                    <td class="p-2">Off ${fmt(row.current_leave_days)} → ${fmt(row.requested_leave_days)}<br>Late ${fmt(row.current_late_days)} → ${fmt(row.requested_late_days)}</td>
+                    <td class="p-2 whitespace-normal">${esc(row.reason)}</td>
+                    <td class="p-2"><span class="rounded-full px-2 py-1 ${row.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : row.status === 'Rejected' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}">${esc(row.status)}</span></td>
+                    <td class="p-2 whitespace-normal">${esc(row.admin_note || '-')}</td>
+                </tr>`).join('')}</tbody>
+            </table></div>` : `<p class="text-sm text-slate-500">${payrollWaiverDataError ? 'Request history is unavailable until setup is complete.' : 'No waiver requests yet.'}</p>`;
+}
+
+function updatePayrollWaiverSelection() {
+        const candidate = payrollWaiverCandidates.find(row => String(row.payroll_id) === $('waiverPayroll').value);
+        const leaveInput = $('waiverLeaveDays'), lateInput = $('waiverLateDays');
+        leaveInput.value = candidate ? candidate.current_leave_days : '';
+        leaveInput.max = candidate ? candidate.current_leave_days : '0';
+        lateInput.value = candidate ? candidate.current_late_days : '';
+        lateInput.max = candidate ? candidate.current_late_days : '0';
+        leaveInput.disabled = !candidate;
+        lateInput.disabled = !candidate;
+        $('waiverLeaveCurrent').textContent = candidate ? `Current deduction: ${fmt(candidate.current_leave_days)} day(s)` : '';
+        $('waiverLateCurrent').textContent = candidate ? `Current deduction: ${fmt(candidate.current_late_days)} day(s)` : '';
+}
+
+async function submitPayrollWaiverRequest() {
+        if(!can('accounts', 'a')) { toast('Accounts Add permission is required to request a waiver.', false); return; }
+        const candidate = payrollWaiverCandidates.find(row => String(row.payroll_id) === $('waiverPayroll').value);
+        const leaveDays = Number($('waiverLeaveDays').value), lateDays = Number($('waiverLateDays').value);
+        const reason = $('waiverReason').value.trim();
+        if(!candidate) { toast('Select an eligible unpaid staff payroll.', false); return; }
+        if(!Number.isInteger(leaveDays) || leaveDays < 0 || leaveDays > Number(candidate.current_leave_days)
+            || !Number.isInteger(lateDays) || lateDays < 0 || lateDays > Number(candidate.current_late_days)) {
+            toast('Requested deduction days must be whole numbers within the current deduction limits.', false); return;
+        }
+        if(leaveDays === Number(candidate.current_leave_days) && lateDays === Number(candidate.current_late_days)) {
+            toast('Reduce at least one off/leave or late deduction day.', false); return;
+        }
+        if(!reason || reason.length > 300) { toast('Enter a reason of 1 to 300 characters.', false); return; }
+
+        showLoading('Sending waiver request...');
+        try {
+            const config = getSupabaseConfig();
+            const response = await fetch(`${config.url}/rest/v1/rpc/request_payroll_waiver`, {
+                method: 'POST',
+                headers: sbHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    p_payroll_id: Number(candidate.payroll_id),
+                    p_leave_days: leaveDays,
+                    p_late_days: lateDays,
+                    p_reason: reason
+                })
+            });
+            if(!response.ok) throw new Error('Could not send waiver request: ' + await response.text());
+            $('waiverReason').value = '';
+            toast('Waiver request sent to Admin for approval.');
+            await loadPayrollWaiverData();
+        } catch(error) {
+            toast(error.message || 'Could not send waiver request.', false);
+        } finally {
+            hideLoading();
+        }
 }
 
 const ASSET_EVENT_LABELS = { opening: 'Opening asset', purchase: 'Purchase', sale: 'Sale', depreciation: 'Depreciation' };
@@ -424,7 +553,7 @@ function scopeList() {
 //  TABS + RENDER
 // ====================================================================================
 function showTab(t) {
-    ['overview', 'daybook', 'fees', 'heads', 'wallets', 'dues', 'assets'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+    ['overview', 'daybook', 'fees', 'heads', 'wallets', 'dues', 'assets', 'waivers'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
     document.querySelectorAll('.tabbtn').forEach(b => { b.classList.toggle('tab-on', b.dataset.tab === t); b.classList.toggle('tab-off', b.dataset.tab !== t); });
     if (t === 'overview') renderOverview();
     else if (t === 'daybook') renderDaybook();
@@ -436,7 +565,8 @@ function showTab(t) {
         if (!fixedAssetsLoaded) loadFixedAssets();
         else renderFixedAssets();
     }
-    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable', assets: 'Purchases / Assets' };
+    else if (t === 'waivers') renderPayrollWaiverTab();
+    const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable', assets: 'Purchases / Assets', waivers: 'Payroll Waivers' };
     let r = getRange();
     $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;
 }
