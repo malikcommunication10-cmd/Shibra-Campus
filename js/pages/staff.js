@@ -363,8 +363,8 @@ security definer
 set search_path = pg_catalog, public, auth
 as $$
 begin
-  if not (public.app_has_page_permission('accounts', 'a') or public.app_has_page_permission('accounts', 'e')) then
-    raise exception 'Accounts Add or Edit permission is required to request a payroll waiver.';
+  if not (public.app_has_page_permission('accounts', 'v') or public.app_has_page_permission('accounts', 'a') or public.app_has_page_permission('accounts', 'e')) then
+    raise exception 'Accounts permission is required to request a payroll waiver.';
   end if;
 
   return query
@@ -403,8 +403,8 @@ declare
   v_request_id bigint;
   v_email text := lower(coalesce(auth.jwt() ->> 'email', ''));
 begin
-  if not (public.app_has_page_permission('accounts', 'a') or public.app_has_page_permission('accounts', 'e')) then
-    raise exception 'Accounts Add or Edit permission is required to request a payroll waiver.';
+  if not (public.app_has_page_permission('accounts', 'v') or public.app_has_page_permission('accounts', 'a') or public.app_has_page_permission('accounts', 'e')) then
+    raise exception 'Accounts permission is required to request a payroll waiver.';
   end if;
   if nullif(btrim(coalesce(p_reason, '')), '') is null or length(btrim(p_reason)) > 300 then
     raise exception 'Enter a waiver reason of 1 to 300 characters.';
@@ -947,14 +947,14 @@ async function initStaff() {
             ERP.db.request('staff_security_ledger', 'select=*'),
             ERP.db.request('staff_salary_increments', 'select=*'),
             ERP.db.request('staff_attendance_device_map', 'select=*'),
-            ME && ME.role === 'Admin'
+            ME && (ME.role === 'Admin' || can('accounts', 'v'))
                 ? ERP.db.request('payroll_waiver_requests', 'select=*&order=created_at.desc')
                 : Promise.resolve(null)
         ]);
         payrollWaiverRequests = [];
         payrollWaiverRequestsReady = false;
         payrollWaiverRequestsError = '';
-        if(ME && ME.role === 'Admin') {
+        if(ME && (ME.role === 'Admin' || can('accounts', 'v'))) {
             if(waiverRequestsRes && waiverRequestsRes.ok) {
                 const requestRows = await waiverRequestsRes.json();
                 if(Array.isArray(requestRows)) {
@@ -2502,9 +2502,19 @@ function renderPayroll() {
         { t: 'Pending', v: 'PKR ' + fmt(net - paid), c: net - paid > 0 ? 'text-rose-600' : 'text-emerald-600' }
     ].map(card).join('');
     renderPayrollWaiverApprovals();
+    const canRequestWaiver = ME && ME.role !== 'Admin' && (can('accounts', 'v') || can('accounts', 'a') || can('accounts', 'e'));
+    const hasPendingWaiver = p => payrollWaiverRequests.some(request =>
+        String(request.payroll_id) === String(p.id) && request.status === 'Pending'
+    );
+    const waiverAction = p => canRequestWaiver && p.status === 'Unpaid'
+        && (p.leaves > 0 || payrollLateDeductionDays(p) > 0)
+        ? hasPendingWaiver(p)
+            ? '<span class="px-2 py-1 text-[10px] bg-amber-50 text-amber-700 rounded font-semibold">Waiver pending</span>'
+            : `<button onclick="openPayrollWaiverRequest(${js(p.id)})" title="Request Admin approval to reduce deductions" class="px-2 py-1 text-[11px] bg-violet-50 hover:bg-violet-100 text-violet-700 rounded font-semibold">Request waiver</button>`
+        : '';
     const acts = p => p.status === 'Paid'
         ? `<button onclick="printSlip(${js(p.id)})" title="Salary slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button><button onclick="undoPay(${js(p.id)})" title="Undo payment" class="px-2 py-1 text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-700 rounded font-semibold">Undo</button>`
-        : `<button onclick="openAdjust(${js(p.id)})" title="Adjust salary" class="px-1.5 hover:bg-slate-100 rounded">✏️</button><button onclick="openPay(${js(p.id)})" class="px-2 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold">Pay</button><button onclick="printSlip(${js(p.id)})" title="Salary slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button><button onclick="removePayrollRow(${js(p.id)})" title="Remove from this month" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`;
+        : `${waiverAction(p)}<button onclick="openAdjust(${js(p.id)})" title="Adjust salary" class="px-1.5 hover:bg-slate-100 rounded">✏️</button><button onclick="openPay(${js(p.id)})" class="px-2 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold">Pay</button><button onclick="printSlip(${js(p.id)})" title="Salary slip" class="px-1.5 hover:bg-slate-100 rounded">🖨️</button><button onclick="removePayrollRow(${js(p.id)})" title="Remove from this month" class="px-1.5 hover:bg-rose-50 rounded">🗑️</button>`;
     $('prBody').innerHTML = list.length ? list.map(p => `<tr class="border-b hover:bg-slate-50 align-top">
         <td class="p-2.5"><div class="flex items-center gap-2">${avatar(p.name)}<div><div class="font-semibold text-slate-800">${esc(p.name)}</div><div class="text-[11px] text-slate-400">${esc(p.designation)}</div></div></div></td>
         <td class="p-2.5 text-right">${fmt(p.base)}</td><td class="p-2.5 text-right">${p.absenceCount ? `${fmt(p.absenceCount)}${p.excusedLeaves ? ` (${fmt(p.excusedLeaves)} excused)` : ''}${payrollWaivedLeaveDays(p) ? ` (${fmt(payrollWaivedLeaveDays(p))} waived)` : ''}` : '-'}</td>
@@ -2524,6 +2534,73 @@ function renderPayroll() {
         <div class="flex items-end justify-between mt-2"><div class="text-xs text-slate-500">${p.attendanceDays ? `${p.attendanceDays} marked days` : ''}${p.paidDate ? `<div>Paid ${fmtDate(p.paidDate)}</div>` : ''}</div><div class="text-xl font-extrabold">PKR ${fmt(p.net)}</div></div>
         <div class="flex justify-end items-center gap-1 mt-2 border-t pt-2">${acts(p)}</div></div>`).join('')
         : `<div class="bg-white rounded-2xl border p-8 text-center text-slate-400 text-sm">${payrollOk ? `No salary sheet for ${monthLabel(month)} yet.` : 'Payroll table not set up yet.'}</div>`;
+}
+
+let waiverRequestPayrollId = null;
+function openPayrollWaiverRequest(payrollId) {
+    const isAccountant = ME && ME.role !== 'Admin' && (can('accounts', 'v') || can('accounts', 'a') || can('accounts', 'e'));
+    if(!isAccountant) { toast('Accounts permission is required to request a waiver.', false); return; }
+    const p = payById[payrollId];
+    if(!p || p.status !== 'Unpaid') { toast('Only unpaid payroll can have a waiver requested.', false); return; }
+    if(payrollWaiverRequests.some(request => String(request.payroll_id) === String(p.id) && request.status === 'Pending')) {
+        toast('A waiver request for this payroll is already waiting for Admin approval.', false); return;
+    }
+
+    waiverRequestPayrollId = p.id;
+    const currentLateDays = payrollLateDeductionDays(p);
+    $('payrollWaiverRequestSub').textContent = `${p.name} · ${monthLabel(p.month)}`;
+    $('payrollWaiverRequestSummary').textContent =
+        `Current deductions: ${p.leaves} off/leave day(s), ${currentLateDays} late day(s). Approval will update the unpaid payroll; sending this request will not change salary.`;
+    $('payrollWaiverRequestLeaves').value = p.leaves;
+    $('payrollWaiverRequestLeaves').max = p.leaves;
+    $('payrollWaiverRequestLate').value = currentLateDays;
+    $('payrollWaiverRequestLate').max = currentLateDays;
+    $('payrollWaiverRequestReason').value = '';
+    openModal('payrollWaiverRequestModal');
+}
+
+async function submitStaffPayrollWaiverRequest() {
+    const isAccountant = ME && ME.role !== 'Admin' && (can('accounts', 'v') || can('accounts', 'a') || can('accounts', 'e'));
+    if(!isAccountant) { toast('Accounts permission is required to request a waiver.', false); return; }
+    const p = payById[waiverRequestPayrollId];
+    if(!p || p.status !== 'Unpaid') { toast('Payroll is no longer available as unpaid. Refresh and try again.', false); return; }
+
+    const leaveDays = Number($('payrollWaiverRequestLeaves').value);
+    const lateDays = Number($('payrollWaiverRequestLate').value);
+    const currentLateDays = payrollLateDeductionDays(p);
+    const reason = $('payrollWaiverRequestReason').value.trim();
+    if(!Number.isInteger(leaveDays) || leaveDays < 0 || leaveDays > p.leaves
+        || !Number.isInteger(lateDays) || lateDays < 0 || lateDays > currentLateDays) {
+        toast('Requested days must be whole numbers within the current deduction limits.', false); return;
+    }
+    if(leaveDays === p.leaves && lateDays === currentLateDays) {
+        toast('Reduce at least one off/leave or late deduction day.', false); return;
+    }
+    if(!reason || reason.length > 300) { toast('Enter a reason of 1 to 300 characters.', false); return; }
+
+    showLoading('Sending waiver request...');
+    try {
+        const c = getSupabaseConfig();
+        const response = await fetch(`${c.url}/rest/v1/rpc/request_payroll_waiver`, {
+            method: 'POST',
+            headers: sbHeaders({ ...JSON_H, Prefer: 'return=minimal' }),
+            body: JSON.stringify({
+                p_payroll_id: Number(p.id),
+                p_leave_days: leaveDays,
+                p_late_days: lateDays,
+                p_reason: reason
+            })
+        });
+        if(!response.ok) throw new Error(await response.text());
+        closeModal('payrollWaiverRequestModal');
+        toast('Waiver request sent to Admin. Salary will change only after approval.');
+        await initStaff();
+        showTab('payroll');
+    } catch(error) {
+        toast(error.message || 'Could not send waiver request.', false);
+    } finally {
+        hideLoading();
+    }
 }
 
 function renderPayrollWaiverApprovals() {
