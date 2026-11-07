@@ -363,8 +363,8 @@ security definer
 set search_path = pg_catalog, public, auth
 as $$
 begin
-  if not public.app_has_page_permission('accounts', 'a') then
-    raise exception 'Accounts Add permission is required to request a payroll waiver.';
+  if not (public.app_has_page_permission('accounts', 'a') or public.app_has_page_permission('accounts', 'e')) then
+    raise exception 'Accounts Add or Edit permission is required to request a payroll waiver.';
   end if;
 
   return query
@@ -403,8 +403,8 @@ declare
   v_request_id bigint;
   v_email text := lower(coalesce(auth.jwt() ->> 'email', ''));
 begin
-  if not public.app_has_page_permission('accounts', 'a') then
-    raise exception 'Accounts Add permission is required to request a payroll waiver.';
+  if not (public.app_has_page_permission('accounts', 'a') or public.app_has_page_permission('accounts', 'e')) then
+    raise exception 'Accounts Add or Edit permission is required to request a payroll waiver.';
   end if;
   if nullif(btrim(coalesce(p_reason, '')), '') is null or length(btrim(p_reason)) > 300 then
     raise exception 'Enter a waiver reason of 1 to 300 characters.';
