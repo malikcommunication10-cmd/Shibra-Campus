@@ -228,7 +228,7 @@ async function loadPayrollWaiverData() {
             if(!Array.isArray(requestRows)) throw new Error('Waiver requests response was not a list.');
             payrollWaiverRequests = requestRows;
 
-            if(can('accounts', 'a') || can('accounts', 'e')) {
+            if(can('accounts', 'v') || can('accounts', 'a') || can('accounts', 'e')) {
                 const candidateResponse = await fetch(`${config.url}/rest/v1/rpc/list_payroll_waiver_candidates`, {
                     method: 'POST',
                     headers: sbHeaders({ 'Content-Type': 'application/json' }),
@@ -248,7 +248,7 @@ async function loadPayrollWaiverData() {
 
 function renderPayrollWaiverTab() {
         const form = $('payrollWaiverRequestForm');
-        const canRequest = can('accounts', 'a') || can('accounts', 'e');
+        const canRequest = can('accounts', 'v') || can('accounts', 'a') || can('accounts', 'e');
         form.classList.toggle('hidden', !canRequest);
         const notice = $('payrollWaiverRequestNotice');
         if(payrollWaiverDataError) {
@@ -302,7 +302,7 @@ function updatePayrollWaiverSelection() {
 }
 
 async function submitPayrollWaiverRequest() {
-        if(!can('accounts', 'a') && !can('accounts', 'e')) { toast('Accounts Add or Edit permission is required to request a waiver.', false); return; }
+        if(!can('accounts', 'v') && !can('accounts', 'a') && !can('accounts', 'e')) { toast('Accounts permission is required to request a waiver.', false); return; }
         const candidate = payrollWaiverCandidates.find(row => String(row.payroll_id) === $('waiverPayroll').value);
         const leaveDays = Number($('waiverLeaveDays').value), lateDays = Number($('waiverLateDays').value);
         const reason = $('waiverReason').value.trim();
