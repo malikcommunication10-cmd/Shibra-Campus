@@ -430,6 +430,34 @@
         </div>
     </div>
 
+    <div id="payrollWaiverRequestModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-center">
+                <div><h3 class="text-lg font-bold text-indigo-950">Request payroll waiver</h3><p id="payrollWaiverRequestSub" class="text-xs text-slate-500"></p></div>
+                <button onclick="closeModal('payrollWaiverRequestModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2" aria-label="Close">✕</button>
+            </div>
+            <div class="p-5 space-y-3">
+                <p id="payrollWaiverRequestSummary" class="text-xs text-indigo-900 bg-indigo-50 border border-indigo-100 rounded-xl p-3"></p>
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="text-xs text-slate-600">Off/leave deduction days requested
+                        <input id="payrollWaiverRequestLeaves" type="number" min="0" step="1" class="mt-1 w-full border rounded-lg p-2.5 text-sm">
+                    </label>
+                    <label class="text-xs text-slate-600">Late deduction days requested
+                        <input id="payrollWaiverRequestLate" type="number" min="0" step="1" class="mt-1 w-full border rounded-lg p-2.5 text-sm">
+                    </label>
+                </div>
+                <label class="block text-xs text-slate-600">Reason for Admin (required)
+                    <input id="payrollWaiverRequestReason" type="text" maxlength="300" class="mt-1 w-full border rounded-lg p-2.5 text-sm" placeholder="Explain why the deduction should be reduced">
+                </label>
+                <p class="text-[11px] text-slate-500">A request does not edit payroll. The change applies only if an Admin approves it.</p>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2">
+                <button onclick="closeModal('payrollWaiverRequestModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="submitStaffPayrollWaiverRequest()" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm">Send to Admin</button>
+            </div>
+        </div>
+    </div>
+
     <!-- PAY MODAL -->
     <div id="payModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
         <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
@@ -531,6 +559,6 @@
     <!-- SETTINGS -->
     
 
-<script src="js/pages/staff.js?v=20261107-2"></script>
+<script src="js/pages/staff.js?v=20261107-3"></script>
 </body>
 </html>
