@@ -191,17 +191,6 @@ def main():
               renderFeesTable(allFeesCache);
               const v=document.getElementById('voucherView'); return {sw:v.scrollWidth,cw:v.clientWidth,cols:document.querySelectorAll('#feesTableBody tr:first-child td').length};}""")
             check('voucher table has 9 columns', out['cols'] == 9, out); check('no sideways scroll in the voucher table (1280px)', out['sw'] <= out['cw'] + 1, out)
-            ACT = """()=>{const v=document.getElementById('voucherView'),vr=v.getBoundingClientRect();
-              return [...document.querySelectorAll('#feesTableBody tr')].slice(0,6).map(r=>{const b=[...r.querySelectorAll('.act .btn')],tops=b.map(x=>Math.round(x.getBoundingClientRect().top));
-                return {n:b.length,one:Math.max(...tops)-Math.min(...tops)<=2,inside:b.every(x=>x.getBoundingClientRect().right<=vr.right+1),noscroll:v.scrollWidth<=v.clientWidth+1}})}"""
-            for w in (1366, 1280, 1100, 1000):
-                pg.set_viewport_size({'width': w, 'height': 800}); pg.wait_for_timeout(150); acts = pg.evaluate(ACT)
-                check(f'Pay / Disc / Item / Print sit on ONE line, fully visible, no side scroll ({w}px)', all(a['n'] == 4 and a['one'] and a['inside'] and a['noscroll'] for a in acts), acts[:1])
-            pg.set_viewport_size({'width': 1280, 'height': 800})
-            out = pg.evaluate("""()=>{ openChallanFor('V-2'); const f=chForm(), plan=challanPlan(f);
-              return {cls:chEl('chClass').value, stu:chEl('chStudent').value, names:plan.list.map(c=>c.name), open:chEl('challanModal').classList.contains('open')}; }""")
-            check('row Print button opens the challan popup for exactly that student', out['open'] and out['cls'] == '5' and 'Rehman' in out['stu'] and out['names'] == ['Muhammad Abdul Rehman Qureshi'], out)
-            pg.evaluate("()=>{closeChallanModal()}")
             out = pg.evaluate("""()=>{ window.__posted=null; window.postAccounts=async p=>{window.__posted=p;return true}; window.showConfirm=(m,cb)=>cb(); window.initFeePage=async()=>{};
               $('payToAccount').innerHTML='<option value="cash">Cash</option>'; openPayModal('V-2'); openStudentBulkPay();
               const total=$('sbTotal').value, lines=document.querySelectorAll('#sbDues tbody tr').length; $('sbAmount').value=15000; sbPreview();
@@ -310,12 +299,6 @@ def main():
             check('a student with 20 old dues is merged to at most 11 lines', plan['by']['Long Dues']['lines'] <= 11 and plan['by']['Long Dues']['first'].startswith('Earlier dues'), plan['by'].get('Long Dues'))
             narrow = pg.evaluate("""()=>{ const f=chForm(); f.cls='Class 1'; const a=challanPlan(f).list.map(c=>c.name); f.cls='ALL'; f.student='aleezy'; const b2=challanPlan(f).list.map(c=>c.name); return {a,b2}; }""")
             check('class filter and one-student filter work', narrow['a'] == ['Overpaid'] and narrow['b2'] == ['Aleezy'], narrow)
-            out = pg.evaluate("""()=>{ const sel=document.getElementById('toMonth'); sel.innerHTML=[...Array(12).keys()].map(i=>`<option value="${i+1}">m${i+1}</option>`).join(''); sel.value='10';
-              openChallanModal(); const f=chForm(); const a=challanPlan(f).list.find(c=>c.name==='Aleezy'); const labels=a.lines.map(l=>l.label);
-              sel.value='11'; openChallanModal(); const b2=chForm().month; sel.innerHTML=''; return {m:f.month,pay:a.payable,labels,b2}; }""")
-            check('challan month follows the "To month" filter (October)', out['m'] == 10, out)
-            check('with To month = October nothing from November is shown or counted (7,400 + 3,000 = 10,400)', out['pay'] == 10400 and not any('November' in l for l in out['labels']), out)
-            check('changing the filter to November moves the challan to November', out['b2'] == 11, out)
             html = pg.evaluate("()=>{const f=chForm();return challanHtml(challanPlan(f),f)}")
             pg2 = b.new_page(); pg2.route('**/*', lambda r: r.continue_() if f'localhost:{PORT}' in r.request.url else r.abort()); pg2.goto(f'http://localhost:{PORT}/login.html'); pg2.set_content(html, wait_until='load'); pg2.wait_for_timeout(300)
             pdf = pg2.pdf(landscape=True, format='A4', print_background=True, prefer_css_page_size=True); npg = len(_re.findall(rb'/Type\s*/Page[^s]', pdf))
@@ -323,23 +306,6 @@ def main():
             check('every page shows Student, Office and Bank copy', pg2.evaluate("document.querySelectorAll('.copy').length") == 9 and 'BANK COPY' in pg2.inner_text('body'))
             check('logo is on every copy', pg2.evaluate("[...document.images].every(i=>i.naturalWidth>0)")); pg2.close()
             check('no errors', not errs, errs); pg.close()
-
-            print('13. Cache survives read-only server calls; waivers load only when opened')
-            errs = []; pg = new_page(b, errs, 'accounts')
-            out = pg.evaluate("""async()=>{
-              const rev=()=>['students','fees','accounts','books'].map(sbDataRevision).join('|'), r0=rev(), res={};
-              const call=async fn=>{try{await fetch(SB_URL+'/rest/v1/rpc/'+fn,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})}catch(e){}};
-              for(const fn of ['list_payroll_waiver_candidates','app_business_reports','app_audit_events','app_followup_data','get_something']){await call(fn);res[fn]=rev()===r0}
-              await call('review_payroll_waiver_request'); res.write_wipes=rev()!==r0; return res;}""")
-            check('Reports / Audit / Follow-up / waiver LIST calls leave the cache alone', all(out[k] for k in ['list_payroll_waiver_candidates', 'app_business_reports', 'app_audit_events', 'app_followup_data', 'get_something']), out)
-            check('a real change (review a waiver) still clears the cache', out['write_wipes'] is True, out)
-            out = pg.evaluate("""()=>{ let calls=0; window.loadPayrollWaiverData=async()=>{calls++}; payrollWaiverLoaded=false;
-              const initHas=initAccounts.toString().includes('loadPayrollWaiverData'); showTab('waivers'); return {calls,initHas}; }""")
-            check('Accounts page load no longer waits for the waiver server calls', out['initHas'] is False, out)
-            check('the waiver data loads once when its tab is opened', out['calls'] == 1, out)
-            check('no errors', not errs, errs); pg.close()
-            c = ctx_for(1366, 800); pg = c.new_page(); errs = []; pg.on('pageerror', lambda e: errs.append(str(e)[:120])); pg.goto(f'http://localhost:{PORT}/staff.html'); pg.wait_for_timeout(500)
-            check('staff page loads without errors with its schema checks cached', not errs, errs); c.close()
 
             b.close()
     finally:

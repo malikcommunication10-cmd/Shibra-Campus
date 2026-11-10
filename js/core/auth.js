@@ -118,25 +118,16 @@ async function sbFreshToken() {
     })();
     return _sbRefreshing;
 }
-// Server functions that only READ data (Reports, Audit, Follow-ups, waiver lists...) are sent with POST, but they change nothing.
-// They must NOT empty the data cache: before this, opening Reports / Audit / Accounts wiped every table copy, so the next page started cold.
-const SB_READ_RPC = /^(list_|get_|read_|search_|app_audit_events$|app_business_reports$|app_followup_data$)/;
-function sbIsReadOnlyRpc(url) {
-    const m = String(url).match(/\/rest\/v1\/rpc\/([^/?]+)/);
-    return !!(m && SB_READ_RPC.test(decodeURIComponent(m[1])));
-}
 window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : ((input && input.url) || '');
     if (url.startsWith(SB_URL + '/rest/v1')) {
         const method = String((init && init.method) || (input instanceof Request && input.method) || 'GET').toUpperCase();
-        const readOnlyRpc = sbIsReadOnlyRpc(url);
-        if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !readOnlyRpc) {
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
             const match = url.match(/\/rest\/v1\/([^/?]+)/);
             const resource = match ? decodeURIComponent(match[1]) : '';
             sbCacheClear(resource && resource !== 'rpc' ? resource : '');
         }
         if (!['GET', 'HEAD', 'OPTIONS'].includes(method)
-            && !readOnlyRpc
             && !/\/rest\/v1\/day_close(?:[/?]|$)/.test(url)
             && sbDayClosePending()) {
             const message = `Close all previous days through ${sbPakistanDate(-1)} before making changes for today.`;
