@@ -56,29 +56,6 @@ function sbQueueDataPreload() {
     };
     if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 2000 });
     else setTimeout(run, 300);
-    sbQueueHeavyWarmup();
-}
-
-// After the current page has had the connection to itself, quietly download the big tables the user can open next.
-// Result: the next page opens from memory instead of starting a cold download.
-function sbWarmList() {
-    const v = pages => pages.some(pg => { try { return can(pg, 'v'); } catch (e) { return false; } }), list = [];
-    if (v(['students', 'fees', 'dashboard', 'followups'])) list.push(['students', 'select=*']);
-    if (v(['fees', 'dashboard', 'followups'])) list.push(['fees', 'select=*']);
-    if (v(['accounts', 'fees', 'dashboard', 'books'])) list.push(['accounts', 'select=*']);
-    if (v(['books', 'dashboard'])) list.push(['books', 'select=*']);
-    if (v(['staff'])) list.push(['staff', 'select=*'], ['payroll', 'select=*']);
-    return list;
-}
-function sbQueueHeavyWarmup() {
-    try {
-        const c = navigator.connection; if (c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ''))) return;
-        const key = `sb_heavy_warm_${sbDataCacheUser()}`, last = Number(sessionStorage.getItem(key) || 0);
-        if (Date.now() - last < 5 * 60 * 1000) return; sessionStorage.setItem(key, String(Date.now()));
-    } catch (e) {}
-    setTimeout(async () => {
-        for (const [table, query] of sbWarmList()) { try { await sbFetchAll(table, query); } catch (e) {} }
-    }, 3500);
 }
 
 // ---- checks used by the pages ----------------------------------------------

@@ -76,14 +76,5 @@ const UI = (() => {
             el.addEventListener('input', run);
         });
     });
-    // "Loading…" while only READING data becomes a small floating chip (the page stays visible and scrollable);
-    // saving / deleting / importing still use the full blocking overlay so nothing can be clicked twice.
-    document.addEventListener('DOMContentLoaded', () => {
-        const ov = document.getElementById('loadingOverlay'), tx = document.getElementById('loadingText'); if (!ov) return;
-        const sync = () => { const t = (tx && tx.textContent || '').trim(); ov.classList.toggle('ui-soft', /^(loading|checking|refresh|fetching)/i.test(t)); /* only wording that is a pure read */ };
-        new MutationObserver(sync).observe(ov, { attributes: true, attributeFilter: ['class'] });
-        if (tx) new MutationObserver(sync).observe(tx, { childList: true, characterData: true, subtree: true });
-        sync();
-    });
     return { esc, fmt, toast, dialog, alert, confirm, prompt, notify, csv, words, debounce };
 })();

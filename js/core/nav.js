@@ -4,7 +4,7 @@
         ['index.html', '🏠', 'Home / Dashboard'], ['students.html', '👨‍🎓', 'Students Directory'], ['increments.html', '⚡', 'Bulk Updation'],
         ['fees.html', '💸', 'Fee Vouchers'], ['followups.html', '📞', 'Follow-up Calls'], ['books.html', '📚', 'Book Store'],
         ['accounts.html', '💰', 'Accounts & Daybook'], ['staff.html', '👩‍🏫', 'Staff & Payroll'],
-        ['reports.html', '📈', 'Business Reports'], ['audit.html', '🧾', 'Audit Trail'],
+        ['reports.html', '📈', 'Business Reports'], ['statements.html', '🧮', 'Financial Statements'], ['audit.html', '🧾', 'Audit Trail'],
         ['settings.html', '⚙️', 'System Settings'], ['users.html', '🔐', 'Users & Roles']
     ];
     const page = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
@@ -14,8 +14,8 @@
         if (!aside) return;
         const me = (typeof ME !== 'undefined') ? ME : null;
         const shown = links.filter(l => !me || !me.perms || (typeof can === 'function' && can(PAGE_FILE[l[0]], 'v')));
-        const reportLinks = shown.filter(l => ['reports.html', 'audit.html'].includes(l[0]));
-        const mainLinks = shown.filter(l => !['reports.html', 'audit.html'].includes(l[0]));
+        const reportLinks = shown.filter(l => ['reports.html', 'statements.html', 'audit.html'].includes(l[0]));
+        const mainLinks = shown.filter(l => !['reports.html', 'statements.html', 'audit.html'].includes(l[0]));
         const reportActive = reportLinks.some(l => l[0] === page);
         const reportMenu = reportLinks.length ? `<details class="app-report-group rounded-xl ${reportActive ? 'bg-white/5' : ''}" ${reportActive ? 'open' : ''}>
             <summary class="app-report-summary flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-indigo-100 hover:bg-white/10"><span>📊 Reports &amp; Audit</span><span aria-hidden="true">⌄</span></summary>
@@ -53,10 +53,7 @@
         };
         menuButton.onclick = () => setMenuOpen(menuButton.getAttribute('aria-expanded') !== 'true');
         backdrop.onclick = () => setMenuOpen(false);
-        document.querySelectorAll('a[href]').forEach(link => {
-            const target = new URL(link.href, location.href);
-            const targetFile = target.pathname.split('/').pop().toLowerCase();
-            if (target.origin !== location.origin || !PAGE_FILE[targetFile] || targetFile === page) return;
+        aside.querySelectorAll('nav a').forEach(link => {
             let prefetchTimer = null;
             const warm = () => {
                 if (prefetchTimer || link.dataset.prefetched) return;

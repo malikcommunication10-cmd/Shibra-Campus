@@ -33,8 +33,7 @@ function challanPlan(o) {
     groups.forEach(rows => {
         const first = rows[0], st = stuByAdm.get(normAdm(first.admis_no)) || {}, cls = String(first.class || st.class || '').trim();
         if (o.cls && o.cls !== 'ALL' && cls !== o.cls) return;
-        if (o.adm && normAdm(first.admis_no) !== normAdm(o.adm)) return;
-        if (!o.adm && q && !`${first.student_name} ${first.admis_no}`.toLowerCase().includes(q)) return;
+        if (q && !`${first.student_name} ${first.admis_no}`.toLowerCase().includes(q)) return;
         if (st.status && !/^active$/i.test(String(st.status).trim()) && !o.includeLeft) { skipped.left++; return; }
         const arr = rows.filter(r => Math.abs(pend(r)) > 0.004 && ((isArr(r) && mStart(r).slice(0, 7) <= ym) || (!isArr(r) && mStart(r).slice(0, 7) < ym && mStart(r) <= o.asOf)))
             .sort((a, b) => mStart(a).localeCompare(mStart(b)) || String(a.type).localeCompare(String(b.type)));
@@ -116,10 +115,27 @@ function challanHtml(plan, o) {
 
 /* ---------- 3. the popup ---------- */
 const chEl = id => document.getElementById(id);
+function studentChallanOptions(adm, name, cls, period) {
+    const periodText = String(period || '').trim().toLowerCase();
+    let monthIndex = CHALLAN_MONTHS.findIndex(month =>
+        periodText.includes(month.toLowerCase()) || periodText.includes(month.slice(0, 3).toLowerCase()));
+    if (monthIndex < 0 && typeof parsePeriod === 'function') {
+        monthIndex = CHALLAN_MONTHS.indexOf(parsePeriod(period));
+    }
+    if (monthIndex < 0) throw new Error(`Could not determine the fee month for ${period || 'this voucher'}.`);
+    const month = monthIndex + 1, settings = chSettings(), asOf = typeof sbToday === 'function' ? sbToday() : today();
+    const monthText = String(month).padStart(2, '0');
+    return {
+        cls: String(cls || 'ALL').trim(), student: String(adm || name || '').trim(), month, asOf,
+        due: `${SCHOOL_YEAR}-${monthText}-01`, valid: `${SCHOOL_YEAR}-${monthText}-28`,
+        fine: Number(settings.fine) || 0, copies: Number(settings.copies) || 3,
+        includeLeft: true, includeNoVoucher: false, includeZero: true,
+        account: settings.account, notes: settings.notes, school: settings.school, city: settings.city
+    };
+}
 function chForm() {
     const s = chSettings();
-    const typed = chEl('chStudent').value, am = typed.match(/\(Adm (.*)\)\s*$/), adm = am && am[1] !== '-' ? am[1].trim() : '';
-    return { cls: chEl('chClass').value, student: typed.replace(/\s*\(Adm .*\)\s*$/, ''), adm, month: +chEl('chMonth').value, asOf: chEl('chAsOf').value, due: chEl('chDue').value, valid: chEl('chValid').value,
+    return { cls: chEl('chClass').value, student: chEl('chStudent').value, month: +chEl('chMonth').value, asOf: chEl('chAsOf').value, due: chEl('chDue').value, valid: chEl('chValid').value,
         fine: parseFloat(chEl('chFine').value) || 0, copies: +chEl('chCopies').value, includeLeft: chEl('chLeft').checked, includeNoVoucher: chEl('chNoVoucher').checked, includeZero: chEl('chZero').checked,
         account: chEl('chAccount').value.trim() || s.account, notes: chEl('chNotes').value, school: chEl('chSchool').value.trim() || s.school, city: chEl('chCity').value.trim() || s.city };
 }
@@ -131,9 +147,6 @@ function openChallanModal() {
     chEl('chMonth').innerHTML = CHALLAN_MONTHS.map((m, i) => `<option value="${i + 1}">${m} ${SCHOOL_YEAR}</option>`).join('');
     const nowM = +td.slice(5, 7), sameYear = String(SCHOOL_YEAR) === td.slice(0, 4);
     chEl('chMonth').value = String(sameYear ? Math.min(12, nowM + 1) : 1);
-    // the voucher list's "To month" filter decides the challan month: nothing after it is shown or counted
-    const toSel = document.getElementById('toMonth'), toM = toSel ? +toSel.value : 0;
-    if (toM >= 1 && toM <= 12) chEl('chMonth').value = String(toM);
     chEl('chAsOf').value = td; chEl('chStudent').value = '';
     chEl('chFine').value = s.fine; chEl('chCopies').value = String(s.copies); chEl('chAccount').value = s.account; chEl('chNotes').value = s.notes; chEl('chSchool').value = s.school; chEl('chCity').value = s.city;
     chEl('chLeft').checked = false; chEl('chNoVoucher').checked = false; chEl('chZero').checked = false;
@@ -149,7 +162,7 @@ function chClassChanged() {
     chEl('chStudentList').innerHTML = [...seen.values()].sort().map(v => `<option value="${esc(v)}">`).join(''); chEl('chStudent').value = ''; chRefresh();
 }
 function chRefresh() {
-    const f = chForm(), plan = challanPlan(f);
+    const f = chForm(), plan = challanPlan(Object.assign({}, f, { student: f.student.replace(/\s*\(Adm .*\)$/, '') }));
     const sk = plan.skipped, notes = [];
     if (sk.noVoucher) notes.push(`${sk.noVoucher} without a ${CHALLAN_MONTHS[f.month - 1]} voucher (create the vouchers first)`);
     if (sk.nothing) notes.push(`${sk.nothing} with nothing to pay`);
@@ -159,8 +172,7 @@ function chRefresh() {
         + (plan.list.length > 8 ? `<tr><td colspan="5" class="p-1.5 text-slate-400">… and ${fmt(plan.list.length - 8)} more</td></tr>` : '') || '<tr><td colspan="5" class="p-3 text-center text-slate-400">No student matches these choices.</td></tr>';
 }
 const closeChallanModal = () => chEl('challanModal').classList.remove('open');
-async function printChallans() {
-    const f = chForm(), plan = challanPlan(f);
+async function printChallanPlan(plan, f) {
     if (!plan.list.length) { showAlert('There are no challans to print for these choices.'); return; }
     try { localStorage.setItem(CHALLAN_KEY, JSON.stringify({ school: f.school, city: f.city, account: f.account, fine: f.fine, copies: f.copies, notes: f.notes })); } catch (e) {}
     const fr = document.createElement('iframe'); fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(fr);
@@ -168,16 +180,13 @@ async function printChallans() {
     await Promise.all([...fr.contentDocument.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
     setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(() => fr.remove(), 120000); }, 200);
 }
-
-/* Print button on a voucher row: open the challan popup already set to that student (month and dates can still be changed) */
-function openChallanFor(vid) {
-    const row = allFeesCache.find(r => String(r.voucher_id || '').trim() === String(vid).trim()); if (!row) return;
-    openChallanModal();
-    const cls = String(row.class || '').trim(), sel = chEl('chClass');
-    if ([...sel.options].some(o => o.value === cls)) sel.value = cls;
-    chClassChanged();
-    chEl('chStudent').value = `${row.student_name} (Adm ${row.admis_no || '-'})`;
-    chEl('chZero').checked = true;          // a single student: print even when nothing is due, so the button always gives a challan
-    chEl('chNoVoucher').checked = true;
-    chRefresh();
+async function printChallans() {
+    const f = chForm(); f.student = f.student.replace(/\s*\(Adm .*\)$/, '');
+    return printChallanPlan(challanPlan(f), f);
+}
+function printStudentChallan(adm, name, cls, period) {
+    let f;
+    try { f = studentChallanOptions(decodeURIComponent(adm), decodeURIComponent(name), decodeURIComponent(cls), decodeURIComponent(period)); }
+    catch (error) { showAlert(error.message || 'Could not prepare this student’s fee challan.'); return; }
+    return printChallanPlan(challanPlan(f), f);
 }

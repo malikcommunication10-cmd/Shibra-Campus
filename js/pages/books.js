@@ -109,18 +109,20 @@ async function initBooks() {
     showLoading('Loading book store...');
     let c = getSupabaseConfig();
     try {
-        let [, [res, probe, probe2, invoiceProbe]] = await Promise.all([
-            Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]),
-            Promise.all([
-                ERP.db.request('books', 'select=*'),
-                sbProbe(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`),
-                sbProbe(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`),
-                sbProbe(`${c.url}/rest/v1/books?select=invoice_no&limit=1`)
-            ])
+        await Promise.all([loadSettingLists(), detectBookCols(), loadMasterItems(), loadDuesData(), ensureStudents()]);
+        let [res, probe, probe2, invoiceProbe] = await Promise.all([
+            ERP.db.request('books', bookTransactionQuery()),
+            fetch(`${c.url}/rest/v1/books?select=date,voucher_no,payment_mode,notes&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/books?select=item_class,category,sale_price&limit=1`, { headers: sbHeaders() }),
+            fetch(`${c.url}/rest/v1/books?select=invoice_no&limit=1`, { headers: sbHeaders() })
         ]);
         try { await fillPaySelects(['mWallet', 'ssWallet', 'sdWallet', 'impWallet', 'piWallet']); } catch (e) {}
+        if(!res.ok && bookTransactionQuery() !== 'select=*') {
+            console.warn('Could not load projected book transactions; retrying with all columns.');
+            res = await ERP.db.request('books', 'select=*');
+        }
         let rows = await res.json();
-        if(!Array.isArray(rows)) throw new Error('books failed to load');
+        if(!res.ok || !Array.isArray(rows)) throw new Error('books failed to load');
         hasExt = probe.ok; hasItemCols = probe2.ok; hasInvoiceCol = invoiceProbe.ok;
         hasId = rows.length === 0 || rows.some(r => r.id !== undefined);
         txs = rows.map(normTx);
@@ -174,6 +176,14 @@ function buildItems() {
     mergeMaster();
 }
 let BC = null, BOOK_ALLCOLS = [];
+function bookTransactionQuery() {
+    if(!BOOK_ALLCOLS.length) return 'select=*';
+    const columns = [...new Set([
+        'id', 'date', 'created_at', 'voucher_no', 'payment_mode', 'notes',
+        'item_class', 'category', 'sale_price', ...Object.values(BC || {})
+    ])].filter(column => column && BOOK_ALLCOLS.includes(column));
+    return columns.length ? `select=${columns.join(',')}` : 'select=*';
+}
 async function detectBookCols() {
     try { const c = JSON.parse(sessionStorage.getItem('books_cols_v5') || 'null'); if(c && c.map && c.map.book_title) { BC = c.map; BOOK_ALLCOLS = c.all || []; return; } } catch (e) {}
     const cfg = getSupabaseConfig(), H = sbHeaders();

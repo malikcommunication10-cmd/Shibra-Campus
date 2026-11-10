@@ -17,17 +17,16 @@ async function initDashboard(backgroundRefresh = false) {
     $('dateLine').innerText = now.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
     if (!backgroundRefresh) $('cards').innerHTML = '<div class="col-span-full text-center text-sm text-slate-400 p-6">Loading...</div>';
     try {
-        const [sR, fR, aR, bR, pR, settingLists] = await Promise.all([
+        const [sR, fR, aR, pR, settingLists] = await Promise.all([
             ERP.db.request('students', 'select=admis_no,student_name,status,class'),
             ERP.db.request('fees', 'select=admis_no,student_name,class,voucher_id,period,type,payable,discount'),
             ERP.db.request('accounts', 'select=voucher_id,from_account,to_account,description,amount_in,amount_out,date,remarks'),
-            ERP.db.request('books', 'select=*'),
             ERP.db.request('settings', 'select=*&setting_key=eq.Book%20Promise'),
             loadSettingLists()
         ]);
         if (loadToken !== dashboardLoadToken) return;
         const students = await sR.json(), fees = await fR.json(), acc = await aR.json();
-        const bookRows = bR.ok ? await bR.json() : [], promRows = pR.ok ? await pR.json() : [];
+        const promRows = pR.ok ? await pR.json() : [];
         if (![students, fees, acc].every(Array.isArray)) throw new Error('load');
 
         const active = students.filter(s => { const t = String(s.status || '').trim().toLowerCase(); return t === '' || t === 'active'; }).length;
@@ -185,16 +184,37 @@ async function initDashboard(backgroundRefresh = false) {
             dashboardBreakdown('By account', moneyBreakdown(expenseByWallet)) + dashboardBreakdown('By head', headBreakdown(expenseByHead))]);
         cards.push(['Closing balance', 'PKR ' + fmt(closingBalance), closingBalance >= 0 ? 'text-slate-900' : 'text-rose-600', 'As of today',
             dashboardBreakdown('By account', moneyBreakdown(closingByWallet))]);
-        const nbr = (Array.isArray(bookRows) ? bookRows : []).map(normBookRow), dues = computeDues(nbr, acc), bdues = computeBookDues(nbr, acc), prom = parsePromises(Array.isArray(promRows) ? promRows : []);
-        const recv = dues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), pay = dues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
-        const overdue = dues.filter(p => (p.recv.pending > 0.005 || p.pay.pending > 0.005) && prom[p.key] && prom[p.key].d < today).length;
-        const brecv = bdues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), bpay = bdues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
-        cards.push(['Receivable (to receive)', 'PKR ' + fmt(recv), 'text-emerald-700', `${dues.filter(p => p.recv.pending > 0.005).length} parties · Book Store PKR ${fmt(brecv)}` + (overdue ? ` · ${overdue} promise(s) overdue` : '')]);
-        cards.push(['Payable (to pay)', 'PKR ' + fmt(pay), 'text-rose-600', `${dues.filter(p => p.pay.pending > 0.005).length} parties · Book Store PKR ${fmt(bpay)}`]);
-        $('cards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"><div class="text-xs text-slate-500 font-semibold">${c[0]}</div><div class="text-lg md:text-2xl font-extrabold ${c[2]} mt-1">${c[1]}</div><div class="text-[11px] text-slate-400 mt-0.5 ${c[0] === 'Active students' ? 'text-slate-400/70' : ''}">${c[3]}</div>${c[4] ? `<div class="mt-2 space-y-2 border-t border-slate-100 pt-2 text-[10px] leading-4 text-slate-400">${c[4]}</div>` : ''}</div>`).join('');
+        cards.push(['Receivable (to receive)', 'Loading…', 'text-emerald-700', 'Book Store summary']);
+        cards.push(['Payable (to pay)', 'Loading…', 'text-rose-600', 'Book Store summary']);
+        const renderCards = () => {
+            $('cards').innerHTML = cards.map(c => `<div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"><div class="text-xs text-slate-500 font-semibold">${c[0]}</div><div class="text-lg md:text-2xl font-extrabold ${c[2]} mt-1">${c[1]}</div><div class="text-[11px] text-slate-400 mt-0.5 ${c[0] === 'Active students' ? 'text-slate-400/70' : ''}">${c[3]}</div>${c[4] ? `<div class="mt-2 space-y-2 border-t border-slate-100 pt-2 text-[10px] leading-4 text-slate-400">${c[4]}</div>` : ''}</div>`).join('');
+        };
+        renderCards();
         const rows = Object.entries(activeByClass).sort((a, b) => b[1] - a[1]), max = rows.length ? rows[0][1] : 1;
         $('classRows').innerHTML = rows.length ? rows.map(([c, v]) => `<div><div class="flex justify-between text-xs mb-0.5"><span class="font-semibold">${esc(c)}</span><span class="text-rose-600 font-bold">PKR ${fmt(v)}</span></div><div class="h-2 bg-slate-100 rounded"><div class="h-2 bg-rose-400 rounded" style="width:${Math.max(3, v / max * 100)}%"></div></div></div>`).join('') : '<p class="text-sm text-emerald-600">No pending dues. 🎉</p>';
         $('classRows').dataset.activePending = String(activePending);
+
+        try {
+            let booksResponse = await ERP.db.request('books', 'select=type,party_name,book_title,qty,net_amount,date,voucher_no,notes');
+            if (!booksResponse.ok) booksResponse = await ERP.db.request('books', 'select=*');
+            if (!booksResponse.ok)
+                throw new Error(`Could not load Book Store data (HTTP ${booksResponse.status}): ${await booksResponse.text()}`);
+            const bookRows = await booksResponse.json();
+            if (!Array.isArray(bookRows)) throw new Error('Book Store response was not a row list.');
+            if (loadToken !== dashboardLoadToken) return;
+            const nbr = bookRows.map(normBookRow), dues = computeDues(nbr, acc), bdues = computeBookDues(nbr, acc), prom = parsePromises(promRows);
+            const recv = dues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), pay = dues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
+            const overdue = dues.filter(p => (p.recv.pending > 0.005 || p.pay.pending > 0.005) && prom[p.key] && prom[p.key].d < today).length;
+            const brecv = bdues.reduce((t, p) => t + Math.max(p.recv.pending, 0), 0), bpay = bdues.reduce((t, p) => t + Math.max(p.pay.pending, 0), 0);
+            cards[8] = ['Receivable (to receive)', 'PKR ' + fmt(recv), 'text-emerald-700', `${dues.filter(p => p.recv.pending > 0.005).length} parties · Book Store PKR ${fmt(brecv)}` + (overdue ? ` · ${overdue} promise(s) overdue` : '')];
+            cards[9] = ['Payable (to pay)', 'PKR ' + fmt(pay), 'text-rose-600', `${dues.filter(p => p.pay.pending > 0.005).length} parties · Book Store PKR ${fmt(bpay)}`];
+        } catch (e) {
+            if (loadToken !== dashboardLoadToken) return;
+            console.error('Dashboard Book Store summary', e);
+            cards[8] = ['Receivable (to receive)', 'Unavailable', 'text-emerald-700', 'Book Store summary could not be loaded'];
+            cards[9] = ['Payable (to pay)', 'Unavailable', 'text-rose-600', 'Book Store summary could not be loaded'];
+        }
+        if (loadToken === dashboardLoadToken) renderCards();
     } catch (e) {
         if (loadToken !== dashboardLoadToken) return;
         console.error(e);

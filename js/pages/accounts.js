@@ -28,6 +28,8 @@ let entries = [], entryById = {}, feesByVoucher = {};
 let fixedAssets = [], fixedAssetEvents = [], fixedAssetsLoaded = false;
 let BUSINESS_PARTNERS = [];
 let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
+let staffAdvanceBalances = [], staffAdvanceReady = false, staffAdvanceDataError = '';
+let staffAdvanceRecoveryCounts = new Map(), staffAdvancesByVoucher = new Map();
 let payrollWaiverCandidates = [], payrollWaiverRequests = [], payrollWaiverDataError = '';
 let dbLimit = 300;
 let dbSelectedEntries = new Set();
@@ -177,12 +179,14 @@ async function initAccounts() {
     showLoading('Loading accounts...');
     const settingsPromise = loadSettingLists();
     try {
-        let [L, [aRes, fRes, securityRes]] = await Promise.all([
+        let [L, [aRes, fRes, securityRes, advancesRes, advancePayrollRes]] = await Promise.all([
             settingsPromise,
             Promise.all([
                 ERP.db.request('accounts', 'select=*&order=date.asc,voucher_id.asc'),
                 ERP.db.request('fees', 'select=voucher_id,admis_no,student_name,class,period,type'),
-                ERP.db.request('staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes')
+                ERP.db.request('staff_security_ledger', 'select=staff_id,staff_name,entry_type,amount,transaction_date,salary_month,voucher_id,notes'),
+                ERP.db.request('staff_salary_advances', 'select=id,staff_id,staff_name,principal'),
+                ERP.db.request('staff_advance_payroll_recoveries', 'select=advance_id,recovered_amount,recovery_count')
             ])
         ]);
         INCOME_HEADS = L['Income Head']; EXPENSE_HEADS = L['Expense Head']; BUSINESS_PARTNERS = L['Business Partner'] || []; setupWallets(L['Payment Account']);
@@ -197,6 +201,40 @@ async function initAccounts() {
         staffSecurityLedger = staffSecurityReady ? await securityRes.json() : [];
         if(!Array.isArray(staffSecurityLedger)) { staffSecurityLedger = []; staffSecurityReady = false; }
         securityRefundVouchers = new Set(staffSecurityLedger.filter(entry => entry.entry_type === 'refund' && entry.voucher_id).map(entry => String(entry.voucher_id)));
+        staffAdvanceReady = advancesRes.ok && advancePayrollRes.ok;
+        staffAdvanceDataError = '';
+        staffAdvanceBalances = [];
+        staffAdvanceRecoveryCounts = new Map();
+        staffAdvancesByVoucher = new Map();
+        if(staffAdvanceReady) {
+            const [advances, recoveries] = await Promise.all([advancesRes.json(), advancePayrollRes.json()]);
+            if(!Array.isArray(advances) || !Array.isArray(recoveries)) {
+                staffAdvanceReady = false;
+                staffAdvanceDataError = 'Advance balance response was not a list.';
+            } else {
+                const recoveredByAdvance = new Map();
+                recoveries.forEach(row => {
+                    const id = String(row.advance_id);
+                    const recovered = Number(row.recovered_amount) || 0;
+                    recoveredByAdvance.set(id, recovered);
+                    staffAdvanceRecoveryCounts.set(id, Number(row.recovery_count) || 0);
+                });
+                advances.forEach(advance => {
+                    if(advance.voucher_id) staffAdvancesByVoucher.set(String(advance.voucher_id).toUpperCase(), advance);
+                });
+                const byStaff = new Map();
+                advances.forEach(advance => {
+                    const id = String(advance.staff_id || '');
+                    if(!byStaff.has(id)) byStaff.set(id, { staffId: id, name: advance.staff_name || id, outstanding: 0 });
+                    const item = byStaff.get(id);
+                    item.name = advance.staff_name || item.name;
+                    item.outstanding += Math.max(0, (Number(advance.principal) || 0) - (recoveredByAdvance.get(String(advance.id)) || 0));
+                });
+                staffAdvanceBalances = [...byStaff.values()];
+            }
+        } else {
+            staffAdvanceDataError = !advancesRes.ok ? await advancesRes.text() : await advancePayrollRes.text();
+        }
         feesByVoucher = {};
         (Array.isArray(fees) ? fees : []).forEach(f => { feesByVoucher[String(f.voucher_id || '').trim()] = f; });
         if(!Array.isArray(acc)) throw new Error('accounts failed to load');
@@ -221,7 +259,7 @@ async function loadPayrollWaiverData() {
         try {
             const requestResponse = await ERP.db.request(
                 'payroll_waiver_requests',
-                'select=id,payroll_id,staff_name,month,current_leave_days,requested_leave_days,current_late_days,requested_late_days,reason,requested_by,status,reviewed_at,admin_note,created_at&order=created_at.desc'
+                'select=id,payroll_id,staff_name,month,current_leave_days,requested_leave_days,current_late_days,requested_late_days,reason,requested_by,status,reviewed_by,reviewed_at,admin_note,created_at&order=created_at.desc'
             );
             if(!requestResponse.ok) throw new Error('Could not load waiver requests: ' + await requestResponse.text());
             const requestRows = await requestResponse.json();
@@ -277,12 +315,12 @@ function renderPayrollWaiverTab() {
 
         $('payrollWaiverRequestList').innerHTML = payrollWaiverRequests.length ? `
             <div class="overflow-x-auto"><table class="w-full min-w-[700px] text-left text-xs">
-                <thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Staff / month</th><th class="p-2">Requested deduction days</th><th class="p-2">Reason</th><th class="p-2">Status</th><th class="p-2">Admin note</th></tr></thead>
+                <thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">Staff / month</th><th class="p-2">Requested deduction days</th><th class="p-2">Reason</th><th class="p-2">Status</th><th class="p-2">Admin remarks</th></tr></thead>
                 <tbody>${payrollWaiverRequests.map(row => `<tr class="border-b align-top">
                     <td class="p-2"><b>${esc(row.staff_name)}</b><div class="text-slate-500">${esc(row.month)}</div></td>
                     <td class="p-2">Off ${fmt(row.current_leave_days)} → ${fmt(row.requested_leave_days)}<br>Late ${fmt(row.current_late_days)} → ${fmt(row.requested_late_days)}</td>
                     <td class="p-2 whitespace-normal">${esc(row.reason)}</td>
-                    <td class="p-2"><span class="rounded-full px-2 py-1 ${row.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : row.status === 'Rejected' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}">${esc(row.status)}</span></td>
+                    <td class="p-2"><span class="rounded-full px-2 py-1 ${row.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : row.status === 'Rejected' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}">${esc(row.status)}</span>${row.reviewed_at ? `<div class="mt-1 text-slate-500">${esc(row.reviewed_by || 'Admin')} · ${esc(fmtDate(String(row.reviewed_at).slice(0, 10)))}</div>` : ''}</td>
                     <td class="p-2 whitespace-normal">${esc(row.admin_note || '-')}</td>
                 </tr>`).join('')}</tbody>
             </table></div>` : `<p class="text-sm text-slate-500">${payrollWaiverDataError ? 'Request history is unavailable until setup is complete.' : 'No waiver requests yet.'}</p>`;
@@ -671,6 +709,7 @@ function daybookRows(applyFilters = true) {
 }
 function isDaybookEntryDeletable(e) {
     if(!e || e.isFixedAsset || e.isSecurityRefund) return false;
+    if(String(e.id || '').toUpperCase().startsWith('ADV-')) return false;
     if((e.kind === 'bill_raised' || e.kind === 'bill_received') && entries.some(x => x.billRef === e.id)) return false;
     return true;
 }
@@ -1142,16 +1181,47 @@ function renderStaffSecurityPayable() {
     const all = [...byStaff.values()].map(item => ({ ...item, outstanding: item.opening + item.deductions - item.refunds }));
     return all.reduce((sum, item) => sum + item.outstanding, 0);
 }
+function getStaffSecurityBalances() {
+    const byStaff = new Map();
+    staffSecurityLedger.forEach(entry => {
+        const id = String(entry.staff_id || '');
+        if(!byStaff.has(id)) byStaff.set(id, { staffId: id, name: entry.staff_name || id, payable: 0 });
+        const item = byStaff.get(id);
+        item.name = entry.staff_name || item.name;
+        if(entry.entry_type === 'opening' || entry.entry_type === 'deduction') item.payable += Number(entry.amount) || 0;
+        else if(entry.entry_type === 'refund') item.payable -= Number(entry.amount) || 0;
+    });
+    return byStaff;
+}
+function renderStaffBalanceSummary(query) {
+    const security = getStaffSecurityBalances(), advances = new Map(staffAdvanceBalances.map(item => [item.staffId, item]));
+    const ids = new Set([...security.keys(), ...advances.keys()]);
+    const rows = [...ids].map(id => ({
+        staffId: id,
+        name: (security.get(id) && security.get(id).name) || (advances.get(id) && advances.get(id).name) || id,
+        payable: security.get(id) ? security.get(id).payable : 0,
+        receivable: advances.get(id) ? advances.get(id).outstanding : 0
+    })).filter(item => !query || `${item.name} ${item.staffId}`.toLowerCase().includes(query))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    const payableTotal = rows.reduce((sum, item) => sum + item.payable, 0);
+    const receivableTotal = rows.reduce((sum, item) => sum + item.receivable, 0);
+    const body = rows.length ? rows.map(item => `<tr class="border-b hover:bg-slate-50"><td class="p-2.5 font-semibold">${esc(item.name)}<div class="text-[11px] font-mono text-slate-500">${esc(item.staffId)}</div></td><td class="p-2.5 text-right font-bold text-rose-700">${staffSecurityReady ? 'PKR ' + fmt(item.payable) : 'Unavailable'}</td><td class="p-2.5 text-right font-bold text-amber-700">${staffAdvanceReady ? 'PKR ' + fmt(item.receivable) : 'Unavailable'}</td></tr>`).join('') :
+        `<tr><td colspan="3" class="p-5 text-center text-slate-400">No staff balances found.</td></tr>`;
+    const advanceNote = staffAdvanceReady ? '' : `<p class="px-3 py-2 text-xs text-amber-800 bg-amber-50 border-t">Advance balances unavailable. Run/update the staff advance SQL and ensure Accounts view permission is enabled.${staffAdvanceDataError ? ` <span class="block mt-1">Database response: ${esc(staffAdvanceDataError)}</span>` : ''}</p>`;
+    return `<section class="border-t"><div class="p-3 font-bold text-sm text-indigo-900">Staff balances · separate amounts owed</div><div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2.5">Staff member</th><th class="p-2.5 text-right">School owes staff · security</th><th class="p-2.5 text-right">Staff owes school · advance</th></tr></thead><tbody>${body}</tbody><tfoot class="bg-slate-50 font-bold"><tr><td class="p-2.5">Total</td><td class="p-2.5 text-right text-rose-700">${staffSecurityReady ? 'PKR ' + fmt(payableTotal) : 'Unavailable'}</td><td class="p-2.5 text-right text-amber-700">${staffAdvanceReady ? 'PKR ' + fmt(receivableTotal) : 'Unavailable'}</td></tr></tfoot></table></div>${advanceNote}</section>`;
+}
 async function renderDues() {
     if(!$('duesBody')) return;
     const list = await ensureBookDues(), q = ($('duesSearch').value || '').trim().toLowerCase();
     const sumP = k => list.reduce((s, p) => s + Math.max(p[k].pending, 0), 0);
     const securityTotal = renderStaffSecurityPayable();
+    const advanceTotal = staffAdvanceReady ? staffAdvanceBalances.reduce((sum, item) => sum + item.outstanding, 0) : 0;
     const vendorPayable = list.reduce((sum, party) => sum + party.pay.pending, 0);
     const card = (type, label, amount, color, subtitle) => `<button type="button" onclick="toggleDuesLedger('${type}')" aria-expanded="${duesLedgerSide === type}" class="text-left bg-white rounded-2xl border ${duesLedgerSide === type ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200'} p-4 shadow-sm hover:border-indigo-300 transition print-card"><div class="text-xs text-slate-500">${label}</div><div class="text-xl font-extrabold ${color} mt-1">${amount}</div><div class="text-[11px] ${color} mt-0.5">${subtitle}</div><div class="text-[11px] text-indigo-500 mt-1">${duesLedgerSide === type ? 'Click to close ledger' : 'Click to view ledger'} ${duesLedgerSide === type ? '↑' : '↓'}</div></button>`;
     $('duesCards').innerHTML = [
         card('concept', 'Vendor payables', 'PKR ' + fmt(vendorPayable), vendorPayable > 0.005 ? 'text-rose-600' : 'text-emerald-700', vendorPayable > 0.005 ? 'Outstanding vendor balance' : vendorPayable < -0.005 ? 'Net vendor advance' : 'No outstanding vendor balance'),
-        card('security', 'Staff security payable', staffSecurityReady ? 'PKR ' + fmt(securityTotal) : 'Unavailable', !staffSecurityReady ? 'text-amber-700' : securityTotal > 0.005 ? 'text-rose-600' : 'text-emerald-700', !staffSecurityReady ? 'Ledger data unavailable' : securityTotal > 0.005 ? 'Outstanding liability' : 'No outstanding liability')
+        card('security', 'Staff security payable', staffSecurityReady ? 'PKR ' + fmt(securityTotal) : 'Unavailable', !staffSecurityReady ? 'text-amber-700' : securityTotal > 0.005 ? 'text-rose-600' : 'text-emerald-700', !staffSecurityReady ? 'Ledger data unavailable' : securityTotal > 0.005 ? 'Outstanding liability' : 'No outstanding liability'),
+        card('security', 'Staff advance receivable', staffAdvanceReady ? 'PKR ' + fmt(advanceTotal) : 'Unavailable', !staffAdvanceReady ? 'text-amber-700' : advanceTotal > 0.005 ? 'text-amber-700' : 'text-emerald-700', !staffAdvanceReady ? 'Advance data unavailable' : advanceTotal > 0.005 ? 'Owed back to school' : 'No outstanding advances')
     ].join('');
     renderDuesLedger(q, list);
     const rows = list.filter(p => !q || p.name.toLowerCase().includes(q)).sort((a, b) => (b.recv.pending + b.pay.pending) - (a.recv.pending + a.pay.pending));
@@ -1407,7 +1477,7 @@ function renderDuesLedger(query, parties) {
     const inLabel = isSecurity ? 'IN' : 'Purchase';
     const outLabel = isSecurity ? 'OUT' : 'Payment';
     const balanceLabel = isSecurity ? 'Balance' : 'Balance payable';
-    container.innerHTML = `<div class="p-4 border-b flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-bold text-sm text-indigo-900">${esc(title)}</h3><p class="text-[11px] text-slate-500 mt-1">${isSecurity ? 'Staff security transactions with running balance.' : 'Daily totals are shown on separate Purchase and Payment rows, with the balance after each row.'}</p></div><div class="flex flex-wrap items-center gap-2">${partyPicker}<div class="flex gap-2" role="group" aria-label="Ledger date order">${orderButton('oldest', 'Oldest first')}${orderButton('newest', 'Newest first')}</div></div></div><div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th>${isSecurity ? '<th class="p-2.5">Voucher</th><th class="p-2.5">Particulars</th>' : '<th class="p-2.5">Activity</th>'}<th class="p-2.5 text-right">${inLabel}</th><th class="p-2.5 text-right">${outLabel}</th><th class="p-2.5 text-right">${balanceLabel}</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    container.innerHTML = `<div class="p-4 border-b flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-bold text-sm text-indigo-900">${esc(title)}</h3><p class="text-[11px] text-slate-500 mt-1">${isSecurity ? 'Staff security transactions with running balance.' : 'Daily totals are shown on separate Purchase and Payment rows, with the balance after each row.'}</p></div><div class="flex flex-wrap items-center gap-2">${partyPicker}<div class="flex gap-2" role="group" aria-label="Ledger date order">${orderButton('oldest', 'Oldest first')}${orderButton('newest', 'Newest first')}</div></div></div><div class="overflow-x-auto"><table class="w-full min-w-[760px] text-left border-collapse text-xs"><thead class="bg-slate-100 text-slate-600 border-b"><tr><th class="p-2.5">Date</th>${isSecurity ? '<th class="p-2.5">Voucher</th><th class="p-2.5">Particulars</th>' : '<th class="p-2.5">Activity</th>'}<th class="p-2.5 text-right">${inLabel}</th><th class="p-2.5 text-right">${outLabel}</th><th class="p-2.5 text-right">${balanceLabel}</th></tr></thead><tbody>${body}</tbody></table></div>${isSecurity ? renderStaffBalanceSummary(query) : ''}`;
 }
 
 function openEntry(kind) {
@@ -1516,7 +1586,9 @@ async function savePartnerWithdrawal() {
     } catch (err) { hideLoading(); console.error(err); toast('Could not connect to the database.', false); }
 }
 function editEntry(id) {
-    let e = entryById[id]; if(!e || !e.manual) return;
+    let e = entryById[id]; if(!e) return;
+    if(id.toUpperCase().startsWith('ADV-')) { toast('Edit this advance from the Staff page so its account voucher stays linked.', false); return; }
+    if(!e.manual) return;
     if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
     if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     editingId = id;
@@ -1529,6 +1601,7 @@ function editEntry(id) {
 }
 function quickEdit(id) {
     const e = entryById[id]; if(!e) return;
+    if(id.toUpperCase().startsWith('ADV-')) { toast('Edit this advance from the Staff page so its account voucher stays linked.', false); return; }
     if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
     if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
     $('qeVid').value = id; $('qeDate').value = e.date; $('qeAmount').value = e.amount; $('qeNotes').value = e.notes || '';
@@ -1728,10 +1801,19 @@ function deleteSelectedDaybookEntries() {
 
 function deleteEntry(id) {
     let e = entryById[id]; if(!e) return;
+    if(id.toUpperCase().startsWith('ADV-')) {
+        if(!staffAdvanceReady) { toast('Cannot verify advance recoveries. Run the staff advance SQL and refresh before deleting this voucher.', false); return; }
+        const advance = staffAdvancesByVoucher.get(id.toUpperCase());
+        if(advance && (staffAdvanceRecoveryCounts.get(String(advance.id)) || 0) > 0) {
+            toast('This advance has payroll recoveries. Keep its account voucher and audit record.', false); return;
+        }
+    }
     if(e.isFixedAsset) { toast('Manage this transaction from the Assets tab so the asset register stays in sync.', false); return; }
     if(e.isSecurityRefund) { toast('This refund is linked to the staff security ledger. Undo it from Staff & Payroll instead.', false); return; }
  if(e.kind === 'bill_raised' || e.kind === 'bill_received') { const n = entries.filter(x => x.billRef === e.id).length; if(n) { toast(`This bill has ${n} receipt/payment entr${n > 1 ? 'ies' : 'y'}. Delete those first.`, false); return; } }
-    let msg = e.isFee
+    let msg = id.toUpperCase().startsWith('ADV-')
+        ? `Staff advance voucher ${e.id} (PKR ${fmt(e.amount)}) will be permanently deleted.\n\nAfter deleting it here, return to Staff and delete the advance record.`
+        : e.isFee
         ? `This is a fee payment for ${e.fee.student || 'a student'} (PKR ${fmt(e.amount)}, ${e.fee.period || ''}).\n\nDeleting it will reopen the balance on the Fee Vouchers page.\n\nDelete it?`
         : `${KIND_META[e.kind].label} voucher ${e.id} (PKR ${fmt(e.amount)}) will be permanently deleted. Delete it?`;
     confirmBox(msg, 'Yes, delete', async () => {
@@ -1742,7 +1824,9 @@ function deleteEntry(id) {
             if(!res.ok) { hideLoading(); toast('Could not delete: ' + await res.text(), false); return; }
             let gone = await res.json();
             if(!Array.isArray(gone) || gone.length === 0) { hideLoading(); toast('Entry was not deleted (check permissions / RLS).', false); return; }
-            toast('Entry deleted.');
+            toast(id.toUpperCase().startsWith('ADV-')
+                ? 'Advance voucher deleted. Return to Staff to delete its advance record.'
+                : 'Entry deleted.');
             await initAccounts();
         } catch (err) { hideLoading(); toast('Connection error.', false); }
     });

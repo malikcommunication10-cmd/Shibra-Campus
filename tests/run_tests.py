@@ -299,6 +299,15 @@ def main():
             check('a student with 20 old dues is merged to at most 11 lines', plan['by']['Long Dues']['lines'] <= 11 and plan['by']['Long Dues']['first'].startswith('Earlier dues'), plan['by'].get('Long Dues'))
             narrow = pg.evaluate("""()=>{ const f=chForm(); f.cls='Class 1'; const a=challanPlan(f).list.map(c=>c.name); f.cls='ALL'; f.student='aleezy'; const b2=challanPlan(f).list.map(c=>c.name); return {a,b2}; }""")
             check('class filter and one-student filter work', narrow['a'] == ['Overpaid'] and narrow['b2'] == ['Aleezy'], narrow)
+            selected = pg.evaluate("""()=>{ const f=studentChallanOptions('731','Aleezy','Pre-Nursery - A','October 2026'); const plan=challanPlan(f);
+              return {month:f.month,due:f.due,student:f.student,names:plan.list.map(c=>c.name),payable:plan.list[0]?.payable}; }""")
+            check('row print prepares only that student and voucher month', selected == {'month':10,'due':'2026-10-01','student':'731','names':['Aleezy'],'payable':10400}, selected)
+            pg.set_viewport_size({'width':375,'height':812})
+            pg.evaluate("""()=>renderFeesTable(allFeesCache.filter(r=>r.admis_no==='731'))""")
+            actions = pg.evaluate("""()=>{ const box=document.querySelector('#feesTableBody td[data-l="Action"] > div');
+              const buttons=[...box.querySelectorAll('button')], tops=buttons.map(b=>Math.round(b.getBoundingClientRect().top));
+              return {labels:buttons.map(b=>b.innerText.trim()),tops,wrap:getComputedStyle(box).flexWrap}; }""")
+            check('Pay, discount, item and print buttons stay on one row on mobile', actions['labels']==['💳 Pay','% Disc','➕ Item','🖨️ Print'] and len(set(actions['tops']))==1 and actions['wrap']=='nowrap', actions)
             html = pg.evaluate("()=>{const f=chForm();return challanHtml(challanPlan(f),f)}")
             pg2 = b.new_page(); pg2.route('**/*', lambda r: r.continue_() if f'localhost:{PORT}' in r.request.url else r.abort()); pg2.goto(f'http://localhost:{PORT}/login.html'); pg2.set_content(html, wait_until='load'); pg2.wait_for_timeout(300)
             pdf = pg2.pdf(landscape=True, format='A4', print_background=True, prefer_css_page_size=True); npg = len(_re.findall(rb'/Type\s*/Page[^s]', pdf))

@@ -3,8 +3,6 @@
 // ============================================================================
 const SB_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
 const SB_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
-// Start the connection (DNS + TLS) to the database right now, so the first data request does not wait for the handshake
-try { ['preconnect', 'dns-prefetch'].forEach(rel => { const l = document.createElement('link'); l.rel = rel; l.href = SB_URL; l.crossOrigin = 'anonymous'; document.head.appendChild(l); }); } catch (e) {}
 function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 let _sbXlsxLoading = null;
 function sbLoadXlsx() {
