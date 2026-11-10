@@ -29,6 +29,7 @@ let fixedAssets = [], fixedAssetEvents = [], fixedAssetsLoaded = false;
 let BUSINESS_PARTNERS = [];
 let staffSecurityLedger = [], staffSecurityReady = false, securityRefundVouchers = new Set();
 let payrollWaiverCandidates = [], payrollWaiverRequests = [], payrollWaiverDataError = '';
+let payrollWaiverLoaded = false;   // waiver data is loaded when the Waivers tab is opened, not on every Accounts page load
 let dbLimit = 300;
 let dbSelectedEntries = new Set();
 let editingId = null, entryKind = 'receipt';
@@ -204,7 +205,7 @@ async function initAccounts() {
         billEntries = allE.filter(e => e.kind === 'bill_raised' || e.kind === 'bill_received');
         entries = allE.filter(e => e.kind !== 'bill_raised' && e.kind !== 'bill_received');
         if(!$('gFrom').value) applyPreset();
-        await loadPayrollWaiverData();
+        payrollWaiverLoaded = false;
         renderAll();
     } catch (e) {
         console.error(e);
@@ -243,10 +244,16 @@ async function loadPayrollWaiverData() {
             payrollWaiverDataError = error.message || 'Could not load payroll waiver data.';
             console.error('Could not load payroll waiver data:', error);
         }
+        payrollWaiverLoaded = true;
         renderPayrollWaiverTab();
 }
 
 function renderPayrollWaiverTab() {
+        if (!payrollWaiverLoaded) {
+            const wait = $('payrollWaiverRequestNotice');
+            wait.className = 'rounded-xl p-3 text-sm bg-slate-50 border border-slate-200 text-slate-600';
+            wait.textContent = 'Loading waiver data...'; wait.classList.remove('hidden'); return;
+        }
         const form = $('payrollWaiverRequestForm');
         const canRequest = can('accounts', 'v') || can('accounts', 'a') || can('accounts', 'e');
         form.classList.toggle('hidden', !canRequest);
@@ -565,7 +572,7 @@ function showTab(t) {
         if (!fixedAssetsLoaded) loadFixedAssets();
         else renderFixedAssets();
     }
-    else if (t === 'waivers') renderPayrollWaiverTab();
+    else if (t === 'waivers') { renderPayrollWaiverTab(); if (!payrollWaiverLoaded) loadPayrollWaiverData(); }
     const names = { overview: 'Overview', daybook: 'Daybook', fees: 'Fee Collection', heads: 'Heads Summary', wallets: 'Cash & Bank', dues: 'Receivable / Payable', assets: 'Purchases / Assets', waivers: 'Payroll Waivers' };
     let r = getRange();
     $('printTitle').innerText = `${names[t]} — ${fmtDate(r.from)} to ${fmtDate(r.to)} (${r.wallet === 'ALL' ? 'All accounts' : WALLETS[r.wallet].label})`;

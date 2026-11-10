@@ -79,3 +79,16 @@ Amount payable = arrears + that month's fee (never below 0). Skips students with
 More than 11 lines are merged ("Earlier dues (n items)") so a challan always fits one page. Wording, top box, notes, fine and copies are remembered.
 Files: js/pages/challan.js, assets/logo.png (taken from the school's sample challan), fees.html (button + popup).
 Note: the students table has no father's-name column, so the challan shows the contact number instead.
+
+## Speed regression fix (every page slow again, switching pages reloaded everything)
+Found in the repository as uploaded:
+1. `js/core/auth.js` treated EVERY non-GET request as a write and emptied the whole data cache. Reports, Audit, Follow-ups and the new
+   Payroll Waivers list call server functions with POST although they only read, so opening Accounts / Reports / Audit wiped the cached
+   students, fees, accounts and books, and the next page started from zero. Read-only server functions (`list_*`, `get_*`, `read_*`,
+   `search_*`, `app_audit_events`, `app_business_reports`, `app_followup_data`) now leave the cache alone and are not blocked by "close previous days".
+   Real changes (save / review / schedule ...) still clear it.
+2. Accounts waited for the waiver data (1 table + 1 server function) on every load. It now loads when the Waivers tab is opened.
+3. The pages carried 8 different `?v=` numbers for the same scripts, so each page switch downloaded the scripts again. All pages now share one (`20261110-1`).
+4. `.github/workflows/build-css.yml` was the old one (scans only nav.js / config.js), so every rebuild of `styles.css` lost 121 classes used in `js/`
+   (sidebar layout, buttons ...). The corrected workflow scans `*.html` and `js/**/*.js`.
+5. Staff schema checks run once a day (`sbProbe`) again; accounts.html and staff.html lost the old "hide page while loading" script.
