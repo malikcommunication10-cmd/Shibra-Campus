@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="css/theme.css?v=20261030-1">
     <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
     <script src="js/core/db.js?v=20261029-1"></script>
-    <script src="js/core/nav.js?v=20261029-1"></script>
+    <script src="js/core/nav.js?v=20261107-9"></script>
     <script src="js/core/ui.js?v=20261029-1"></script>
     <style>
         .tab-on  { background:#4338ca; color:#fff; border-color:#4338ca; }
@@ -145,6 +145,17 @@
             <section id="tab-staff" class="hidden space-y-4">
                 <div id="staffCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
                 <div id="incrementSetupNotice" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-900 no-print">Annual increments need the one-time <b>supabase_staff_increments.sql</b> migration. Run it in Supabase SQL Editor, then refresh this page.</div>
+                <div id="staffAdvanceSetupNotice" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-900 no-print">
+                    Staff advances need a one-time database setup. Run <b>supabase_staff_advances.sql</b> in Supabase SQL Editor, or copy its SQL from the setup banner, then refresh.
+                    <button onclick="copyStaffAdvanceSql()" class="ml-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white">Copy SQL</button>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div><h3 class="font-bold text-indigo-950">Staff salary advances</h3><p class="text-xs text-slate-500 mt-1">Record an advance and agreed monthly recovery. Payroll will deduct it automatically from the effective month until paid off.</p></div>
+                        <button id="addStaffAdvanceButton" onclick="openStaffAdvance()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">➕ Give advance</button>
+                    </div>
+                    <div id="staffAdvanceRows" class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-2"></div>
+                </div>
                 <div class="flex justify-end no-print">
                     <button id="salaryIncrementButton" onclick="openSalaryIncrement()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold">📈 Annual increment</button>
                 </div>
@@ -341,6 +352,50 @@
         </div>
     </div>
 
+    <div id="staffAdvanceModal" class="modal fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                <div><h3 id="staffAdvanceTitle" class="text-lg font-bold text-indigo-950">Give staff advance</h3><p class="text-xs text-slate-500">Select the date and account the money was paid from. The remaining balance is recovered through payroll.</p></div>
+                <button onclick="closeModal('staffAdvanceModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2" aria-label="Close">✕</button>
+            </div>
+            <div class="p-5 space-y-3">
+                <label class="block text-xs font-medium text-slate-700">Staff member
+                    <select id="advanceStaff" class="mt-1 w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
+                </label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label class="block text-xs font-medium text-slate-700">Advance given (PKR)
+                        <input id="advancePrincipal" type="number" min="0.01" step="0.01" class="mt-1 w-full border rounded-lg p-2.5 text-sm" placeholder="50000">
+                    </label>
+                    <label class="block text-xs font-medium text-slate-700">Monthly deduction (PKR)
+                        <input id="advanceMonthly" type="number" min="0.01" step="0.01" class="mt-1 w-full border rounded-lg p-2.5 text-sm" placeholder="5000">
+                    </label>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label class="block text-xs font-medium text-slate-700">Date given
+                        <input id="advanceDate" type="date" class="mt-1 w-full border rounded-lg p-2.5 text-sm">
+                    </label>
+                    <label class="block text-xs font-medium text-slate-700">Paid from account
+                        <select id="advanceWallet" class="mt-1 w-full border rounded-lg p-2.5 text-sm bg-white outline-none">
+                            <option value="cash">💵 Cash in Hand</option>
+                            <option value="bank">🏦 Bank</option>
+                        </select>
+                    </label>
+                </div>
+                <label class="block text-xs font-medium text-slate-700">Start deduction from
+                    <input id="advanceStartMonth" type="month" class="mt-1 w-full border rounded-lg p-2.5 text-sm">
+                </label>
+                <label class="block text-xs font-medium text-slate-700">Notes (optional)
+                    <input id="advanceNotes" type="text" maxlength="300" class="mt-1 w-full border rounded-lg p-2.5 text-sm" placeholder="Reason / approval details">
+                </label>
+                <p class="text-[11px] text-slate-500 bg-amber-50 border border-amber-100 rounded-lg p-3">Only one unpaid advance agreement per staff member is allowed at a time. Final month's deduction is capped to the remaining balance.</p>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2 sticky bottom-0 bg-white">
+                <button onclick="closeModal('staffAdvanceModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button id="staffAdvanceSaveButton" onclick="saveStaffAdvance()" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg text-sm">Save advance</button>
+            </div>
+        </div>
+    </div>
+
     <div id="staffAttendanceMonthModal" class="modal fixed inset-0 bg-black/60 z-[85] hidden flex items-end sm:items-center justify-center sm:p-3">
         <div class="bg-white w-full max-w-6xl rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] flex flex-col">
             <div class="p-5 border-b flex justify-between items-center">
@@ -378,7 +433,7 @@
                 <button onclick="closeModal('genPayrollModal')" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
             </div>
             <div class="p-5 space-y-3">
-                <p class="text-xs text-slate-600 bg-indigo-50 border border-indigo-100 rounded-xl p-3">Set salary days and security deduction for each staff member. Admin deductible off/leave days aur late deduction days ko kam ya zero kar sakta hai; har waiver ke liye Remarks mein reason lazmi hai. Actual attendance counts change nahi honge. Any recorded leave still disqualifies the no-absence bonus. Security is withheld from salary and added to the school's payable liability. Unmarked workdays will be saved as Present without changing saved attendance.</p>
+                <p class="text-xs text-slate-600 bg-indigo-50 border border-indigo-100 rounded-xl p-3">Set salary days and security deduction for each staff member. Advance recovery is taken up to the agreed monthly amount and capped at the salary available after other deductions. Admin deductible off/leave days aur late deduction days ko kam ya zero kar sakta hai; har waiver ke liye Remarks mein reason lazmi hai. Actual attendance counts change nahi honge. Any recorded leave still disqualifies the no-absence bonus. Security is withheld from salary and added to the school's payable liability. Unmarked workdays will be saved as Present without changing saved attendance.</p>
                 <div id="genPayrollRows" class="space-y-3"></div>
             </div>
             <div class="p-5 border-t flex justify-end gap-2 sticky bottom-0 bg-white">
@@ -410,7 +465,7 @@
                 <div class="grid grid-cols-3 gap-3 bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
                     <div><label class="block text-xs font-medium text-emerald-700 mb-1">Bonus (+)</label><input id="adjBonus" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"><p id="adjBonusRule" class="mt-1 text-[10px] text-slate-500"></p></div>
                     <div><label class="block text-xs font-medium text-rose-700 mb-1">Fine (−)</label><input id="adjFine" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"></div>
-                    <div><label class="block text-xs font-medium text-amber-700 mb-1">Advance (−)</label><input id="adjAdv" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"></div>
+                    <div><label class="block text-xs font-medium text-amber-700 mb-1">Advance (−)</label><input id="adjAdv" type="number" min="0" oninput="calcAdj()" class="w-full border rounded-lg p-2 text-sm bg-white outline-none"><p id="adjAdvanceHint" class="mt-1 text-[10px] text-slate-500"></p></div>
                 </div>
                 <div><label class="block text-xs font-medium text-slate-700 mb-1">Remarks <span class="text-slate-400">(waived off/late days ke liye reason zaroori)</span></label><input id="adjNotes" type="text" maxlength="300" class="w-full border rounded-lg p-2.5 text-sm outline-none"></div>
                 <div class="bg-slate-50 border rounded-xl p-4 text-sm space-y-1">
@@ -560,6 +615,6 @@
     <!-- SETTINGS -->
     
 
-<script src="js/pages/staff.js?v=20261107-7"></script>
+<script src="js/pages/staff.js?v=20261110-3"></script>
 </body>
 </html>
