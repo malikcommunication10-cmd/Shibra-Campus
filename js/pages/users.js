@@ -5,7 +5,7 @@ function openModal(id) { $(id).classList.remove('hidden'); $(id).classList.add('
 function closeModal(id) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
 let users = [], roles = [], closes = [], permTarget = null, passwordTargetEmail = '', activeTab = 'users';
 let usersLoaded = false, rolesLoaded = false, roleCountsLoaded = false, closesLoaded = false, roleListPromise = null;
-let roleCounts = new Map(), tabLoadPromises = {}, tabCacheInitialized = false;
+let roleCounts = new Map(), tabLoadPromises = {};
 const H = () => ({ apikey: SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
 const roleOf = n => roles.find(r => r.name === n);
 const permsOf = u => u.perms || (roleOf(u.role) || {}).perms || { pages: {}, flags: [] };
@@ -77,10 +77,6 @@ async function loadTabData(tab) {
 }
 async function initUsers(refresh = false) {
     $('tabC').classList.toggle('hidden', !ME || ME.role !== 'Admin');
-    if (!tabCacheInitialized) {
-        ['app_users', 'app_roles', 'day_close'].forEach(sbCacheClear);
-        tabCacheInitialized = true;
-    }
     if (refresh) {
         usersLoaded = rolesLoaded = roleCountsLoaded = closesLoaded = false;
         roleCounts = new Map();
