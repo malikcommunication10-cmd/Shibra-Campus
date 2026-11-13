@@ -44,4 +44,4 @@ function sbLoadXlsx() {
 //  login.html sets  window.SB_NO_GUARD = true  before loading this file.
 // ============================================================================
 const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1', SB_LOGOUT_REASON_KEY = 'sb_logout_reason_v1';
-const SB_IDLE_TIMEOUT = 5 * 60 * 1000;
+const SB_IDLE_TIMEOUT = 60 * 60 * 1000;
