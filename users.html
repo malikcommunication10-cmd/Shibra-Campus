@@ -7,7 +7,7 @@
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <link rel="stylesheet" href="css/theme.css?v=20261030-1">
-    <script src="js/core/config.js?v=20261029-1"></script><script src="js/core/cache.js?v=20261029-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261029-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/config.js?v=20261113-1"></script><script src="js/core/cache.js?v=20261113-1"></script><script src="js/core/auth.js?v=20261029-1"></script><script src="js/core/permissions.js?v=20261029-1"></script><script src="js/core/data.js?v=20261110-3"></script><script src="js/core/settings.js?v=20261029-1"></script>
     <script src="js/core/db.js?v=20261029-1"></script>
     <script src="js/core/nav.js?v=20261107-9"></script>
     <script src="js/core/ui.js?v=20261029-1"></script>
@@ -19,9 +19,10 @@
     <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 page-hero p-5 md:p-7 rounded-2xl">
             <div><div class="page-kicker mb-2">Shibra Campus · Administration</div><h2 class="text-xl md:text-2xl font-extrabold text-indigo-950">Users & Roles</h2><p class="text-xs md:text-sm text-slate-500">Create users, tick what each role may do, and close the day</p></div>
-            <div class="flex gap-2 text-sm font-semibold">
+            <div class="flex flex-wrap gap-2 text-sm font-semibold">
                 <button id="tabU" onclick="showTab('users')" class="px-4 py-2 rounded-xl bg-indigo-600 text-white">👥 Users</button>
                 <button id="tabR" onclick="showTab('roles')" class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600">🛡️ Roles</button>
+                <button id="tabC" onclick="showTab('connection')" class="hidden px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600">🔌 Database connection</button>
                 <button id="tabD" onclick="showTab('day')" class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600">🔒 Day close</button>
             </div>
         </div>
@@ -48,6 +49,28 @@
                 <button onclick="reopenDay()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-semibold">🔓 Re-open the last close</button>
             </div>
             <div><h4 class="text-xs font-bold text-slate-600 mb-1">History</h4><div id="closeList" class="text-xs divide-y border rounded-lg"></div></div>
+        </section>
+
+        <!-- DATABASE CONNECTION -->
+        <section id="paneConnection" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-6 space-y-4 max-w-3xl">
+            <div>
+                <h3 class="font-bold text-indigo-900 text-sm">Supabase connection</h3>
+                <p class="text-xs text-slate-500 mt-1">Enter the project URL and publishable key. Use a publishable/anon key only; never enter a service-role key.</p>
+            </div>
+            <div>
+                <label for="connectionUrl" class="block text-xs font-semibold text-slate-600 mb-1">Project URL</label>
+                <input id="connectionUrl" type="url" autocomplete="off" placeholder="https://xxxx.supabase.co" class="w-full border rounded-lg p-2.5 text-sm outline-none">
+            </div>
+            <div>
+                <label for="connectionKey" class="block text-xs font-semibold text-slate-600 mb-1">Publishable key</label>
+                <input id="connectionKey" type="text" autocomplete="off" placeholder="sb_publishable_..." class="w-full border rounded-lg p-2.5 text-sm outline-none">
+            </div>
+            <p id="connectionMessage" class="text-xs text-slate-500" role="status">Saving or resetting signs you out and reloads the app.</p>
+            <div class="flex flex-wrap gap-2">
+                <button onclick="resetSupabaseConfig()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-semibold">Reset to default</button>
+                <button id="testSupabaseConnectionButton" onclick="testSupabaseConnection()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold">Test connection</button>
+                <button onclick="saveSupabaseConfig()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold">Save</button>
+            </div>
         </section>
     </main>
 </div>
@@ -92,6 +115,6 @@
     <div class="p-4 border-t flex flex-wrap justify-between gap-2"><button id="pReset" onclick="resetUserPerms()" class="hidden px-3 py-2 bg-amber-50 text-amber-700 rounded-lg text-sm font-semibold">Use the role's permissions</button><span class="flex-1"></span><button onclick="closeModal('permModal')" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button><button onclick="savePerms()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save permissions</button></div>
 </div></div>
 
-<script src="js/pages/users.js?v=20261029-1"></script>
+<script src="js/pages/users.js?v=20261113-1"></script>
 </body>
 </html>
