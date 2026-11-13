@@ -3,30 +3,101 @@ const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 function toast(msg, ok) { UI.toast(msg, ok !== false); }
 function openModal(id) { $(id).classList.remove('hidden'); $(id).classList.add('flex'); }
 function closeModal(id) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
-let users = [], roles = [], closes = [], permTarget = null, passwordTargetEmail = '';
+let users = [], roles = [], closes = [], permTarget = null, passwordTargetEmail = '', activeTab = 'users';
+let usersLoaded = false, rolesLoaded = false, roleCountsLoaded = false, closesLoaded = false, roleListPromise = null;
+let roleCounts = new Map(), tabLoadPromises = {}, tabCacheInitialized = false;
 const H = () => ({ apikey: SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' });
 const roleOf = n => roles.find(r => r.name === n);
 const permsOf = u => u.perms || (roleOf(u.role) || {}).perms || { pages: {}, flags: [] };
 const adminCount = () => users.filter(u => u.active !== false && u.role === 'Admin' && !u.perms).length;
 
-async function initUsers() {
+async function readRows(table, query) {
+    const response = await ERP.db.request(table, query);
+    if (!response.ok) throw new Error(`Could not load ${table} (HTTP ${response.status}): ${await response.text()}`);
+    const rows = await response.json();
+    if (!Array.isArray(rows)) throw new Error(`Could not load ${table}: the response was not a row list.`);
+    return rows;
+}
+async function ensureRolesLoaded() {
+    if (rolesLoaded) return true;
+    if (!roleListPromise) {
+        const pending = readRows('app_roles', 'select=*&order=created_at.asc')
+            .then(rows => {
+                if (roleListPromise === pending) { roles = rows; rolesLoaded = true; }
+            })
+            .finally(() => { if (roleListPromise === pending) roleListPromise = null; });
+        roleListPromise = pending;
+    }
+    await roleListPromise;
+    return true;
+}
+async function loadTabData(tab) {
+    if (tab === 'connection') { renderConnectionSettings(); return; }
+    if (tabLoadPromises[tab]) return tabLoadPromises[tab];
+    const load = async () => {
+        if (tab === 'users' && usersLoaded) return renderUsers();
+        if (tab === 'roles' && rolesLoaded && roleCountsLoaded) return renderRoles();
+        if (tab === 'day' && closesLoaded) return renderDay();
+        if (tab === 'users') $('usersBody').innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">Loading users...</td></tr>';
+        if (tab === 'roles') $('rolesBody').innerHTML = '<tr><td colspan="5" class="p-6 text-center text-slate-400">Loading roles...</td></tr>';
+        if (tab === 'day') { $('closedThrough').innerText = 'Loading...'; $('closeList').innerHTML = '<div class="p-3 text-slate-400">Loading day-close history...</div>'; }
+        try {
+            if (tab === 'users') {
+                users = await readRows('app_users', 'select=*&order=created_at.asc');
+                usersLoaded = true;
+                renderUsers();
+            } else if (tab === 'roles') {
+                await ensureRolesLoaded();
+                if (!roleCountsLoaded) {
+                    const roleRows = await readRows('app_users', 'select=role');
+                    roleCounts = new Map();
+                    roleRows.forEach(user => roleCounts.set(user.role, (roleCounts.get(user.role) || 0) + 1));
+                    roleCountsLoaded = true;
+                }
+                renderRoles();
+            } else if (tab === 'day') {
+                closes = await readRows('day_close', 'select=*&order=closed_date.desc');
+                closesLoaded = true;
+                renderDay();
+            }
+        } catch (error) {
+            console.error(`Could not load the ${tab} tab:`, error);
+            const message = esc(error.message);
+            if (tab === 'users') $('usersBody').innerHTML = `<tr><td colspan="6" class="p-6 text-center text-rose-500">Could not load users: ${message}</td></tr>`;
+            if (tab === 'roles') $('rolesBody').innerHTML = `<tr><td colspan="5" class="p-6 text-center text-rose-500">Could not load roles: ${message}</td></tr>`;
+            if (tab === 'day') $('closeList').innerHTML = `<div class="p-3 text-rose-500">Could not load day-close history: ${message}</div>`;
+            toast(`Could not load ${tab === 'day' ? 'day-close history' : tab}: ${error.message}`, false);
+        }
+    };
+    const pending = load().finally(() => {
+        if (tabLoadPromises[tab] === pending) delete tabLoadPromises[tab];
+    });
+    tabLoadPromises[tab] = pending;
+    return pending;
+}
+async function initUsers(refresh = false) {
     $('tabC').classList.toggle('hidden', !ME || ME.role !== 'Admin');
-    try {
-        const [u, r, d] = await Promise.all([ERP.db.request('app_users', 'select=*&order=created_at.asc'), ERP.db.request('app_roles', 'select=*&order=created_at.asc'), ERP.db.request('day_close', 'select=*&order=closed_date.desc')]);
-        users = u.ok ? await u.json() : []; roles = r.ok ? await r.json() : []; closes = d.ok ? await d.json() : [];
-        if (!Array.isArray(users) || !Array.isArray(roles)) throw new Error('tables');
-        if (!Array.isArray(closes)) closes = [];
-    } catch (e) { console.error(e); toast('Could not load. Did you run supabase_roles.sql?', false); }
-    renderUsers(); renderRoles(); renderDay();
+    if (!tabCacheInitialized) {
+        ['app_users', 'app_roles', 'day_close'].forEach(sbCacheClear);
+        tabCacheInitialized = true;
+    }
+    if (refresh) {
+        usersLoaded = rolesLoaded = roleCountsLoaded = closesLoaded = false;
+        roleCounts = new Map();
+        roleListPromise = null;
+        tabLoadPromises = {};
+    }
+    await loadTabData(activeTab);
 }
 function showTab(t) {
     if (t === 'connection' && (!ME || ME.role !== 'Admin')) return toast('Only an Admin can change the database connection.', false);
+    activeTab = t;
     $('paneUsers').classList.toggle('hidden', t !== 'users'); $('paneRoles').classList.toggle('hidden', t !== 'roles'); $('paneDay').classList.toggle('hidden', t !== 'day'); $('paneConnection').classList.toggle('hidden', t !== 'connection');
     const on = 'px-4 py-2 rounded-xl bg-indigo-600 text-white', off = 'px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600';
     $('tabU').className = t === 'users' ? on : off; $('tabR').className = t === 'roles' ? on : off;
     $('tabC').className = `${t === 'connection' ? on : off}${ME && ME.role === 'Admin' ? '' : ' hidden'}`;
     $('tabD').className = t === 'day' ? on : off;
-    if (t === 'connection') renderConnectionSettings();
+    loadTabData(t);
 }
 
 function renderConnectionSettings() {
@@ -159,7 +230,9 @@ async function setUserPassword() {
         button.textContent = 'Change password';
     }
 }
-function openUser(email) {
+async function openUser(email) {
+    try { await ensureRolesLoaded(); }
+    catch (error) { console.error('Could not load roles for the user form:', error); return toast(error.message, false); }
     const u = email ? users.find(x => x.email === email) : null;
     $('uTitle').innerText = u ? 'Edit user' : 'Add user'; $('uEditing').value = u ? u.email : '';
     $('uName').value = u ? u.name || '' : ''; $('uEmail').value = u ? u.email : ''; $('uEmail').disabled = !!u; $('uPass').value = ''; $('uPassWrap').classList.toggle('hidden', !!u);
@@ -176,7 +249,7 @@ async function saveUser() {
         if (u && u.role === 'Admin' && !u.perms && (role !== 'Admin' || !active) && adminCount() <= 1) return toast('There must always be one active Admin.', false);
         const r = await fetch(`${SB_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(editing)}`, { method: 'PATCH', headers: H(), body: JSON.stringify({ name, role, active }) });
         if (!r.ok) return toast('Could not save: ' + await r.text(), false);
-        toast('User saved.'); closeModal('userModal'); return initUsers();
+        toast('User saved.'); closeModal('userModal'); return initUsers(true);
     }
     if (users.some(x => x.email === email)) return toast('This email is already in the list.', false);
     if (pw && pw.length < 6) return toast('The password must have at least 6 characters.', false);
@@ -187,7 +260,7 @@ async function saveUser() {
     }
     const r = await fetch(`${SB_URL}/rest/v1/app_users`, { method: 'POST', headers: H(), body: JSON.stringify({ email, name, role, active }) });
     if (!r.ok) return toast('Could not save: ' + await r.text(), false);
-    toast(pw ? 'User created. Tell them the email and the first password.' : 'User added.'); closeModal('userModal'); initUsers();
+    toast(pw ? 'User created. Tell them the email and the first password.' : 'User added.'); closeModal('userModal'); initUsers(true);
 }
 async function deleteUser(email) {
     const u = users.find(x => x.email === email); if (!u) return;
@@ -195,36 +268,42 @@ async function deleteUser(email) {
     if (!await UI.confirm(`Remove ${u.name || email} from the app?\n\nTheir login stays in Supabase but they will get "No access".`)) return;
     const r = await fetch(`${SB_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: H() });
     if (!r.ok) return toast('Could not delete: ' + await r.text(), false);
-    toast('User removed.'); initUsers();
+    toast('User removed.'); initUsers(true);
 }
 
 /* ---------- roles ---------- */
 function renderRoles() {
     $('rolesBody').innerHTML = roles.map(r => {
-        const n = users.filter(u => u.role === r.name).length, p = r.perms || { pages: {}, flags: [] };
+        const n = roleCounts.get(r.name) || 0, p = r.perms || { pages: {}, flags: [] };
         return `<tr class="border-t align-top"><td class="p-3 font-semibold">${esc(r.name)}${r.builtin ? ' <span class="text-[10px] bg-slate-100 text-slate-500 rounded px-1">standard</span>' : ''}</td><td class="p-3">${n}</td><td class="p-3 text-slate-600">${esc(summarizePages(p))}</td>
         <td class="p-3 text-slate-500">${(p.flags || []).map(f => esc((PERM_FLAGS.find(x => x[0] === f) || [f, f])[1])).join('; ') || '-'}</td>
         <td class="p-3 whitespace-nowrap" data-r="${esc(r.name)}"><button onclick="openPerms('role',this.parentNode.dataset.r)" class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded font-semibold mr-1">Edit permissions</button>${r.builtin || n ? '' : '<button onclick="deleteRole(this.parentNode.dataset.r)" class="px-2 py-1 bg-rose-50 text-rose-600 rounded font-semibold">Delete</button>'}</td></tr>`;
     }).join('') || '<tr><td colspan="5" class="p-6 text-center text-slate-400">No roles.</td></tr>';
 }
-function openRoleNew() { $('rName').value = ''; $('rCopy').innerHTML = roles.map(r => `<option value="${esc(r.name)}">${esc(r.name)}</option>`).join(''); openModal('roleModal'); }
+async function openRoleNew() {
+    try { await ensureRolesLoaded(); }
+    catch (error) { console.error('Could not load roles for the role form:', error); return toast(error.message, false); }
+    $('rName').value = ''; $('rCopy').innerHTML = roles.map(r => `<option value="${esc(r.name)}">${esc(r.name)}</option>`).join(''); openModal('roleModal');
+}
 async function createRole() {
     const name = $('rName').value.trim(); if (!name) return toast('Enter a role name.', false);
     if (roles.some(r => r.name.toLowerCase() === name.toLowerCase())) return toast('This role already exists.', false);
     const src = roleOf($('rCopy').value), perms = JSON.parse(JSON.stringify((src && src.perms) || { pages: {}, flags: [] }));
     const r = await fetch(`${SB_URL}/rest/v1/app_roles`, { method: 'POST', headers: H(), body: JSON.stringify({ name, perms, builtin: false }) });
     if (!r.ok) return toast('Could not create: ' + await r.text(), false);
-    closeModal('roleModal'); await initUsers(); openPerms('role', name);
+    closeModal('roleModal'); await initUsers(true); openPerms('role', name);
 }
 async function deleteRole(name) {
     if (!await UI.confirm(`Delete the role "${name}"?`)) return;
     const r = await fetch(`${SB_URL}/rest/v1/app_roles?name=eq.${encodeURIComponent(name)}`, { method: 'DELETE', headers: H() });
     if (!r.ok) return toast('Could not delete: ' + await r.text(), false);
-    toast('Role deleted.'); initUsers();
+    toast('Role deleted.'); initUsers(true);
 }
 
 /* ---------- the permission tick boxes ---------- */
-function openPerms(type, key) {
+async function openPerms(type, key) {
+    try { await ensureRolesLoaded(); }
+    catch (error) { console.error('Could not load roles for permissions:', error); return toast(error.message, false); }
     const t = type === 'role' ? roleOf(key) : users.find(u => u.email === key); if (!t) return;
     permTarget = { type, key };
     const p = type === 'role' ? (t.perms || { pages: {}, flags: [] }) : permsOf(t);
@@ -248,12 +327,12 @@ async function savePerms() {
     const url = t.type === 'role' ? `${SB_URL}/rest/v1/app_roles?name=eq.${encodeURIComponent(t.key)}` : `${SB_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(t.key)}`;
     const r = await fetch(url, { method: 'PATCH', headers: H(), body: JSON.stringify({ perms }) });
     if (!r.ok) return toast('Could not save: ' + await r.text(), false);
-    toast('Permissions saved. People see it within a minute or at their next login.'); closeModal('permModal'); initUsers();
+    toast('Permissions saved. People see it within a minute or at their next login.'); closeModal('permModal'); initUsers(true);
 }
 async function resetUserPerms() {
     const r = await fetch(`${SB_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(permTarget.key)}`, { method: 'PATCH', headers: H(), body: JSON.stringify({ perms: null }) });
     if (!r.ok) return toast('Could not save: ' + await r.text(), false);
-    toast('Now using the role\'s permissions.'); closeModal('permModal'); initUsers();
+    toast('Now using the role\'s permissions.'); closeModal('permModal'); initUsers(true);
 }
 
 /* ---------- day close ---------- */
@@ -269,12 +348,12 @@ async function closeDay() {
     if (!await UI.confirm(`Close every day up to ${d}?\nNobody without the special permission can change these days afterwards.`)) return;
     const r = await fetch(`${SB_URL}/rest/v1/day_close`, { method: 'POST', headers: H(), body: JSON.stringify({ closed_date: d, closed_by: ME && ME.email }) });
     if (!r.ok) return toast('Could not close: ' + await r.text(), false);
-    ME.closedThrough = d; sbSaveMe(ME); toast('Day closed.'); initUsers();
+    ME.closedThrough = d; sbSaveMe(ME); toast('Day closed.'); initUsers(true);
 }
 async function reopenDay() {
     const c = closes[0]; if (!c) return toast('Nothing to re-open.', false);
     if (!await UI.confirm(`Re-open the close up to ${c.closed_date}?`)) return;
     const r = await fetch(`${SB_URL}/rest/v1/day_close?id=eq.${c.id}`, { method: 'DELETE', headers: H() });
     if (!r.ok) return toast('Could not re-open: ' + await r.text(), false);
-    ME.closedThrough = (closes[1] && closes[1].closed_date) || ''; sbSaveMe(ME); toast('Re-opened.'); initUsers();
+    ME.closedThrough = (closes[1] && closes[1].closed_date) || ''; sbSaveMe(ME); toast('Re-opened.'); initUsers(true);
 }
