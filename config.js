@@ -44,7 +44,7 @@ function sbLoadXlsx() {
 //  login.html sets  window.SB_NO_GUARD = true  before loading this file.
 // ============================================================================
 const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1', SB_LOGOUT_REASON_KEY = 'sb_logout_reason_v1';
-const SB_IDLE_TIMEOUT = 5 * 60 * 1000;
+const SB_IDLE_TIMEOUT = 60 * 60 * 1000;
 const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_EXPIRY = Number.MAX_SAFE_INTEGER;
 const SB_DATA_DB_NAME = 'shibra_data_cache_v1', SB_DATA_DB_STORE = 'responses';
 const _sbDataMemory = new Map(), _sbDataPending = new Map(), _sbDataLookupPending = new Map();
