@@ -34,6 +34,7 @@ function sbLoadMeCache() { try { const c = JSON.parse(localStorage.getItem(SB_ME
 
 function sbQueueDataPreload() {
     if (!ME || ME.error || ME.noaccess || !sbSession()) return;
+    if (currentPageKey() === 'users') return;
     const preloadKey = `sb_data_preload_v1_${sbDataCacheUser()}`;
     try {
         const last = Number(sessionStorage.getItem(preloadKey) || 0);
