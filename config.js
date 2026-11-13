@@ -1,8 +1,22 @@
 // ============================================================================
-//  Shared settings + helpers for every page (change the Supabase project HERE only)
+//  Shared defaults + helpers for every page (Admins can override the project in Users & Roles)
 // ============================================================================
-const SB_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
-const SB_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+const SB_DEFAULT_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
+const SB_DEFAULT_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+const SB_CONFIG_STORAGE_KEY = 'shibra_supabase_config_v1';
+function readSupabaseConfig() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(SB_CONFIG_STORAGE_KEY) || 'null');
+        if (saved && /^https:\/\/.+/.test(String(saved.url || '')) && String(saved.key || '').trim())
+            return { url: String(saved.url).replace(/\/+$/, ''), key: String(saved.key).trim() };
+    } catch (error) {
+        console.warn('Could not read the saved Supabase connection settings:', error);
+    }
+    return { url: SB_DEFAULT_URL, key: SB_DEFAULT_KEY };
+}
+const _initialSupabaseConfig = readSupabaseConfig();
+let SB_URL = _initialSupabaseConfig.url;
+let SB_KEY = _initialSupabaseConfig.key;
 function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 let _sbXlsxLoading = null;
 function sbLoadXlsx() {
@@ -33,10 +47,28 @@ const SB_SESSION_KEY = 'sb_session_v1', SB_ME_KEY = 'sb_me_v1', SB_LOGOUT_REASON
 const SB_IDLE_TIMEOUT = 5 * 60 * 1000;
 const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_EXPIRY = Number.MAX_SAFE_INTEGER;
 const SB_DATA_DB_NAME = 'shibra_data_cache_v1', SB_DATA_DB_STORE = 'responses';
-const _sbDataMemory = new Map(), _sbDataPending = new Map();
+const _sbDataMemory = new Map(), _sbDataPending = new Map(), _sbDataLookupPending = new Map();
 let _sbDataDbPromise = null, _sbDataTabId = '';
+let _sbLoadingTimer = 0;
+function sbShowLoadingIndicator(text) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (!overlay) return;
+    const label = document.getElementById('loadingText');
+    if (label) label.textContent = text || 'Loading...';
+    clearTimeout(_sbLoadingTimer);
+    _sbLoadingTimer = setTimeout(() => {
+        overlay.classList.add('flex');
+        overlay.classList.remove('hidden');
+    }, 250);
+}
+function sbHideLoadingIndicator() {
+    clearTimeout(_sbLoadingTimer);
+    _sbLoadingTimer = 0;
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.add('hidden');
+}
 function sbSession() { try { return JSON.parse(localStorage.getItem(SB_SESSION_KEY) || 'null'); } catch (e) { return null; } }
-function sbDataCacheUser() { return encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase()); }
+function sbDataCacheUser() { return `${encodeURIComponent(SB_URL.toLowerCase())}_${encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase())}`; }
 function sbDataCacheTab() {
     if (_sbDataTabId) return _sbDataTabId;
     try {
@@ -371,6 +403,7 @@ function sbLoadMeCache() { try { const c = JSON.parse(localStorage.getItem(SB_ME
 
 function sbQueueDataPreload() {
     if (!ME || ME.error || ME.noaccess || !sbSession()) return;
+    if (currentPageKey() === 'users') return;
     const preloadKey = `sb_data_preload_v1_${sbDataCacheUser()}`;
     try {
         const last = Number(sessionStorage.getItem(preloadKey) || 0);
@@ -565,9 +598,70 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
     _sbDataPending.set(key, { revision, promise: tracked });
     return tracked;
 }
-async function sbFetchAll(table, query) {
-    query = query || 'select=*';
-    const key = sbDataCacheKey(table, query), revision = sbDataRevision(table), now = Date.now();
+function sbCachedProjection(table, query, revision, now) {
+    const parse = value => {
+        const params = new URLSearchParams(value);
+        const select = params.get('select') || '*';
+        params.delete('select');
+        const signature = JSON.stringify([...params.entries()].sort((a, b) =>
+            a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])));
+        const fields = select === '*' ? null : select.split(',').map(field => field.trim());
+        if (fields && fields.some(field => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field))) return null;
+        return { signature, fields };
+    };
+    const target = parse(query);
+    if (!target) return null;
+    const prefix = `${sbDataCacheScope()}${table}_`;
+    const candidates = new Map();
+    for (const [key, entry] of _sbDataMemory) {
+        if (key.startsWith(prefix) && entry.revision === revision && entry.staleUntil > now)
+            candidates.set(key, entry);
+    }
+    try {
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (!key || !key.startsWith(prefix) || candidates.has(key)) continue;
+            const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+            if (saved && saved.revision === revision && Array.isArray(saved.rows)
+                && Number(saved.staleUntil || saved.expires || 0) > now) {
+                candidates.set(key, {
+                    revision,
+                    expires: Number(saved.expires) || 0,
+                    staleUntil: Number(saved.staleUntil || saved.expires) || 0,
+                    packed: JSON.stringify(saved.rows)
+                });
+            }
+        }
+    } catch (error) {
+        console.warn(`Could not inspect cached ${table} projections:`, error);
+    }
+
+    let best = null;
+    for (const [key, entry] of candidates) {
+        if (key === sbDataCacheKey(table, query)) continue;
+        let sourceQuery;
+        try { sourceQuery = decodeURIComponent(key.slice(prefix.length)); }
+        catch (error) { continue; }
+        const source = parse(sourceQuery);
+        if (!source || source.signature !== target.signature) continue;
+        if (source.fields && (!target.fields || target.fields.some(field => !source.fields.includes(field)))) continue;
+        const width = source.fields ? source.fields.length : Infinity;
+        if (!best || width < best.width || (width === best.width && entry.expires > best.entry.expires))
+            best = { entry, width };
+    }
+    if (!best) return null;
+
+    const sourceRows = JSON.parse(best.entry.packed);
+    const rows = target.fields
+        ? sourceRows.map(row => Object.fromEntries(target.fields.map(field => [field, row[field]])))
+        : sourceRows;
+    return {
+        rows,
+        entry: { ...best.entry, packed: JSON.stringify(rows) }
+    };
+}
+async function sbFetchAllFromCache(table, query, key, revision) {
+    const now = Date.now();
     for (const [cacheKey, entry] of _sbDataMemory)
         if (entry.staleUntil <= now) _sbDataMemory.delete(cacheKey);
 
@@ -603,6 +697,19 @@ async function sbFetchAll(table, query) {
                 console.warn(`Could not read persistent ${table} cache:`, error);
             }
         }
+        if (!cached) {
+            const projection = sbCachedProjection(table, query, revision, now);
+            if (projection) {
+                cached = projection.entry;
+                _sbDataMemory.set(key, cached);
+                sbWritePersistentData({ key, revision, ...cached, rows: projection.rows })
+                    .catch(error => console.warn(`Could not persist cached ${table} projection:`, error));
+                try {
+                    if (cached.packed.length < 1800000)
+                        sessionStorage.setItem(key, JSON.stringify({ ...cached, rows: projection.rows }));
+                } catch (error) {}
+            }
+        }
     }
     if (cached && cached.staleUntil > now) {
         const rows = JSON.parse(cached.packed);
@@ -613,6 +720,19 @@ async function sbFetchAll(table, query) {
         return { ok: true, status: 200, json: async () => rows, text: async () => cached.packed };
     }
     return sbFetchAllNetwork(table, query, key, revision);
+}
+function sbFetchAll(table, query) {
+    query = query || 'select=*';
+    const key = sbDataCacheKey(table, query), revision = sbDataRevision(table);
+    const existing = _sbDataLookupPending.get(key);
+    if (existing && existing.revision === revision) return existing.promise;
+    let tracked;
+    tracked = sbFetchAllFromCache(table, query, key, revision).finally(() => {
+        const pending = _sbDataLookupPending.get(key);
+        if (pending && pending.promise === tracked) _sbDataLookupPending.delete(key);
+    });
+    _sbDataLookupPending.set(key, { revision, promise: tracked });
+    return tracked;
 }
 
 // Dropdown lists + rules maintained on the System Settings page (with sensible defaults)
