@@ -35,7 +35,7 @@ async function sbFetchAllUncached(table, query) {
     return { ok: true, status: 200, json: async () => rows, text: async () => '' };
 }
 
-// Cache briefly per signed-in user; expired data stays visible while a background refresh runs.
+// Keep data in this browser tab's cache until refresh, a write, or sign-out.
 function sbFetchAllNetwork(table, query, key, revision, background) {
     const existing = _sbDataPending.get(key);
     if (existing && existing.revision === revision) return existing.promise;
@@ -45,7 +45,7 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
         const rows = await response.json();
         if (!Array.isArray(rows)) return { ok: false, status: response.status, json: async () => rows, text: async () => '' };
         if (sbDataRevision(table) !== revision) return { ok: true, status: response.status, json: async () => rows, text: async () => '' };
-        const value = JSON.stringify(rows), expires = Date.now() + SB_DATA_CACHE_TTL, staleUntil = expires + SB_DATA_CACHE_STALE;
+        const value = JSON.stringify(rows), expires = SB_DATA_CACHE_EXPIRY, staleUntil = SB_DATA_CACHE_EXPIRY;
         _sbDataMemory.set(key, { revision, expires, staleUntil, packed: value });
         sbWritePersistentData({ key, revision, expires, staleUntil, rows })
             .catch(error => console.warn(`Could not persist cached ${table} data:`, error));
@@ -69,54 +69,121 @@ function sbFetchAllNetwork(table, query, key, revision, background) {
     _sbDataPending.set(key, { revision, promise: tracked });
     return tracked;
 }
-async function sbFetchAll(table, query) {
-    query = query || 'select=*';
-    const key = sbDataCacheKey(table, query), revision = sbDataRevision(table), now = Date.now();
-    for (const [cacheKey, entry] of _sbDataMemory)
-        if (entry.staleUntil <= now) _sbDataMemory.delete(cacheKey);
+function sbCachedProjection(table, query, revision) {
+    const parse = value => {
+        const params = new URLSearchParams(value);
+        const select = params.get('select') || '*';
+        params.delete('select');
+        const signature = JSON.stringify([...params.entries()].sort((a, b) =>
+            a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])));
+        const fields = select === '*' ? null : select.split(',').map(field => field.trim());
+        if (fields && fields.some(field => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(field))) return null;
+        return { signature, fields };
+    };
+    const target = parse(query);
+    if (!target) return null;
+    const prefix = `${sbDataCacheScope()}${table}_`;
+    const candidates = new Map();
+    for (const [key, entry] of _sbDataMemory) {
+        if (key.startsWith(prefix) && entry.revision === revision)
+            candidates.set(key, entry);
+    }
+    try {
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (!key || !key.startsWith(prefix) || candidates.has(key)) continue;
+            const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+            if (saved && saved.revision === revision && Array.isArray(saved.rows)) {
+                candidates.set(key, {
+                    revision,
+                    expires: Number(saved.expires) || 0,
+                    staleUntil: Number(saved.staleUntil || saved.expires) || 0,
+                    packed: JSON.stringify(saved.rows)
+                });
+            }
+        }
+    } catch (error) {
+        console.warn(`Could not inspect cached ${table} projections:`, error);
+    }
 
+    let best = null;
+    for (const [key, entry] of candidates) {
+        if (key === sbDataCacheKey(table, query)) continue;
+        let sourceQuery;
+        try { sourceQuery = decodeURIComponent(key.slice(prefix.length)); }
+        catch (error) { continue; }
+        const source = parse(sourceQuery);
+        if (!source || source.signature !== target.signature) continue;
+        if (source.fields && (!target.fields || target.fields.some(field => !source.fields.includes(field)))) continue;
+        const width = source.fields ? source.fields.length : Infinity;
+        if (!best || width < best.width || (width === best.width && entry.expires > best.entry.expires))
+            best = { entry, width };
+    }
+    if (!best) return null;
+
+    const sourceRows = JSON.parse(best.entry.packed);
+    const rows = target.fields
+        ? sourceRows.map(row => Object.fromEntries(target.fields.map(field => [field, row[field]])))
+        : sourceRows;
+    return {
+        rows,
+        entry: { ...best.entry, packed: JSON.stringify(rows) }
+    };
+}
+async function sbFetchAllFromCache(table, query, key, revision) {
     let cached = _sbDataMemory.get(key);
     if (!cached || cached.revision !== revision) {
         cached = null;
         try {
             const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
             if (saved && saved.revision === revision && Array.isArray(saved.rows)) {
-                const staleUntil = Number(saved.staleUntil || saved.expires || 0);
-                if (staleUntil > now) {
-                    cached = { revision, expires: Number(saved.expires) || 0, staleUntil, packed: JSON.stringify(saved.rows) };
-                    _sbDataMemory.set(key, cached);
-                } else sessionStorage.removeItem(key);
+                cached = { revision, expires: SB_DATA_CACHE_EXPIRY, staleUntil: SB_DATA_CACHE_EXPIRY, packed: JSON.stringify(saved.rows) };
+                _sbDataMemory.set(key, cached);
             }
         } catch (e) {}
         if (!cached) {
             try {
                 const saved = await sbReadPersistentData(key);
                 if (saved && saved.revision === revision && Array.isArray(saved.rows)) {
-                    const staleUntil = Number(saved.staleUntil || saved.expires || 0);
-                    if (staleUntil > now) {
-                        cached = {
-                            revision,
-                            expires: Number(saved.expires) || 0,
-                            staleUntil,
-                            packed: JSON.stringify(saved.rows)
-                        };
-                        _sbDataMemory.set(key, cached);
-                    }
+                    cached = { revision, expires: SB_DATA_CACHE_EXPIRY, staleUntil: SB_DATA_CACHE_EXPIRY, packed: JSON.stringify(saved.rows) };
+                    _sbDataMemory.set(key, cached);
                 }
             } catch (error) {
                 console.warn(`Could not read persistent ${table} cache:`, error);
             }
         }
+        if (!cached) {
+            const projection = sbCachedProjection(table, query, revision);
+            if (projection) {
+                cached = projection.entry;
+                _sbDataMemory.set(key, cached);
+                sbWritePersistentData({ key, revision, ...cached, rows: projection.rows })
+                    .catch(error => console.warn(`Could not persist cached ${table} projection:`, error));
+                try {
+                    if (cached.packed.length < 1800000)
+                        sessionStorage.setItem(key, JSON.stringify({ ...cached, rows: projection.rows }));
+                } catch (error) {}
+            }
+        }
     }
-    if (cached && cached.staleUntil > now) {
+    if (cached) {
         const rows = JSON.parse(cached.packed);
-        if (cached.expires <= now)
-            sbFetchAllNetwork(table, query, key, revision, true).then(response => {
-                if (!response.ok) console.warn(`Background refresh for ${table} failed with HTTP ${response.status}.`);
-            }).catch(error => console.warn(`Background refresh for ${table} failed:`, error));
         return { ok: true, status: 200, json: async () => rows, text: async () => cached.packed };
     }
     return sbFetchAllNetwork(table, query, key, revision);
+}
+function sbFetchAll(table, query) {
+    query = query || 'select=*';
+    const key = sbDataCacheKey(table, query), revision = sbDataRevision(table);
+    const existing = _sbDataLookupPending.get(key);
+    if (existing && existing.revision === revision) return existing.promise;
+    let tracked;
+    tracked = sbFetchAllFromCache(table, query, key, revision).finally(() => {
+        const pending = _sbDataLookupPending.get(key);
+        if (pending && pending.promise === tracked) _sbDataLookupPending.delete(key);
+    });
+    _sbDataLookupPending.set(key, { revision, promise: tracked });
+    return tracked;
 }
 
 // Dropdown lists + rules maintained on the System Settings page (with sensible defaults)
