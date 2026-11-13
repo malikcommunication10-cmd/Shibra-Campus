@@ -1,8 +1,22 @@
 // ============================================================================
-//  Shared settings + helpers for every page (change the Supabase project HERE only)
+//  Shared defaults + helpers for every page (Admins can override the project in Users & Roles)
 // ============================================================================
-const SB_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
-const SB_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+const SB_DEFAULT_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
+const SB_DEFAULT_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
+const SB_CONFIG_STORAGE_KEY = 'shibra_supabase_config_v1';
+function readSupabaseConfig() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(SB_CONFIG_STORAGE_KEY) || 'null');
+        if (saved && /^https:\/\/.+/.test(String(saved.url || '')) && String(saved.key || '').trim())
+            return { url: String(saved.url).replace(/\/+$/, ''), key: String(saved.key).trim() };
+    } catch (error) {
+        console.warn('Could not read the saved Supabase connection settings:', error);
+    }
+    return { url: SB_DEFAULT_URL, key: SB_DEFAULT_KEY };
+}
+const _initialSupabaseConfig = readSupabaseConfig();
+let SB_URL = _initialSupabaseConfig.url;
+let SB_KEY = _initialSupabaseConfig.key;
 function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
 let _sbXlsxLoading = null;
 function sbLoadXlsx() {
