@@ -1,11 +1,52 @@
-const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_TTL = 20000, SB_DATA_CACHE_STALE = 5 * 60 * 1000;
+const SB_DATA_CACHE_PREFIX = 'sb_data_v1_', SB_DATA_CACHE_EXPIRY = Number.MAX_SAFE_INTEGER;
 const SB_DATA_DB_NAME = 'shibra_data_cache_v1', SB_DATA_DB_STORE = 'responses';
-const _sbDataMemory = new Map(), _sbDataPending = new Map();
-let _sbDataDbPromise = null;
+const _sbDataMemory = new Map(), _sbDataPending = new Map(), _sbDataLookupPending = new Map();
+let _sbDataDbPromise = null, _sbDataTabId = '';
+let _sbLoadingTimer = 0;
+function sbShowLoadingIndicator(text) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (!overlay) return;
+    const label = document.getElementById('loadingText');
+    if (label) label.textContent = text || 'Loading...';
+    clearTimeout(_sbLoadingTimer);
+    _sbLoadingTimer = setTimeout(() => {
+        overlay.classList.add('flex');
+        overlay.classList.remove('hidden');
+    }, 250);
+}
+function sbHideLoadingIndicator() {
+    clearTimeout(_sbLoadingTimer);
+    _sbLoadingTimer = 0;
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.add('hidden');
+}
 function sbSession() { try { return JSON.parse(localStorage.getItem(SB_SESSION_KEY) || 'null'); } catch (e) { return null; } }
-function sbDataCacheUser() { return encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase()); }
+function sbDataCacheUser() { return `${encodeURIComponent(SB_URL.toLowerCase())}_${encodeURIComponent(String((sbSession() || {}).email || 'anonymous').toLowerCase())}`; }
+function sbDataCacheTab() {
+    if (_sbDataTabId) return _sbDataTabId;
+    try {
+        _sbDataTabId = sessionStorage.getItem('sb_data_tab_v1') || '';
+        if (!_sbDataTabId) {
+            _sbDataTabId = window.crypto && crypto.randomUUID
+                ? crypto.randomUUID()
+                : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            sessionStorage.setItem('sb_data_tab_v1', _sbDataTabId);
+        }
+    } catch (error) {
+        _sbDataTabId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+    return _sbDataTabId;
+}
+function sbDataCacheScope() { return `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_${sbDataCacheTab()}__`; }
 function sbDataCacheKey(table, query) {
-    return `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_${table}_${encodeURIComponent(query)}`;
+    return `${sbDataCacheScope()}${table}_${encodeURIComponent(query)}`;
+}
+function sbDataCacheMatches(key, userPrefix, tableName) {
+    if (!key.startsWith(userPrefix)) return false;
+    if (!tableName) return true;
+    const suffix = key.slice(userPrefix.length), scopeEnd = suffix.indexOf('__');
+    const tableQuery = scopeEnd >= 0 ? suffix.slice(scopeEnd + 2) : suffix;
+    return tableQuery.startsWith(`${tableName}_`);
 }
 function sbOpenDataCache() {
     if (!('indexedDB' in window)) return Promise.resolve(null);
@@ -54,7 +95,7 @@ async function sbDeletePersistentData(userPrefix, tableName) {
             const cursor = request.result;
             if (!cursor) return;
             const key = String(cursor.key || '');
-            if (key.startsWith(userPrefix) && (!tableName || key.startsWith(`${userPrefix}${tableName}_`)))
+            if (sbDataCacheMatches(key, userPrefix, tableName))
                 cursor.delete();
             cursor.continue();
         };
@@ -71,12 +112,12 @@ function sbCacheClear(table) {
     const tableName = table ? String(table) : '';
     const userPrefix = `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_`;
     for (const key of _sbDataMemory.keys())
-        if (!tableName || key.startsWith(`${userPrefix}${tableName}_`)) _sbDataMemory.delete(key);
+        if (sbDataCacheMatches(key, userPrefix, tableName)) _sbDataMemory.delete(key);
     try {
         for (let i = sessionStorage.length - 1; i >= 0; i--) {
             const key = sessionStorage.key(i);
             if (key && key.startsWith(SB_DATA_CACHE_PREFIX)
-                && (!tableName || key.startsWith(`${userPrefix}${tableName}_`)))
+                && sbDataCacheMatches(key, userPrefix, tableName))
                 sessionStorage.removeItem(key);
         }
         const revision = `${Date.now()}_${Math.random()}`;
@@ -90,3 +131,30 @@ function sbCacheClear(table) {
     } catch (e) {}
     sbDeletePersistentData(userPrefix, tableName).catch(error => console.warn('Could not clear the persistent data cache:', error));
 }
+function sbResetTabDataCacheOnReload() {
+    if (window.SB_NO_GUARD || !sbSession()) return;
+    let isReload = false;
+    try {
+        const navigation = performance.getEntriesByType('navigation');
+        isReload = navigation.length
+            ? navigation[0].type === 'reload'
+            : !!(performance.navigation && performance.navigation.type === 1);
+    } catch (error) {}
+    if (!isReload) return;
+
+    const userPrefix = `${SB_DATA_CACHE_PREFIX}${sbDataCacheUser()}_`;
+    const oldScope = sbDataCacheScope();
+    try {
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith(userPrefix)) sessionStorage.removeItem(key);
+        }
+        sessionStorage.removeItem('sb_data_tab_v1');
+        sessionStorage.removeItem(`sb_data_preload_v1_${sbDataCacheUser()}`);
+        sessionStorage.removeItem('sb_settings_v2');
+        sessionStorage.removeItem('sb_settings_v3');
+    } catch (error) {}
+    _sbDataTabId = '';
+    sbDeletePersistentData(oldScope).catch(error => console.warn('Could not clear the previous tab data cache:', error));
+}
+sbResetTabDataCacheOnReload();
