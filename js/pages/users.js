@@ -10,6 +10,7 @@ const permsOf = u => u.perms || (roleOf(u.role) || {}).perms || { pages: {}, fla
 const adminCount = () => users.filter(u => u.active !== false && u.role === 'Admin' && !u.perms).length;
 
 async function initUsers() {
+    $('tabC').classList.toggle('hidden', !ME || ME.role !== 'Admin');
     try {
         const [u, r, d] = await Promise.all([ERP.db.request('app_users', 'select=*&order=created_at.asc'), ERP.db.request('app_roles', 'select=*&order=created_at.asc'), ERP.db.request('day_close', 'select=*&order=closed_date.desc')]);
         users = u.ok ? await u.json() : []; roles = r.ok ? await r.json() : []; closes = d.ok ? await d.json() : [];
@@ -19,9 +20,76 @@ async function initUsers() {
     renderUsers(); renderRoles(); renderDay();
 }
 function showTab(t) {
-    $('paneUsers').classList.toggle('hidden', t !== 'users'); $('paneRoles').classList.toggle('hidden', t !== 'roles'); $('paneDay').classList.toggle('hidden', t !== 'day');
+    if (t === 'connection' && (!ME || ME.role !== 'Admin')) return toast('Only an Admin can change the database connection.', false);
+    $('paneUsers').classList.toggle('hidden', t !== 'users'); $('paneRoles').classList.toggle('hidden', t !== 'roles'); $('paneDay').classList.toggle('hidden', t !== 'day'); $('paneConnection').classList.toggle('hidden', t !== 'connection');
     const on = 'px-4 py-2 rounded-xl bg-indigo-600 text-white', off = 'px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600';
-    $('tabU').className = t === 'users' ? on : off; $('tabR').className = t === 'roles' ? on : off; $('tabD').className = t === 'day' ? on : off;
+    $('tabU').className = t === 'users' ? on : off; $('tabR').className = t === 'roles' ? on : off;
+    $('tabC').className = `${t === 'connection' ? on : off}${ME && ME.role === 'Admin' ? '' : ' hidden'}`;
+    $('tabD').className = t === 'day' ? on : off;
+    if (t === 'connection') renderConnectionSettings();
+}
+
+function renderConnectionSettings() {
+    const config = getSupabaseConfig();
+    $('connectionUrl').value = config.url;
+    $('connectionKey').value = config.key;
+    $('connectionMessage').textContent = 'Saving or resetting signs you out and reloads the app.';
+    $('connectionMessage').className = 'text-xs text-slate-500';
+}
+function connectionFormValues() {
+    return {
+        url: $('connectionUrl').value.trim().replace(/\/+$/, ''),
+        key: $('connectionKey').value.trim()
+    };
+}
+function showConnectionMessage(message, isError = false) {
+    $('connectionMessage').textContent = message;
+    $('connectionMessage').className = `text-xs ${isError ? 'text-rose-600' : 'text-slate-500'}`;
+}
+async function testSupabaseConnection() {
+    if (!ME || ME.role !== 'Admin') return toast('Only an Admin can test the database connection.', false);
+    const config = connectionFormValues();
+    if (!/^https:\/\/.+/.test(config.url) || !config.key) return showConnectionMessage('Enter a valid https:// URL and publishable key.', true);
+    const button = $('testSupabaseConnectionButton');
+    button.disabled = true;
+    button.textContent = 'Testing...';
+    showConnectionMessage('Testing connection...');
+    try {
+        const response = await fetch(`${config.url}/auth/v1/settings`, { headers: { apikey: config.key } });
+        showConnectionMessage(response.ok
+            ? 'Connection accepted. Save to use this database.'
+            : `Connection rejected (HTTP ${response.status}). Check the URL and publishable key.`,
+        !response.ok);
+    } catch (error) {
+        showConnectionMessage(`Could not reach this URL: ${error.message}`, true);
+    } finally {
+        button.disabled = false;
+        button.textContent = 'Test connection';
+    }
+}
+function saveSupabaseConfig() {
+    if (!ME || ME.role !== 'Admin') return toast('Only an Admin can change the database connection.', false);
+    const config = connectionFormValues();
+    if (!/^https:\/\/.+/.test(config.url) || !config.key) return showConnectionMessage('Enter a valid https:// URL and publishable key.', true);
+    try {
+        localStorage.setItem(SB_CONFIG_STORAGE_KEY, JSON.stringify(config));
+        localStorage.setItem('sb_data_rev_all', `${Date.now()}_${Math.random()}`);
+        sbClearAuth();
+        location.replace('login.html');
+    } catch (error) {
+        showConnectionMessage(`Could not save the connection settings: ${error.message}`, true);
+    }
+}
+function resetSupabaseConfig() {
+    if (!ME || ME.role !== 'Admin') return toast('Only an Admin can reset the database connection.', false);
+    try {
+        localStorage.removeItem(SB_CONFIG_STORAGE_KEY);
+        localStorage.setItem('sb_data_rev_all', `${Date.now()}_${Math.random()}`);
+        sbClearAuth();
+        location.replace('login.html');
+    } catch (error) {
+        showConnectionMessage(`Could not reset the connection settings: ${error.message}`, true);
+    }
 }
 
 /* ---------- pure helpers ---------- */
