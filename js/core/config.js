@@ -1,23 +1,65 @@
 // ============================================================================
-//  Shared defaults + helpers for every page (Admins can override the project in Users & Roles)
+//  Shared connection helpers. A missing saved connection must never select a project implicitly.
 // ============================================================================
-const SB_DEFAULT_URL = "https://tsnfwebctvjnmmweepiu.supabase.co";
-const SB_DEFAULT_KEY = "sb_publishable_mQcfSTQd8nca5xzbT1q6dw_aRvOHIYh";
 const SB_CONFIG_STORAGE_KEY = 'shibra_supabase_config_v1';
+function normalizeSupabaseConfig(config) {
+    const url = String(config && config.url || '').trim().replace(/\/+$/, '');
+    const key = String(config && config.key || '').trim();
+    let parsed;
+    try {
+        parsed = new URL(url);
+    } catch (error) {
+        throw new Error('Enter a valid Supabase project URL.');
+    }
+    if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.pathname !== '/' || parsed.search || parsed.hash)
+        throw new Error('Enter the HTTPS Supabase project URL without a path.');
+    if (!key) throw new Error('Enter the Supabase publishable/anon key.');
+    return { url: parsed.origin, key };
+}
 function readSupabaseConfig() {
     try {
         const saved = JSON.parse(localStorage.getItem(SB_CONFIG_STORAGE_KEY) || 'null');
-        if (saved && /^https:\/\/.+/.test(String(saved.url || '')) && String(saved.key || '').trim())
-            return { url: String(saved.url).replace(/\/+$/, ''), key: String(saved.key).trim() };
+        return saved ? normalizeSupabaseConfig(saved) : null;
     } catch (error) {
         console.warn('Could not read the saved Supabase connection settings:', error);
+        return null;
     }
-    return { url: SB_DEFAULT_URL, key: SB_DEFAULT_KEY };
 }
 const _initialSupabaseConfig = readSupabaseConfig();
-let SB_URL = _initialSupabaseConfig.url;
-let SB_KEY = _initialSupabaseConfig.key;
+let SB_URL = _initialSupabaseConfig ? _initialSupabaseConfig.url : '';
+let SB_KEY = _initialSupabaseConfig ? _initialSupabaseConfig.key : '';
+let SB_CONFIG_READY = !!_initialSupabaseConfig;
 function getSupabaseConfig() { return { url: SB_URL, key: SB_KEY }; }
+function isSupabaseConfigCurrent() {
+    if (!SB_CONFIG_READY) return false;
+    try {
+        const saved = JSON.parse(localStorage.getItem(SB_CONFIG_STORAGE_KEY) || 'null');
+        if (!saved) return false;
+        const normalized = normalizeSupabaseConfig(saved);
+        return normalized.url === SB_URL && normalized.key === SB_KEY;
+    } catch (error) {
+        return false;
+    }
+}
+function persistSupabaseConfig(config) {
+    const normalized = normalizeSupabaseConfig(config);
+    localStorage.setItem(SB_CONFIG_STORAGE_KEY, JSON.stringify(normalized));
+    SB_URL = normalized.url;
+    SB_KEY = normalized.key;
+    SB_CONFIG_READY = true;
+    return normalized;
+}
+function clearSupabaseConfig() {
+    localStorage.removeItem(SB_CONFIG_STORAGE_KEY);
+    SB_URL = '';
+    SB_KEY = '';
+    SB_CONFIG_READY = false;
+}
+window.addEventListener('storage', event => {
+    if (event.key !== SB_CONFIG_STORAGE_KEY) return;
+    if (typeof sbClearAuth === 'function') sbClearAuth();
+    location.replace('login.html');
+});
 let _sbXlsxLoading = null;
 function sbLoadXlsx() {
     if (window.XLSX) return Promise.resolve(window.XLSX);
