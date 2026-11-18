@@ -44,7 +44,7 @@
         // ====================================================================================
         // DIRECTORY: load, KPIs, filters, table, profile, export
         // ====================================================================================
-        let FEE_BY_ADM = new Map(), FEES_OK = false, ISSUES_ONLY = false, SHOWN = 300, VIEW = [];
+        let FEE_BY_ADM = new Map(), FEES_OK = false, ANNUAL_FUND_OK = false, ANNUAL_FUND_TOTAL = 0, ISSUES_ONLY = false, SHOWN = 300, VIEW = [];
         const r2 = n => Math.round((Number(n) || 0) * 100) / 100, money = n => UI.fmt(n);
         const admKey = a => String(a ?? '').trim().toLowerCase();
         const todayIso = () => (typeof todayYmd === 'function' ? todayYmd() : new Date().toLocaleDateString('en-CA'));
@@ -86,13 +86,31 @@
         }
 
         async function loadFeePosition() {
-            FEES_OK = false; FEE_BY_ADM = new Map();
+            FEES_OK = false; ANNUAL_FUND_OK = false; ANNUAL_FUND_TOTAL = 0; FEE_BY_ADM = new Map();
             try {
-                if(typeof can === 'function' && ME && ME.perms && !(can('fees', 'v') && can('accounts', 'v'))) throw new Error('no access');
-                const [fees, acc] = await Promise.all([
-                    ERP.db.fetchAll('fees', 'select=voucher_id,admis_no,student_name,class,period,type,payable,discount'),
-                    ERP.db.fetchAll('accounts', 'select=voucher_id,amount_in&voucher_id=like.V-*')
-                ]);
+                if(typeof can === 'function' && ME && ME.perms && !can('fees', 'v')) throw new Error('no fees access');
+                const fees = await ERP.db.fetchAll('fees', 'select=voucher_id,admis_no,student_name,class,period,type,payable,discount');
+                const annualFundByAdm = new Map();
+                fees.forEach(row => {
+                    const type = String(row.type || '').toLowerCase();
+                    if(!type.includes('annual') || !type.includes('fund')) return;
+                    const key = admKey(row.admis_no);
+                    if(!key) return;
+                    const net = Math.max(0, (parseFloat(row.payable) || 0) - (parseFloat(row.discount) || 0));
+                    annualFundByAdm.set(key, (annualFundByAdm.get(key) || 0) + net);
+                });
+                ANNUAL_FUND_TOTAL = allStudentsCache.reduce((total, row) => {
+                    const key = admKey(row.admis_no);
+                    if(annualFundByAdm.has(key)) return total + annualFundByAdm.get(key);
+                    const savedNet = parseFloat(row.annual_fund_pay);
+                    const amount = Number.isFinite(savedNet)
+                        ? savedNet
+                        : (parseFloat(row.annual_fund) || 0) - (parseFloat(row.annual_fund_disc) || 0);
+                    return total + Math.max(0, amount);
+                }, 0);
+                ANNUAL_FUND_OK = true;
+                if(typeof can === 'function' && ME && ME.perms && !can('accounts', 'v')) throw new Error('no accounts access');
+                const acc = await ERP.db.fetchAll('accounts', 'select=voucher_id,amount_in&voucher_id=like.V-*');
                 const t = todayIso();
                 buildFeeVouchers(fees, acc, SCHOOL_YEAR).forEach(v => {
                     const k = admKey(v.adm); if(!k) return;
@@ -120,13 +138,18 @@
             const active = allStudentsCache.filter(isActive), left = allStudentsCache.length - active.length;
             const monthly = active.reduce((s, r) => s + tuitionOf(r), 0);
             const issues = allStudentsCache.filter(r => issuesOf(r).length).length;
-            let due = 0, owing = 0; if(FEES_OK) active.forEach(r => { const s = FEE_BY_ADM.get(admKey(r.admis_no)); if(s && s.due > 0.5) { due += s.due; owing++; } });
             const k = (label, value, note, cls, extra = '') => `<${extra ? 'button type="button"' : 'div'} class="ui-kpi ${cls}" ${extra}><small>${label}</small><b>${value}</b><i>${note}</i></${extra ? 'button' : 'div'}>`;
+            const annualFundKpi = k(
+                'Annual fund (after discount)',
+                ANNUAL_FUND_OK ? 'PKR ' + money(ANNUAL_FUND_TOTAL) : '—',
+                ANNUAL_FUND_OK ? 'All students · net total' : 'Fee data not available for your role',
+                'good'
+            );
             document.getElementById('stuKpis').innerHTML =
                 k('Active students', money(active.length), `${money(new Set(active.map(r => String(r.class || '').trim()).filter(Boolean)).size)} classes`, 'good')
                 + k('Left students', money(left), 'Kept for fee history', '')
                 + k('Monthly tuition', 'PKR ' + money(monthly), 'All active students, after discount', '')
-                + k('Fees due now', FEES_OK ? 'PKR ' + money(due) : '—', FEES_OK ? `${money(owing)} student${owing === 1 ? '' : 's'} owe fees` : 'Fee data not available for your role', FEES_OK && due > 0 ? 'bad' : 'good')
+                + annualFundKpi
                 + k('Needs attention', money(issues), issues ? 'Click to review missing details' : 'All records complete', issues ? 'warn' : 'good', issues ? 'onclick="toggleIssues()"' : '');
         }
         function toggleIssues() { ISSUES_ONLY = !ISSUES_ONLY; if(ISSUES_ONLY) document.getElementById('statusFilter').value = 'ACTIVE'; filterStudents(); }
