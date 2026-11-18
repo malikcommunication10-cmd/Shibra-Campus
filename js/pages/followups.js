@@ -1,3 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concept School Shibra Campus - Follow-up Calls</title>
+    <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
+    <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
+    <link rel="stylesheet" href="theme.css?v=20261030-2">
+    <script src="config.js?v=20261118-1"></script>
+    <script src="db.js?v=20261026-1"></script>
+    <script src="nav.js?v=20261107-9"></script>
+    <style>
+        .urdu-box { font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Segoe UI', sans-serif; }
+        .mic-live { animation: micPulse 1.1s ease-in-out infinite; }
+        @keyframes micPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(225,29,72,.45); } 50% { box-shadow: 0 0 0 8px rgba(225,29,72,0); } }
+        @media (prefers-reduced-motion: reduce) { .mic-live { animation: none; } }
+        @media print {
+            aside, .no-print, #callModal, #settingsModal, #customAlertModal, #customConfirmModal, #loadingOverlay { display: none !important; }
+            .fam-details { display: block !important; }
+            .fam-card { break-inside: avoid; box-shadow: none !important; }
+            body { background: white !important; }
+            main { padding: 0 !important; }
+            /* print only the student ledger when it is open */
+            body.print-ledger * { visibility: hidden !important; }
+            body.print-ledger #ledgerModal, body.print-ledger #ledgerModal * { visibility: visible !important; }
+            body.print-ledger #ledgerModal { position: absolute !important; left: 0; top: 0; width: 100%; background: #fff !important; display: block !important; }
+            body.print-ledger #ledgerBox { max-height: none !important; box-shadow: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans" onload="initFollowups()">
+
+    <!-- LOADING -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/40 z-50 hidden flex flex-col items-center justify-center text-white">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-3"></div>
+        <p id="loadingText" class="text-sm font-semibold tracking-wide">Loading...</p>
+    </div>
+
+    <!-- ALERT -->
+    <div id="customAlertModal" class="fixed inset-0 bg-black/50 z-[70] hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center space-y-4">
+            <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-xl">ℹ️</div>
+            <p id="customAlertMessage" class="text-sm font-medium text-slate-700 whitespace-pre-line"></p>
+            <button onclick="closeCustomAlert()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-sm font-semibold transition">OK</button>
+        </div>
+    </div>
+
+    <!-- CONFIRM -->
+    <div id="customConfirmModal" class="fixed inset-0 bg-black/60 z-[80] hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center space-y-4">
+            <div class="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto text-xl">❓</div>
+            <p id="customConfirmMessage" class="text-sm font-medium text-slate-700"></p>
+            <div class="flex space-x-2 pt-2">
+                <button id="confirmCancelBtn" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold transition">Cancel</button>
+                <button id="confirmOkBtn" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl text-sm font-semibold transition">Proceed</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="followupsAppLayout" class="min-h-screen flex flex-col md:flex-row">
+        <!-- SIDEBAR -->
+        <aside id="appNav"></aside>
+
+        <!-- MAIN -->
+        <main class="flex-1 p-4 md:p-8 min-w-0">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-5 flex flex-col md:flex-row md:justify-between md:items-center gap-3 no-print">
+                <div>
+                    <h2 class="text-2xl font-extrabold text-indigo-950">Follow-up Calls</h2>
+                    <p class="text-sm text-slate-500">Family or individual student assignments, dues and call history</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="sbRefreshCurrentPage();initFollowups()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🔄 Refresh</button>
+                    <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition">🖨️ Print call sheet</button>
+                    </div>
+            </div>
+
+            <!-- FOLLOW-UP DATABASE SETUP -->
+            <div id="setupBanner" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-5 mb-5 no-print">
+                <h3 class="font-bold text-amber-900 mb-1">Follow-up database setup is required</h3>
+                <p class="text-sm text-amber-800">In Supabase SQL Editor, run <b>supabase_followups_access.sql</b> as database owner (after <b>supabase_roles.sql</b>), then refresh this page. This enables assignments and secure teacher-specific access.</p>
+            </div>
+
+            <!-- SUMMARY -->
+            <div id="summaryCards" class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5 no-print"></div>
+
+            <!-- TABS -->
+            <div class="flex gap-2 mb-4 no-print">
+                <button id="tabBtnFamilies" onclick="showTab('families')" class="px-4 py-2 rounded-xl text-sm font-semibold transition bg-indigo-600 text-white">📞 Families</button>
+                <button id="tabBtnHistory" onclick="showTab('history')" class="px-4 py-2 rounded-xl text-sm font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-100">🗂️ Call History</button>
+            </div>
+
+            <!-- TAB: FAMILIES -->
+            <section id="tabFamilies">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input id="fSearch" oninput="renderFamilies()" type="text" placeholder="Family code, student name, admission no, phone..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[220px]">
+                        <select id="fClass" onchange="renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All Classes</option></select>
+                        <select id="fStud" onchange="renderSummary(); renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none" title="Show only families with students of this status">
+                            <option value="ALL">All students</option>
+                            <option value="active" selected>Active students</option>
+                            <option value="left">Left students</option>
+                            <option value="other">Inactive / other</option>
+                        </select>
+                        <select id="fStatus" onchange="renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                            <option value="ALL">All Status</option>
+                            <option value="calltoday">Call today (Today + Overdue)</option>
+                            <option value="overdue">Overdue promise</option>
+                            <option value="today">Promise today</option>
+                            <option value="new">Not called yet</option>
+                            <option value="nopromise">No promise</option>
+                            <option value="upcoming">Promise upcoming</option>
+                            <option value="clear">Clear</option>
+                        </select>
+                        <select id="fSort" onchange="renderFamilies()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none">
+                            <option value="priority">Sort: Call priority</option>
+                            <option value="pending">Sort: Highest pending</option>
+                            <option value="code">Sort: Family code</option>
+                        </select>
+                        <label class="flex items-center gap-2 text-sm text-slate-600"><input id="fPendingOnly" type="checkbox" checked onchange="renderFamilies()"> Just pending</label>
+                    </div>
+                    <div class="flex justify-between items-center mt-3">
+                        <p id="famCount" class="text-xs text-slate-500"></p>
+                        <div class="flex gap-2">
+                            <button onclick="setAllDetails(true)" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg">Expand all</button>
+                            <button onclick="setAllDetails(false)" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg">Collapse all</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="famList" class="space-y-3"></div>
+            </section>
+
+            <!-- TAB: HISTORY -->
+            <section id="tabHistory" class="hidden">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4 no-print">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input id="hSearch" oninput="renderHistory()" type="text" placeholder="Search family, student name or remarks..." class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none flex-1 min-w-[220px]">
+                        <select id="hOutcome" onchange="renderHistory()" class="border rounded-lg px-3 py-2 text-sm bg-slate-50 outline-none"><option value="ALL">All outcomes</option></select>
+                        <label class="text-xs text-slate-500">From <input id="hFrom" type="date" onchange="renderHistory()" class="border rounded-lg px-2 py-1.5 text-sm bg-slate-50 ml-1"></label>
+                        <label class="text-xs text-slate-500">To <input id="hTo" type="date" onchange="renderHistory()" class="border rounded-lg px-2 py-1.5 text-sm bg-slate-50 ml-1"></label>
+                        <button onclick="exportHistoryCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold">⬇️ Excel/CSV</button>
+                    </div>
+                    <p id="histCount" class="text-xs text-slate-500 mt-3"></p>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="bg-slate-100 text-slate-600 border-b">
+                            <tr>
+                                <th class="p-2.5">Date / Time</th>
+                                <th class="p-2.5">Family</th>
+                                <th class="p-2.5">Outcome</th>
+                                <th class="p-2.5">Spoke with</th>
+                                <th class="p-2.5">Promise</th>
+                                <th class="p-2.5">Remarks</th>
+                                <th class="p-2.5">Pending (call time)</th>
+                                <th class="p-2.5">Caller</th>
+                                <th class="p-2.5 no-print"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="histBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- CALL MODAL -->
+    <div id="callModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-3">
+        <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl max-h-[94vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-start">
+                <div>
+                    <h3 class="text-lg font-bold text-indigo-950">Record call</h3>
+                    <p id="cmFamily" class="text-sm font-semibold text-slate-700 mt-0.5"></p>
+                    <p id="cmKids" class="text-xs text-slate-500"></p>
+                </div>
+
+                <button onclick="closeCallModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div class="flex flex-wrap gap-3 text-sm">
+                    <div class="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2"><span class="text-xs text-rose-700">Current balance due</span><div id="cmPending" class="font-extrabold text-rose-700"></div></div>
+                    <div id="cmContacts" class="flex flex-wrap gap-2 items-center"></div>
+                </div>
+                <div id="cmLast" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600"></div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Call outcome</label>
+                        <select id="cmOutcome" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Spoke with</label>
+                        <input id="cmSpokeWith" type="text" placeholder="Father / Mother / Bhai..." class="w-full border rounded-lg p-2.5 text-sm outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Promise date (when the parent promised to pay)</label>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <input id="cmPromiseDate" type="date" class="border rounded-lg p-2.5 text-sm outline-none">
+                        <button type="button" onclick="setPromiseOffset(0)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">Today</button>
+                        <button type="button" onclick="setPromiseOffset(1)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">Tomorrow</button>
+                        <button type="button" onclick="setPromiseOffset(3)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">3 days</button>
+                        <button type="button" onclick="setPromiseOffset(7)" class="text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg">1 week</button>
+                        <button type="button" onclick="setPromiseOffset(null)" class="text-xs text-slate-400 hover:text-slate-600 px-2 py-2">Clear</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Promised amount (optional)</label>
+                    <input id="cmPromiseAmt" type="number" min="0" placeholder="PKR" class="w-full sm:w-48 border rounded-lg p-2.5 text-sm outline-none">
+                </div>
+
+                <div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                        <label class="text-xs font-medium text-slate-700">Remarks</label>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <select id="voiceLang" onchange="onVoiceLangChange()" class="border rounded-lg px-2 py-1 text-xs bg-white">
+                                <option value="ur-PK">Voice: Urdu (ur-PK)</option>
+                                <option value="en-IN">Voice: English</option>
+                            </select>
+                            <label id="romanWrap" class="flex items-center gap-1 text-xs text-slate-600"><input id="romanToggle" type="checkbox" checked> Roman Urdu</label>
+                            <button id="micBtn" type="button" onclick="toggleVoice()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition">🎤 Speak</button>
+                            <button type="button" onclick="convertRemarksToRoman()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold" title="Converts any Urdu script in the box into Roman Urdu">🔤 Roman</button>
+                        </div>
+                    </div>
+                    <textarea id="cmRemarks" rows="4" placeholder="e.g. Father said salary arrives on the 5th; he will deposit half the fee by the 6th." class="w-full border rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400"></textarea>
+                    <p id="micStatus" class="text-xs text-slate-400 mt-1">Tap 🎤 Speak and talk in Urdu. The text appears in Roman Urdu automatically; you can edit it before saving.</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Caller name</label>
+                    <input id="cmCaller" type="text" placeholder="Your name" class="w-full sm:w-64 border rounded-lg p-2.5 text-sm outline-none">
+                </div>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2">
+                <button onclick="closeCallModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="saveCall()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm shadow-sm">Save call</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOLLOW-UP ASSIGNMENT MODAL -->
+    <div id="assignmentModal" class="fixed inset-0 bg-black/50 z-[65] hidden flex items-center justify-center p-3">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl max-h-[94vh] flex flex-col">
+            <div class="p-5 border-b flex justify-between items-start gap-3">
+                <div><h3 class="text-lg font-bold text-indigo-950">Manage follow-up assignments</h3><p id="assignmentFamilyLabel" class="text-sm text-slate-500 mt-1"></p></div>
+                <button onclick="closeAssignmentModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-4 overflow-y-auto">
+                <div class="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                    <label class="block text-xs font-semibold text-indigo-950 mb-1">Assign entire family</label>
+                    <select id="assignFamilyEmail" class="w-full border rounded-lg p-2.5 text-sm bg-white"></select>
+                    <p class="text-[11px] text-indigo-700 mt-1">The selected teacher will see every student in this family.</p>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-slate-700 mb-2">Individual student assignments</h4>
+                    <div id="assignStudentRows" class="space-y-2"></div>
+                    <p class="text-[11px] text-slate-500 mt-2">Individual assignments can be different from the family assignment. Leaving a student unassigned does not cancel a family-wide assignment.</p>
+                </div>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2">
+                <button onclick="closeAssignmentModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="saveFamilyAssignments()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-sm">Save assignments</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WHATSAPP MODAL -->
+    <div id="waModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center sm:p-3">
+        <div class="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+            <div class="p-5 border-b flex justify-between items-start">
+                <div>
+                    <h3 class="text-lg font-bold text-indigo-950">WhatsApp reminder</h3>
+                    <p id="waFamily" class="text-xs text-slate-500 mt-0.5"></p>
+                </div>
+                <button onclick="closeWaModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">✕</button>
+            </div>
+            <div class="p-5 space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Message language</label>
+                    <div class="flex gap-2">
+                        <button id="waLangEn" type="button" onclick="setWaLang('en')" class="flex-1 py-2 rounded-lg border text-sm font-semibold transition">English</button>
+                        <button id="waLangUr" type="button" onclick="setWaLang('ur')" class="flex-1 py-2 rounded-lg border text-sm font-semibold transition">Roman Urdu</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Send to</label>
+                    <select id="waNumber" class="w-full border rounded-lg p-2.5 text-sm bg-white outline-none"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Message (you can edit it before sending)</label>
+                    <textarea id="waText" rows="9" class="w-full border rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-emerald-400"></textarea>
+                </div>
+            </div>
+            <div class="p-5 border-t flex justify-end gap-2">
+                <button onclick="closeWaModal()" class="px-4 py-2 bg-slate-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="openWhatsApp()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm">Open WhatsApp</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STUDENT LEDGER MODAL -->
+    <div id="ledgerModal" class="fixed inset-0 bg-black/50 z-[60] hidden flex items-center justify-center p-3">
+        <div id="ledgerBox" class="bg-white w-full max-w-4xl rounded-2xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex justify-between items-start border-b pb-3 mb-3 gap-2">
+                <div>
+                    <h3 class="text-lg font-bold text-indigo-950">Concept School - Student Fee Ledger</h3>
+                    <p id="ledgerInfo" class="text-xs text-slate-500 mt-0.5"></p>
+                </div>
+                <div class="flex gap-2 no-print">
+                    <button id="ledgerViewToggle" onclick="toggleFollowupLedgerView()" aria-pressed="false" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold">Monthly view</button>
+                    <button onclick="printLedger()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">🖨️ Print</button>
+                    <button onclick="closeLedger()" class="bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">✕</button>
+                </div>
+            </div>
+            <p id="ledgerViewNote" class="hidden mb-2 text-[11px] text-slate-500">Payments are shown in the month they were received, not distributed across earlier fee months.</p>
+            <div class="overflow-x-auto mb-3">
+                <table id="followupLedgerTable" class="w-full text-left text-xs border-collapse">
+                    <thead id="ledgerHead" class="bg-slate-100 text-slate-600">
+                        <tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr>
+                    </thead>
+                    <tbody id="ledgerBody"></tbody>
+                </table>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border flex flex-wrap justify-between gap-2 text-xs font-semibold">
+                <div>Total charges: <span id="ledTP" class="text-indigo-900"></span></div>
+                <div>Paid: <span id="ledTD" class="text-emerald-600"></span></div>
+                <div>Balance: <span id="ledTB" class="text-rose-600"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS -->
+    
+
+<script>
 // ====================================================================================
 //  CONFIG  (change column names here)
 // ====================================================================================
@@ -51,11 +387,19 @@ function fmtDate(s) { if(!s) return '-'; let d = String(s).length <= 10 ? parseY
 function fmtDateTime(s) { if(!s) return '-'; let d = new Date(s); return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); }
 function dayDiff(a, b) { return Math.round((parseYmd(a) - parseYmd(b)) / 86400000); }
 
-function showLoading(t = 'Loading...') { $('loadingText').innerText = t; $('loadingOverlay').classList.remove('hidden'); }
-function hideLoading() { $('loadingOverlay').classList.add('hidden'); }
-function showCustomAlert(m) { UI.alert(m); }
+function showLoading(t = 'Loading...') { sbShowLoadingIndicator(t); }
+function hideLoading() { sbHideLoadingIndicator(); }
+function showCustomAlert(m) { $('customAlertMessage').innerText = m; $('customAlertModal').classList.remove('hidden'); }
 function closeCustomAlert() { $('customAlertModal').classList.add('hidden'); }
-function showCustomConfirm(message, onConfirm) { UI.confirm(message).then(v => { if (v) onConfirm(); }); }
+function showCustomConfirm(message, onConfirm) {
+    $('customConfirmMessage').innerText = message;
+    let modal = $('customConfirmModal'); modal.classList.remove('hidden');
+    let ok = $('confirmOkBtn'), cancel = $('confirmCancelBtn');
+    let nOk = ok.cloneNode(true), nCancel = cancel.cloneNode(true);
+    ok.parentNode.replaceChild(nOk, ok); cancel.parentNode.replaceChild(nCancel, cancel);
+    nOk.addEventListener('click', () => { modal.classList.add('hidden'); onConfirm(true); });
+    nCancel.addEventListener('click', () => modal.classList.add('hidden'));
+}
 
 
 function sbHeaders(extra = {}) { let c = getSupabaseConfig(); return { "apikey": c.key, "Authorization": `Bearer ${c.key}`, ...extra }; }
@@ -166,34 +510,86 @@ async function loadLogs(rerender = true) {
 // ====================================================================================
 //  STUDENT LEDGER (opens when a student name is clicked)
 // ====================================================================================
+let followupLedgerView = 'detailed', followupLedgerData = null;
 function periodStart(p) { const a = String(p || '').trim().toLowerCase().split(/\s+/), m = MONTHS.indexOf(a[0]); return `${parseInt(a[1]) || SCHOOL_YEAR}-${String((m < 0 ? 0 : m) + 1).padStart(2, '0')}-01`; }
+function followupLedgerMonthIndex(date, fallback) {
+    const match = String(date || '').match(/^(\d{4})-(\d{2})/);
+    return match ? Number(match[1]) * 12 + Number(match[2]) - 1 : fallback;
+}
+function toggleFollowupLedgerView() {
+    if(!followupLedgerData) return;
+    followupLedgerView = followupLedgerView === 'detailed' ? 'monthly' : 'detailed';
+    renderFollowupLedger();
+}
+function renderFollowupLedger() {
+    if(!followupLedgerData) return;
+    const monthly = followupLedgerView === 'monthly';
+    const events = monthly ? followupLedgerData.monthly : followupLedgerData.events;
+    $('followupLedgerTable').classList.toggle('monthly-ledger', monthly);
+    $('ledgerHead').innerHTML = monthly
+        ? '<tr><th class="p-2">Month</th><th class="p-2">Fee items</th><th class="p-2">Charge</th><th class="p-2">Received</th><th class="p-2">Balance</th></tr>'
+        : '<tr><th class="p-2">Date</th><th class="p-2">Voucher</th><th class="p-2">Period</th><th class="p-2">Description</th><th class="p-2">Charge</th><th class="p-2">Paid</th><th class="p-2">Balance</th></tr>';
+    $('ledgerViewToggle').innerText = monthly ? 'Detailed view' : 'Monthly view';
+    $('ledgerViewToggle').setAttribute('aria-pressed', String(monthly));
+    $('ledgerViewNote').classList.toggle('hidden', !monthly);
+    let running = 0, charges = 0, paid = 0, html = '';
+    events.forEach(event => {
+        running = Math.round((running + event.debit - event.credit) * 100) / 100;
+        charges += event.debit;
+        paid += event.credit;
+        const balance = running < 0 ? `Adv ${fmt(-running)}` : `PKR ${fmt(running)}`;
+        if(monthly) {
+            html += `<tr class="border-b ${event.debit ? 'bg-slate-50/70' : ''}"><td class="p-2 font-semibold whitespace-nowrap">${esc(event.label)}</td><td class="p-2 text-slate-600 whitespace-nowrap">${esc(event.description) || '-'}</td><td class="p-2 font-bold whitespace-nowrap">${event.debit ? 'PKR ' + fmt(event.debit) : '0'}</td><td class="p-2 font-bold text-emerald-600 whitespace-nowrap">${event.credit ? 'PKR ' + fmt(event.credit) : '0'}</td><td class="p-2 font-bold whitespace-nowrap ${running > 0 ? 'text-rose-600' : running < 0 ? 'text-indigo-600' : 'text-slate-500'}">${balance}</td></tr>`;
+        } else {
+            html += `<tr class="border-b ${event.ord ? '' : 'bg-slate-50/70'}"><td class="p-2 font-mono ${event.ord ? '' : 'text-slate-400'}">${event.ord ? event.date : event.date.slice(0, 7)}</td><td class="p-2 font-mono text-indigo-900">${esc(event.vid) || '-'}</td><td class="p-2 text-indigo-600">${esc(event.period) || '-'}</td><td class="p-2 text-slate-600">${event.desc}</td><td class="p-2 font-bold">${event.debit ? 'PKR ' + fmt(event.debit) : ''}</td><td class="p-2 font-bold text-emerald-600">${event.credit ? 'PKR ' + fmt(event.credit) : ''}</td><td class="p-2 font-bold ${running > 0 ? 'text-rose-600' : running < 0 ? 'text-indigo-600' : 'text-slate-500'}">${balance}</td></tr>`;
+        }
+    });
+    $('ledgerBody').innerHTML = html || `<tr><td colspan="${monthly ? 5 : 7}" class="p-4 text-center text-slate-400">No vouchers found for this student.</td></tr>`;
+    $('ledTP').innerText = 'PKR ' + fmt(charges);
+    $('ledTD').innerText = 'PKR ' + fmt(paid);
+    $('ledTB').innerText = running < 0 ? 'Adv ' + fmt(-running) : 'PKR ' + fmt(running);
+}
 function openLedger(key) {
-    // a real ledger: vouchers are CHARGES, payments are CREDITS on the day they were received, and the balance runs on
     const rows = allFees.filter(f => childKey(f.admis_no, f.student_name) === key && (!isFutureV(f) || f._paid > 0));
     const st = allStudents.find(s => childKey(s.admis_no, s.student_name) === key) || rows[0] || {};
     const tcase = t => String(t || '').replace(/\b\w/g, c => c.toUpperCase());
     const byV = new Map(); rows.forEach(r => { const k = String(r.voucher_id || '').trim(); (byV.get(k) || byV.set(k, []).get(k)).push(r); });
-    const ev = [];
+    const ev = [], monthlyRows = new Map();
+    const getMonth = index => {
+        if(!monthlyRows.has(index)) monthlyRows.set(index, { label: `${MONTHS[((index % 12) + 12) % 12]} ${Math.floor(index / 12)}`, items: new Set(), debit: 0, credit: 0 });
+        return monthlyRows.get(index);
+    };
     byV.forEach((R, vid) => {
         const f0 = R[0], net = R.reduce((s, r) => s + r._payable, 0), disc = R.reduce((s, r) => s + r._discount, 0);
         const items = R.map(r => (isArrearsType(r.type) ? 'Arrears' : tcase(r.type || 'tuition fee')) + (R.length > 1 ? ' ' + fmt(r._payable) : '')).join(' + ');
         ev.push({ date: periodStart(f0.period), ord: 0, vid, period: f0.period, desc: esc(items) + (disc > 0 ? ` <span class="text-indigo-600 font-semibold">(Discount PKR ${fmt(disc)})</span>` : ''), debit: net, credit: 0 });
-        (txMap[vid.split('-').slice(0, 2).join('-')] || []).forEach(t => ev.push({ date: String(t.date || '').slice(0, 10) || periodStart(f0.period), ord: 1, vid, period: f0.period, desc: esc(t.description || t.remarks || 'Payment received'), debit: 0, credit: parseFloat(t.amount_in) || 0 }));
+        const periodIndex = periodRank(f0.period);
+        const chargeIndex = periodIndex >= 0 && periodIndex !== 9999999 ? periodIndex : followupLedgerMonthIndex(periodStart(f0.period), SCHOOL_YEAR * 12);
+        const monthCharge = getMonth(chargeIndex);
+        monthCharge.debit += net;
+        R.forEach(r => monthCharge.items.add(isArrearsType(r.type) ? 'Arrears' : tcase(r.type || 'tuition fee')));
+        (txMap[vid.split('-').slice(0, 2).join('-')] || []).forEach(t => {
+            const amount = parseFloat(t.amount_in) || 0;
+            if(amount <= 0) return;
+            const date = String(t.date || '').slice(0, 10) || periodStart(f0.period);
+            ev.push({ date, ord: 1, vid, period: f0.period, desc: esc(t.description || t.remarks || 'Payment received'), debit: 0, credit: amount });
+            const receivedIndex = followupLedgerMonthIndex(date, chargeIndex);
+            getMonth(receivedIndex).credit += amount;
+        });
     });
     ev.sort((a, b) => a.date.localeCompare(b.date) || a.ord - b.ord || String(a.vid).localeCompare(String(b.vid)));
-    let run = 0, tc = 0, tp = 0, html = '';
-    ev.forEach(e => {
-        run = Math.round((run + e.debit - e.credit) * 100) / 100; tc += e.debit; tp += e.credit;
-        html += `<tr class="border-b ${e.ord ? '' : 'bg-slate-50/70'}"><td class="p-2 font-mono ${e.ord ? '' : 'text-slate-400'}">${e.ord ? e.date : e.date.slice(0, 7)}</td><td class="p-2 font-mono text-indigo-900">${esc(e.vid) || '-'}</td><td class="p-2 text-indigo-600">${esc(e.period) || '-'}</td><td class="p-2 text-slate-600">${e.desc}</td><td class="p-2 font-bold">${e.debit ? 'PKR ' + fmt(e.debit) : ''}</td><td class="p-2 font-bold text-emerald-600">${e.credit ? 'PKR ' + fmt(e.credit) : ''}</td><td class="p-2 font-bold ${run > 0 ? 'text-rose-600' : run < 0 ? 'text-indigo-600' : 'text-slate-500'}">${run < 0 ? 'Adv ' + fmt(-run) : 'PKR ' + fmt(run)}</td></tr>`;
-    });
-    $('ledgerBody').innerHTML = html || '<tr><td colspan="7" class="p-4 text-center text-slate-400">No vouchers found for this student.</td></tr>';
+    const monthIndexes = [...monthlyRows.keys()].sort((a, b) => a - b), monthly = [];
+    if(monthIndexes.length) for(let index = monthIndexes[0]; index <= monthIndexes[monthIndexes.length - 1]; index++) {
+        const month = getMonth(index);
+        monthly.push({ label: month.label, description: [...month.items].join(', ') || '—', debit: month.debit, credit: month.credit });
+    }
+    followupLedgerData = { events: ev, monthly };
+    followupLedgerView = 'detailed';
     $('ledgerInfo').innerText = `Student: ${st.student_name || '-'} | Class: ${st.class || '-'} | Admis No: ${st.admis_no || '-'}${st[SIBLINGS_COL] ? ' | Siblings: ' + st[SIBLINGS_COL] : ''}`;
-    $('ledTP').innerText = 'PKR ' + fmt(tc);
-    $('ledTD').innerText = 'PKR ' + fmt(tp);
-    $('ledTB').innerText = run < 0 ? 'Adv ' + fmt(-run) : 'PKR ' + fmt(run);
+    renderFollowupLedger();
     $('ledgerModal').classList.remove('hidden');
 }
-function closeLedger() { $('ledgerModal').classList.add('hidden'); }
+function closeLedger() { $('ledgerModal').classList.add('hidden'); followupLedgerData = null; }
 function printLedger() { document.body.classList.add('print-ledger'); window.print(); }
 window.addEventListener('afterprint', () => document.body.classList.remove('print-ledger'));
 
@@ -217,7 +613,7 @@ function extractContacts(st) {
 
 function buildFamilies() {
     let children = {};
-    const addChild = (key, base) => { if(!children[key]) children[key] = { key, adm: '', name: '', cls: '', sibRaw: '', monthlyFee: 0, contacts: [], parent: '', vouchers: [], net: 0, ...base }; return children[key]; };
+    const addChild = (key, base) => { if(!children[key]) children[key] = { key, adm: '', name: '', cls: '', sibRaw: '', monthlyFee: 0, contacts: [], parent: '', vouchers: [], paymentVoucherIds: new Set(), net: 0, ...base }; return children[key]; };
 
     allStudents.forEach(st => {
         let key = childKey(st.admis_no, st.student_name);
@@ -232,6 +628,7 @@ function buildFamilies() {
         let key = childKey(f.admis_no, f.student_name);
         let ch = addChild(key, { adm: f.admis_no || '', name: f.student_name || '', cls: f.class || '', sibRaw: String(f[SIBLINGS_COL] ?? '').trim() });
         if(!ch.sibRaw && f[SIBLINGS_COL]) ch.sibRaw = String(f[SIBLINGS_COL]).trim();
+        if(f.voucher_id) ch.paymentVoucherIds.add(String(f.voucher_id).trim());
         if(isFutureV(f)) { ch.net -= f._paid; ch.paidFuture = (ch.paidFuture || 0) + f._paid; return; }
         ch.vouchers.push({ period: f.period, type: f.type, payable: f._payable, paid: f._paid, balance: f._balance, voucher_id: f.voucher_id, ord: rowOrder(f) });
         ch.net += f._balance;
@@ -242,6 +639,18 @@ function buildFamilies() {
         ch.vouchers.sort((a, b) => periodRank(a.period) - periodRank(b.period) || (isArrearsType(b.type) - isArrearsType(a.type)) || a.ord - b.ord);
         ch.vouchers.forEach(v => { const use = Math.min(Math.max(pool, 0), Math.max(v.payable, 0)); v.balance = Math.round((v.payable - use) * 100) / 100; pool -= use; });
         ch.net = Math.round((ch.vouchers.reduce((s, v) => s + v.balance, 0) - Math.max(pool, 0)) * 100) / 100;
+        const receivedByDate = new Map();
+        ch.paymentVoucherIds.forEach(voucherId => {
+            if(!voucherId) return;
+            (txMap[voucherId.split('-').slice(0, 2).join('-')] || []).forEach(transaction => {
+                const amount = parseFloat(transaction.amount_in) || 0;
+                const date = String(transaction.date || '').slice(0, 10);
+                if(amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+                receivedByDate.set(date, (receivedByDate.get(date) || 0) + amount);
+            });
+        });
+        ch.lastPaymentDate = [...receivedByDate.keys()].sort().pop() || '';
+        ch.lastPaymentAmount = ch.lastPaymentDate ? receivedByDate.get(ch.lastPaymentDate) : 0;
     });
 
     let fams = {};
@@ -252,6 +661,12 @@ function buildFamilies() {
         let fam = fams[fKey];
         fam.kids.push(ch);
         fam.pending += ch.net;
+        if(ch.lastPaymentDate > (fam.lastPaymentDate || '')) {
+            fam.lastPaymentDate = ch.lastPaymentDate;
+            fam.lastPaymentAmount = ch.lastPaymentAmount;
+        } else if(ch.lastPaymentDate && ch.lastPaymentDate === fam.lastPaymentDate) {
+            fam.lastPaymentAmount += ch.lastPaymentAmount;
+        }
         if(!fam.parent && ch.parent) fam.parent = ch.parent;
         ch.contacts.forEach(c => { if(!fam.contacts.some(x => x.digits === c.digits)) fam.contacts.push(c); });
     });
@@ -491,6 +906,8 @@ function famCardHtml(f) {
                 <div class="text-right">
                     <div class="text-xs text-slate-500">Total due</div>
                     <div class="text-xl font-extrabold ${pendingCls}">${pendingTxt}</div>
+                    <div class="mt-1 text-[11px] text-slate-500">LPD: <b class="text-slate-700">${f.lastPaymentDate ? fmtDate(f.lastPaymentDate) : '-'}</b></div>
+                    <div class="text-[11px] text-slate-500">LPA: <b class="text-emerald-700">${f.lastPaymentDate ? `PKR ${fmt(f.lastPaymentAmount)}` : '-'}</b></div>
                 </div>
             </div>
             <div class="flex flex-wrap gap-1.5 mt-3">${contactsHtml(f, false)}</div>
@@ -893,3 +1310,6 @@ function toggleVoice() {
 
 
 document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeCallModal(); closeWaModal(); closeLedger(); closeCustomAlert(); } });
+</script>
+</body>
+</html>
