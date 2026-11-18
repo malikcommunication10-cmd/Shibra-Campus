@@ -7,7 +7,7 @@
     <script>window.SB_NO_GUARD = true;</script>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="css/theme.css?v=20261030-1">
-    <script src="js/core/config.js?v=20261113-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261029-1"></script>    <script src="js/core/permissions.js?v=20261113-2"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/config.js?v=20261118-1"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261118-1"></script>    <script src="js/core/permissions.js?v=20261118-1"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
 </head>
 <body class="auth-body">
 <div class="auth-shell">
@@ -49,6 +49,28 @@
             <button id="loginBtn" type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold rounded-lg py-2.5 text-sm shadow-sm transition">Sign in</button>
             <button id="forgotBtn" type="button" onclick="sendPasswordReset()" class="w-full text-[11px] text-indigo-600 hover:underline">Forgot password? Send a reset link to my email</button>
         </form>
+        <form id="connectionSetupForm" onsubmit="saveLoginConnection(event)" class="hidden bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+            <div>
+                <h2 id="connectionSetupTitle" class="text-lg font-bold text-indigo-950">Database connection</h2>
+                <p id="connectionSetupHint" class="text-xs text-slate-500">The app only uses the connection saved in this browser.</p>
+            </div>
+            <div>
+                <label for="loginConnectionUrl" class="block text-xs font-semibold text-slate-600 mb-1">Supabase project URL</label>
+                <input id="loginConnectionUrl" type="url" required autocomplete="url" placeholder="https://your-project.supabase.co" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none">
+            </div>
+            <div>
+                <label for="loginConnectionKey" class="block text-xs font-semibold text-slate-600 mb-1">Publishable / anon key</label>
+                <input id="loginConnectionKey" type="password" required autocomplete="off" placeholder="sb_publishable_..." class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none">
+            </div>
+            <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Use a publishable/anon key only. Never enter a secret or service-role key.</p>
+            <p id="connectionSetupMessage" class="hidden text-xs font-semibold rounded-lg px-3 py-2" role="status"></p>
+            <div class="flex flex-wrap gap-2">
+                <button id="testLoginConnectionButton" type="button" onclick="testLoginConnection()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold rounded-lg py-2.5 text-sm">Test connection</button>
+                <button id="saveLoginConnectionButton" type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold rounded-lg py-2.5 text-sm">Save connection</button>
+            </div>
+            <button id="cancelConnectionSetupButton" type="button" onclick="closeLoginConnection()" class="hidden w-full text-[11px] text-slate-500 hover:underline">Back to sign in</button>
+        </form>
+        <button id="changeConnectionButton" type="button" onclick="openLoginConnection()" class="hidden w-full mt-3 text-[11px] text-indigo-600 hover:underline">Change database connection</button>
         <form id="recoveryForm" onsubmit="saveRecoveredPassword(event)" class="hidden bg-white rounded-2xl shadow-2xl p-6 space-y-4">
             <div>
                 <h2 class="text-lg font-bold text-indigo-950">Set a new password</h2>
@@ -70,6 +92,6 @@
     </div>
   </main>
 </div>
-<script src="js/pages/login.js?v=20261029-1"></script>
+<script src="js/pages/login.js?v=20261118-2"></script>
 </body>
 </html>
