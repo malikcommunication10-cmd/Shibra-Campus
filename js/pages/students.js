@@ -1,4 +1,5 @@
         let allStudentsCache = [];
+        let CLASS_MOVE_CONFIGURED = [], CLASS_MOVE_SELECTED = new Set();
 
         function showLoading(text = "Processing...") {
             document.getElementById('loadingText').innerText = text;
@@ -13,9 +14,11 @@
             try {
                 const [year, lists] = await Promise.all([getSchoolYear(), loadSettingLists(), fetchStudents()]);
                 SCHOOL_YEAR = year;
+                CLASS_MOVE_CONFIGURED = Array.isArray(lists['Class']) ? lists['Class'] : [];
                 document.getElementById('classList').innerHTML = lists['Class'].map(x => `<option value="${esc(x)}">`).join('');
                 document.getElementById('tuitionYearLabel').innerText = SCHOOL_YEAR;
                 const add = document.getElementById('addStudentBtn'); if(add && typeof can === 'function' && ME && ME.perms) add.hidden = !can('students', 'a');
+                const move = document.getElementById('classMoveBtn'); if(move && typeof can === 'function' && ME && ME.perms) move.hidden = !can('students', 'e');
             } finally {
                 hideLoading();
             }
@@ -213,6 +216,153 @@
             });
         }
 
+        function canMoveStudents() { return typeof can !== 'function' || !ME || !ME.perms || can('students', 'e'); }
+        function classMoveValues() {
+            return [...new Set([...CLASS_MOVE_CONFIGURED, ...allStudentsCache.map(row => String(row.class || '').trim())].filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        }
+        function openClassMoveModal() {
+            if(!canMoveStudents()) { UI.alert('You do not have permission to change student classes.'); return; }
+            const sources = [...new Set(allStudentsCache.filter(isActive).map(row => String(row.class || '').trim()).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+            if(!sources.length) { UI.alert('There are no active students with a class to move.'); return; }
+            CLASS_MOVE_SELECTED.clear();
+            const source = document.getElementById('classMoveFrom');
+            source.innerHTML = '<option value="">Select current class</option>' + sources.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join('');
+            const currentFilter = document.getElementById('classFilter').value;
+            if(sources.includes(currentFilter)) source.value = currentFilter;
+            document.getElementById('classMoveSearch').value = '';
+            updateClassMoveTargets();
+            renderClassMoveStudents();
+            document.getElementById('classMoveModal').classList.remove('hidden');
+            document.getElementById('classMoveModal').classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        }
+        function updateClassMoveTargets() {
+            const source = document.getElementById('classMoveFrom').value, target = document.getElementById('classMoveTo');
+            const currentTarget = target.value;
+            target.innerHTML = '<option value="">Select destination class</option>' + classMoveValues()
+                .filter(value => value !== source)
+                .map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join('');
+            if(currentTarget && currentTarget !== source && classMoveValues().includes(currentTarget)) target.value = currentTarget;
+            updateClassMoveSummary();
+        }
+        function classMoveSourceChanged() {
+            CLASS_MOVE_SELECTED.clear();
+            document.getElementById('classMoveSearch').value = '';
+            updateClassMoveTargets();
+            renderClassMoveStudents();
+        }
+        function classMoveRows() {
+            const source = document.getElementById('classMoveFrom').value;
+            const query = document.getElementById('classMoveSearch').value.trim().toLowerCase();
+            return allStudentsCache.filter(row => {
+                if(!isActive(row) || String(row.class || '').trim() !== source) return false;
+                if(!query) return true;
+                return [row.admis_no, row.student_name, row.class, row.contact_no_father, row.contact_no_mother]
+                    .some(value => String(value ?? '').toLowerCase().includes(query));
+            });
+        }
+        function renderClassMoveStudents() {
+            const body = document.getElementById('classMoveStudentList');
+            if(!document.getElementById('classMoveFrom').value) {
+                body.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400">Choose a current class to list its active students.</td></tr>';
+                updateClassMoveSummary();
+                return;
+            }
+            const rows = classMoveRows();
+            body.innerHTML = rows.length ? rows.map(row => {
+                const adm = admKey(row.admis_no), duplicate = !adm || dupAdm.has(adm);
+                return `<tr class="border-t">
+                    <td class="p-2"><input type="checkbox" data-adm="${esc(row.admis_no || '')}" onchange="toggleClassMoveStudent(this)" ${CLASS_MOVE_SELECTED.has(adm) ? 'checked' : ''} ${duplicate ? 'disabled' : ''} aria-label="Select ${esc(row.student_name || 'student')}"></td>
+                    <td class="p-2 font-mono">${esc(row.admis_no || '—')}${duplicate ? '<div class="text-xs text-rose-600">Admission number missing/duplicate</div>' : ''}</td>
+                    <td class="p-2 font-semibold">${esc(row.student_name || '—')}</td>
+                    <td class="p-2 text-slate-500">${esc(row.class || '—')}</td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="4" class="p-4 text-center text-slate-400">No active students match this search.</td></tr>';
+            updateClassMoveSummary();
+        }
+        function toggleClassMoveStudent(input) {
+            const adm = admKey(input.dataset.adm);
+            if(!adm || dupAdm.has(adm)) { input.checked = false; return; }
+            if(input.checked) CLASS_MOVE_SELECTED.add(adm);
+            else CLASS_MOVE_SELECTED.delete(adm);
+            updateClassMoveSummary();
+        }
+        function selectVisibleClassMoveStudents() {
+            classMoveRows().forEach(row => {
+                const adm = admKey(row.admis_no);
+                if(adm && !dupAdm.has(adm)) CLASS_MOVE_SELECTED.add(adm);
+            });
+            renderClassMoveStudents();
+        }
+        function clearClassMoveSelection() { CLASS_MOVE_SELECTED.clear(); renderClassMoveStudents(); }
+        function updateClassMoveSummary() {
+            const count = document.getElementById('classMoveCount');
+            const action = document.getElementById('classMoveApply');
+            if(!count || !action) return;
+            count.innerText = `${CLASS_MOVE_SELECTED.size} student${CLASS_MOVE_SELECTED.size === 1 ? '' : 's'} selected`;
+            action.disabled = !CLASS_MOVE_SELECTED.size || !document.getElementById('classMoveTo').value;
+        }
+        function closeClassMoveModal() {
+            const modal = document.getElementById('classMoveModal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        async function applyClassMove() {
+            if(!canMoveStudents()) { UI.alert('You do not have permission to change student classes.'); return; }
+            const source = document.getElementById('classMoveFrom').value, target = document.getElementById('classMoveTo').value;
+            const selected = allStudentsCache.filter(row => isActive(row) && String(row.class || '').trim() === source && CLASS_MOVE_SELECTED.has(admKey(row.admis_no)));
+            if(!source || !target || source === target || !selected.length) { UI.alert('Choose a current class, a different destination class, and at least one student.'); return; }
+            const duplicates = selected.filter(row => !admKey(row.admis_no) || dupAdm.has(admKey(row.admis_no)));
+            if(duplicates.length) { UI.alert('Some selected students have a missing or duplicate admission number. Resolve those records before moving them.'); return; }
+            const direction = selected.length === 1 ? 'student' : 'students';
+            if(!await UI.confirm(`Move ${selected.length} active ${direction} from ${source} to ${target}?\n\nOnly the class field will change. Admission numbers, student status, and existing fee vouchers will remain unchanged.`, { title: 'Confirm class change', ok: 'Move students' })) return;
+
+            showLoading('Updating student classes...');
+            let moved = 0;
+            try {
+                const config = getSupabaseConfig();
+                for(let i = 0; i < selected.length; i += 50) {
+                    const batch = selected.slice(i, i + 50);
+                    const quote = value => `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+                    const params = new URLSearchParams();
+                    params.set('select', 'admis_no,class');
+                    params.set('class', `eq.${source}`);
+                    params.set('or', '(status.eq.Active,status.is.null,status.eq."")');
+                    params.set('admis_no', `in.(${batch.map(row => quote(row.admis_no)).join(',')})`);
+                    const response = await fetch(`${config.url.replace(/\/$/, '')}/rest/v1/students?${params.toString()}`, {
+                        method: 'PATCH',
+                        headers: { apikey: config.key, Authorization: `Bearer ${config.key}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+                        body: JSON.stringify({ class: target })
+                    });
+                    if(!response.ok) throw new Error(await response.text());
+                    const changed = await response.json();
+                    if(!Array.isArray(changed)) throw new Error('The server did not confirm the changed student records.');
+                    moved += changed.length;
+                    const expected = new Set(batch.map(row => admKey(row.admis_no)));
+                    if(changed.length !== batch.length || changed.some(row => !expected.has(admKey(row.admis_no)) || String(row.class || '').trim() !== target))
+                        throw new Error(`The database confirmed ${changed.length} of ${batch.length} requested class changes. Refresh the directory and review the records.`);
+                }
+                sbCacheClear('students');
+                await fetchStudents();
+                closeClassMoveModal();
+                UI.toast(`${moved} student${moved === 1 ? '' : 's'} moved to ${target}. Existing fee vouchers were not changed.`);
+            } catch (error) {
+                console.error('Class move failed:', error);
+                sbCacheClear('students');
+                await fetchStudents();
+                CLASS_MOVE_SELECTED.clear();
+                renderClassMoveStudents();
+                UI.alert(moved
+                    ? `${moved} student${moved === 1 ? '' : 's'} moved before the operation stopped. Refresh the directory and verify the class records. Error: ${error.message}`
+                    : `No student class changes were confirmed. Error: ${error.message}`);
+            } finally {
+                hideLoading();
+            }
+        }
+
         function feeOf(row, names) { for(const n of names) { const v = parseFloat(row[n]); if(!isNaN(v)) return v; } return 0; }
         function feeBadge(adm) {
             if(!FEES_OK) return '<span class="ui-muted">—</span>';
@@ -406,7 +556,11 @@
             setTimeout(() => document.getElementById('student_name').focus(), 60);
         }
         function cancelStudentForm() { resetForm(); closeStudentModal(); }
-        document.addEventListener('keydown', e => { if(e.key === 'Escape') cancelStudentForm(); });
+        document.addEventListener('keydown', e => {
+            if(e.key !== 'Escape') return;
+            if(!document.getElementById('classMoveModal').classList.contains('hidden')) closeClassMoveModal();
+            else cancelStudentForm();
+        });
 
         async function saveStudent(event) {
             event.preventDefault();
