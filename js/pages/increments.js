@@ -17,12 +17,26 @@ notify pgrst, 'reload schema';`;
         const enc = encodeURIComponent;
         const num = v => parseFloat(v) || 0;
         const rawTrim = v => String(v ?? '').trim();
-
-        function showLoading(text = "Processing...") {
-            document.getElementById('loadingText').innerText = text;
-            document.getElementById('loadingOverlay').classList.remove('hidden');
+        function incrementYear(period) {
+            const match = rawTrim(period).match(/(?:^|\D)(\d{4})(?:\D|$)/);
+            return match ? Number(match[1]) : null;
         }
-        function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+        function isPriorYearTuitionIncrement(record) {
+            if(!record) return false;
+            const feeType = rawTrim(record.fee_type).toLowerCase();
+            const year = incrementYear(record.effective_period);
+            return (feeType.includes('tuition') || feeType.includes('tution'))
+                && year !== null && year < incrementSchoolYear && num(record.new_fee) > 0;
+        }
+        function formatDoj(value) {
+            const date = rawTrim(value), match = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if(!match) return date || '—';
+            const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(match[2]) - 1];
+            return month ? `${match[3]} ${month} ${match[1]}` : date;
+        }
+
+        function showLoading(text = "Processing...") { sbShowLoadingIndicator(text); }
+        function hideLoading() { sbHideLoadingIndicator(); }
 
         /* ---------- result popup ---------- */
         function showResult(title, lines, sql) {
@@ -170,7 +184,7 @@ notify pgrst, 'reload schema';`;
             document.getElementById('selectAllCheckbox').checked = false;
 
             if(studentsList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="12" class="p-6 text-center text-slate-400">No student records found.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" class="p-6 text-center text-slate-400">No student records found.</td></tr>`;
                 document.getElementById('incCountInfo').innerText = `Total Students: 0`;
                 return;
             }
@@ -182,12 +196,13 @@ notify pgrst, 'reload schema';`;
                 let sName = (st.student_name || '').trim();
                 let sClass = (st.class || '').trim();
                 let existingInc = findExisting(admNo);
+                let priorYearIncrement = isPriorYearTuitionIncrement(existingInc);
 
                 let feeType = existingInc ? (existingInc.fee_type || defaultFeeType) : defaultFeeType;
-                let oldFee = existingInc ? (existingInc.old_fee || st.monthly_tution_fee || 0) : (st.monthly_tution_fee || 0);
-                let feeInc = existingInc ? (existingInc.fee_increament || '') : '';
-                let newFee = existingInc ? (existingInc.new_fee || (num(oldFee) + num(feeInc))) : '';
-                let effPeriod = existingInc ? (existingInc.effective_period || `March ${incrementSchoolYear}`) : `March ${incrementSchoolYear}`;
+                let oldFee = priorYearIncrement ? num(existingInc.new_fee) : existingInc ? (existingInc.old_fee || st.monthly_tution_fee || 0) : (st.monthly_tution_fee || 0);
+                let feeInc = priorYearIncrement ? '' : existingInc ? (existingInc.fee_increament || '') : '';
+                let newFee = priorYearIncrement ? '' : existingInc ? (existingInc.new_fee || (num(oldFee) + num(feeInc))) : '';
+                let effPeriod = priorYearIncrement ? `March ${incrementSchoolYear}` : existingInc ? (existingInc.effective_period || `March ${incrementSchoolYear}`) : `March ${incrementSchoolYear}`;
                 let annualFund = existingInc ? (existingInc.annual_fund || st.annual_fund || '') : (st.annual_fund || '');
                 let remarks = existingInc ? (existingInc.remarks || '') : '';
                 let fromStudent = !(existingInc && existingInc.annual_fund) && st.annual_fund;
@@ -201,6 +216,7 @@ notify pgrst, 'reload schema';`;
                     <td class="p-2.5 font-mono text-indigo-900">${esc(admNo)}</td>
                     <td class="p-2.5 font-semibold">${esc(sName)}</td>
                     <td class="p-2.5 text-slate-600">${esc(sClass)}</td>
+                    <td class="p-2.5 whitespace-nowrap text-slate-600">${esc(formatDoj(st.doj))}</td>
                     <td class="p-2.5"><input type="text" id="ftype_${idx}" value="${esc(feeType)}" class="w-24 border rounded p-1 text-xs bg-white outline-none"></td>
                     <td class="p-2.5"><input type="number" id="newfee_${idx}" value="${newFee}" placeholder="New Fee" class="w-24 border rounded p-1 text-xs bg-white outline-none font-bold text-indigo-700"></td>
                     <td class="p-2.5"><input type="text" id="eff_${idx}" value="${esc(effPeriod)}" class="w-24 border rounded p-1 text-xs bg-white outline-none"></td>
