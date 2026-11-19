@@ -6,7 +6,7 @@
     <title>Concept School Shibra Campus - Bulk Annual Increments</title>
     <link rel="stylesheet" href="styles.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';document.head.appendChild(s)">
     <link rel="stylesheet" href="css/theme.css?v=20261030-1">
-    <script src="js/core/config.js?v=20261113-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261029-1"></script>    <script src="js/core/permissions.js?v=20261113-2"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/config.js?v=20261119-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261118-1"></script>    <script src="js/core/permissions.js?v=20261118-1"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
     <script src="js/core/db.js?v=20261029-1"></script>
     <script src="js/core/nav.js?v=20261107-9"></script>
     <script src="js/core/ui.js?v=20261029-1"></script>
@@ -41,6 +41,7 @@
                 <div>
                     <div class="page-kicker mb-2">Shibra Campus · Fee management</div><h2 class="text-2xl font-extrabold text-indigo-950">⚡ Bulk Updation & Annual Increments</h2>
                     <p class="text-sm text-slate-500">Apply bulk increments, manage separate fee & annual fund entries with remarks</p>
+                    <p class="mt-1 text-xs text-indigo-700">In a later school year, a previous tuition increment’s New Fee carries into Old Fee. New Fee and Fee Increment start blank for the next increase. DOJ is shown for each student.</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="reloadFromDatabase()" style="background:#f1f5f9;color:#334155;border-radius:12px;padding:8px 16px;font-size:14px;font-weight:600">🔄 Reload</button>
@@ -99,6 +100,7 @@
                                 <th class="p-2.5 cursor-pointer hover:text-indigo-700" onclick="sortTable('admis_no')">Admis No ↕</th>
                                 <th class="p-2.5 cursor-pointer hover:text-indigo-700" onclick="sortTable('student_name')">Student Name ↕</th>
                                 <th class="p-2.5 cursor-pointer hover:text-indigo-700" onclick="sortTable('class')">Class ↕</th>
+                                <th class="p-2.5">DOJ</th>
                                 <th class="p-2.5">Fee Type</th>
                                 <th class="p-2.5">New Fee</th>
                                 <th class="p-2.5">Effective Period</th>
@@ -110,7 +112,7 @@
                             </tr>
                         </thead>
                         <tbody id="incrementTableBody">
-                            <tr><td colspan="12" class="p-6 text-center text-slate-400">Loading student records...</td></tr>
+                            <tr><td colspan="13" class="p-6 text-center text-slate-400">Loading student records...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -118,6 +120,6 @@
         </main>
     </div>
 
-    <script src="js/pages/increments.js?v=20261110-2"></script>
+    <script src="js/pages/increments.js?v=20261119-1"></script>
 </body>
 </html>
