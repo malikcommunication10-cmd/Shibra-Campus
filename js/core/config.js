@@ -1,5 +1,5 @@
 // ============================================================================
-//  Shared connection helpers. A missing saved connection must never select a project implicitly.
+//  Shared connection helpers. Use the configured default when no browser override is saved.
 // ============================================================================
 const SB_CONFIG_STORAGE_KEY = 'shibra_supabase_config_v1';
 const DEFAULT_SUPABASE_CONFIG = Object.freeze({
@@ -38,7 +38,7 @@ function isSupabaseConfigCurrent() {
     if (!SB_CONFIG_READY) return false;
     try {
         const saved = JSON.parse(localStorage.getItem(SB_CONFIG_STORAGE_KEY) || 'null');
-        if (!saved) return false;
+        if (!saved) return SB_URL === DEFAULT_SUPABASE_CONFIG.url && SB_KEY === DEFAULT_SUPABASE_CONFIG.key;
         const normalized = normalizeSupabaseConfig(saved);
         return normalized.url === SB_URL && normalized.key === SB_KEY;
     } catch (error) {
