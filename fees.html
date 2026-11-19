@@ -7,7 +7,7 @@
 <script>window.__show=function(){document.documentElement.style.visibility='visible'};</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="document.documentElement.style.visibility='hidden';setTimeout(__show,4000);var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <link rel="stylesheet" href="css/theme.css?v=20261104-1">
-    <script src="js/core/config.js?v=20261113-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261104-1"></script>    <script src="js/core/permissions.js?v=20261113-2"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261104-1"></script>
+    <script src="js/core/config.js?v=20261119-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261118-1"></script>    <script src="js/core/permissions.js?v=20261118-1"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261104-1"></script>
     <script src="js/core/db.js?v=20261104-1"></script>
     <script src="js/core/nav.js?v=20261107-9"></script>
     <script src="js/core/ui.js?v=20261104-1"></script>
@@ -99,6 +99,19 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
       <button onclick="toggleGen()" class="w-full px-4 py-3 flex justify-between items-center text-sm font-semibold text-indigo-800 bg-indigo-50/60">
         <span>⚡ Generate fee vouchers</span><span id="genArrow">▼</span></button>
       <div id="genBox" class="hidden p-4 border-t space-y-4">
+        <div class="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div class="text-sm font-bold text-indigo-950">Full school-year vouchers · <span id="schoolYearVoucherYear">—</span></div>
+              <p id="schoolYearVoucherGuide" class="mt-1 text-xs text-slate-600">The configured school year controls the Jan–Dec periods. Set the target year in Settings before generating next year's vouchers.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <a href="settings.html#rules" class="btn b-gh">Set school year</a>
+              <button type="button" class="btn b-gh" onclick="selectFullSchoolYear()">Select Jan–Dec</button>
+            </div>
+          </div>
+          <p class="mt-2 text-xs text-slate-600">“Generate vouchers” creates only missing student/period/fee items; old vouchers remain unchanged. Joining/leaving dates and configured increments are applied. Review the class and student selection before confirming.</p>
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label class="lbl">Period / month</label>
             <select id="voucherPeriod" class="inp" onchange="renderPicker()"></select></div>
@@ -319,7 +332,7 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Save discount</button></div>
 </div></div>
 
-<script src="js/pages/fees.js?v=20261110-3"></script>
+<script src="js/pages/fees.js?v=20261119-1"></script>
 <script src="js/pages/challan.js?v=20261107-2"></script>
 </body>
 </html>
