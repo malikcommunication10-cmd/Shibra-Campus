@@ -7,45 +7,119 @@
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};document.documentElement.style.visibility='hidden';setTimeout(window.__show,4000);</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <link rel="stylesheet" href="css/theme.css?v=20261030-1">
-    <script src="js/core/config.js?v=20261113-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261029-1"></script>    <script src="js/core/permissions.js?v=20261113-2"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
+    <script src="js/core/config.js?v=20261119-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261118-1"></script>    <script src="js/core/permissions.js?v=20261118-1"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261029-1"></script>
     <script src="js/core/db.js?v=20261029-1"></script>
     <script src="js/core/nav.js?v=20261107-9"></script>
     <script src="js/core/ui.js?v=20261029-1"></script>
     <style>
-        .report-table{width:100%;border-collapse:collapse}
-        .report-table th,.report-table td{padding:.6rem .75rem;border-bottom:1px solid #e2e8f0;text-align:left;font-size:.8rem}
-        .report-table th{color:#64748b;font-size:.7rem;text-transform:uppercase}
-        .report-table td:last-child,.report-table th:last-child{text-align:right;font-variant-numeric:tabular-nums}
-        .report-card-toggle::after{content:"⌄";display:inline-block;font-size:1rem;transition:transform .15s}
+        .report-main{max-width:1680px;margin:0 auto;width:100%;padding:20px;display:grid;gap:18px}
+        .report-hero{position:relative;overflow:hidden;border-radius:22px;padding:26px 30px;background:linear-gradient(115deg,#102a50 0%,#173b66 58%,#176271 100%);color:#fff;box-shadow:0 16px 38px rgba(16,42,80,.16)}
+        .report-hero:after{content:"";position:absolute;width:300px;height:300px;border:1px solid rgba(255,255,255,.1);border-radius:50%;right:9%;top:-190px;box-shadow:0 0 0 34px rgba(255,255,255,.035),0 0 0 70px rgba(255,255,255,.025)}
+        .report-hero-content{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:24px}
+        .report-hero h1{font-size:clamp(24px,3vw,34px);line-height:1.1;font-weight:850;letter-spacing:-.035em;color:#fff;margin:3px 0 7px}
+        .report-hero p{margin:0;color:#d4e2f1;font-size:13px}
+        .report-hero .page-kicker{font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#f0b857}
+        .report-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+        .report-action{border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.09);color:#fff;border-radius:10px;padding:9px 13px;font-size:12px;font-weight:750;transition:background .15s,transform .15s}
+        .report-action:hover{background:rgba(255,255,255,.17);transform:translateY(-1px)}
+        .report-action.primary{background:#a7f3d0;border-color:#a7f3d0;color:#12332f}
+        .report-filters{display:grid;grid-template-columns:1.1fr 1fr 1fr auto;gap:12px;align-items:end;padding:14px 16px;background:#fff;border:1px solid #e3eaf2;border-radius:16px;box-shadow:0 4px 14px rgba(16,42,80,.04)}
+        .report-field label{display:block;color:#66758a;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px}
+        .report-field select,.report-field input{width:100%;height:40px;border:1px solid #dce5ef;border-radius:10px;padding:0 11px;background:#fff;color:#20344d;font-size:13px;outline:none}
+        .report-field select:focus,.report-field input:focus{border-color:#4b78aa;box-shadow:0 0 0 3px rgba(75,120,170,.13)}
+        .report-filter-action{height:40px;border-radius:10px;padding:0 17px;background:#173b66;color:#fff;font-size:12px;font-weight:800}
+        .report-filter-meta{grid-column:1/-1;display:flex;justify-content:space-between;gap:10px;color:#7a899c;font-size:11px}
+        #reportStatus{margin:0}
+        #periodLabel{margin:-7px 2px 0;color:#758399;font-size:11px}
+        .fin-overview{overflow:hidden;border:1px solid #e1e9f1;border-radius:20px;background:#f7f9fc;padding:20px;box-shadow:0 8px 24px rgba(20,43,73,.05)}
+        .fin-overview-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}
+        .fin-eyebrow{margin:0 0 4px;color:#327b76;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.12em}
+        .fin-overview-head h2{margin:0;color:#102a50;font-size:21px;font-weight:850;letter-spacing:-.025em}
+        .fin-overview-head p:last-child{margin:4px 0 0;color:#718096;font-size:12px}
+        .fin-updated{display:flex;align-items:center;gap:7px;white-space:nowrap;color:#52637b;font-size:11px;font-weight:700;background:white;border:1px solid #e4eaf0;border-radius:99px;padding:7px 10px}
+        .fin-live-dot{width:7px;height:7px;background:#19a77a;border-radius:50%;box-shadow:0 0 0 3px #d8f4e9}
+        .fin-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+        .fin-card{min-width:0;padding:16px;background:#fff;border:1px solid #e3eaf2;border-radius:15px;box-shadow:0 3px 10px rgba(20,43,73,.035)}
+        .fin-card-featured{border-top:3px solid #3176bd;padding-top:14px}
+        .fin-card-zero{border-top:3px solid #d66b71;padding-top:14px}
+        .fin-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .fin-icon{width:29px;height:29px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;font-size:15px;font-weight:900}
+        .fin-icon-blue{background:#e8f1ff;color:#3676b9}.fin-icon-amber{background:#fff2da;color:#bd7b12}.fin-icon-green{background:#e3f7ef;color:#17815e}.fin-icon-rose{background:#fff0f0;color:#c3525b}
+        .fin-tag{color:#7d8ba0;font-size:9px;font-weight:850;letter-spacing:.07em;text-transform:uppercase}
+        .fin-card h3{margin:12px 0 2px;color:#193452;font-size:14px;font-weight:800}
+        .fin-card-caption{min-height:30px;margin:0;color:#8290a2;font-size:10.5px;line-height:1.45}
+        .fin-main-value{margin-top:8px;color:#102a50;font-size:clamp(19px,2vw,25px);font-weight:850;letter-spacing:-.035em;font-variant-numeric:tabular-nums;white-space:nowrap}
+        .fin-progress{height:5px;margin:11px 0 10px;overflow:hidden;background:#eaf0f5;border-radius:99px}
+        .fin-progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#2c78ba,#22a47c);transition:width .25s}
+        .fin-split{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+        .fin-split>div,.fin-click-value{min-width:0;text-align:left}
+        .fin-split span{display:block;margin-bottom:3px;color:#8190a3;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+        .fin-split b{display:block;color:#2d4662;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+        .fin-click-value{border:0;background:transparent;padding:0;cursor:pointer}
+        .fin-click-value b{color:#bd5d3b;text-decoration:underline;text-decoration-color:#efc9ba;text-underline-offset:3px}
+        .fin-click-value:hover b,.fin-list-link:hover{text-decoration-color:currentColor}
+        .fin-zero-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px}
+        .fin-zero-row strong{color:#102a50;font-size:32px;line-height:1;font-weight:850;font-variant-numeric:tabular-nums}
+        .fin-list-link{border:0;background:transparent;padding:7px 0;color:#a94e57;font-size:11px;font-weight:800;cursor:pointer;text-decoration:underline;text-decoration-color:#eccbd0;text-underline-offset:3px}
+        .report-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+        .report-kpi{min-width:0;padding:13px 15px;background:#fff;border:1px solid #e3eaf2;border-radius:13px;box-shadow:0 3px 10px rgba(20,43,73,.035)}
+        .report-kpi p{margin:0}
+        .report-kpi p:first-child{color:#718096;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+        .report-kpi p:nth-child(2){margin-top:5px;color:#173b66;font-size:18px;font-weight:850;font-variant-numeric:tabular-nums}
+        .report-kpi p:last-child{margin-top:3px;color:#95a1b1;font-size:10px}
+        .report-section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:4px 2px 0}
+        .report-section-heading span{color:#31816f;font-size:10px;font-weight:850;letter-spacing:.11em;text-transform:uppercase}
+        .report-section-heading h2{margin:3px 0 0;color:#102a50;font-size:20px;font-weight:850;letter-spacing:-.025em}
+        .report-section-heading p{margin:0;color:#7b899a;font-size:11px}
+        .report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+        .report-group{grid-column:1/-1;border-bottom:1px solid #e4eaf0;padding:7px 2px 8px!important}
+        .report-group h2{margin:0;color:#193452!important;font-size:11px!important;letter-spacing:.1em!important}
+        .report-group p{margin:3px 0 0}
+        .report-card{background:#fff;border:1px solid #e3eaf2;border-radius:15px;box-shadow:0 4px 14px rgba(20,43,73,.04)}
+        .report-card-toggle{min-height:50px;color:#193452!important;font-size:13px;border-color:#edf1f5!important}
+        .report-card-toggle::after{content:"⌄";display:inline-block;color:#8391a3;font-size:1rem;transition:transform .15s}
         .report-card-toggle[aria-expanded="true"]::after{transform:rotate(180deg)}
-        .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem}
-        .report-kpi{min-width:0}
-        .report-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;align-items:end}
-        .report-filters-note{grid-column:1/-1}
-        #kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
-        @media(min-width:1024px){.report-filters{grid-template-columns:repeat(5,minmax(0,1fr))}.report-filters-note{grid-column:auto}}
-        @media(min-width:1280px){#kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
-        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print{display:none!important}.report-grid{grid-template-columns:1fr 1fr}}
+        .report-card-content>p{color:#7c8a9b}
+        .report-table{width:100%;border-collapse:collapse}
+        .report-table th,.report-table td{padding:.65rem .75rem;border-bottom:1px solid #edf1f5;text-align:left;font-size:.76rem}
+        .report-table th{position:sticky;top:0;background:#f6f8fb;color:#65758a;font-size:.64rem;letter-spacing:.055em;text-transform:uppercase}
+        .report-table td:last-child,.report-table th:last-child{text-align:right;font-variant-numeric:tabular-nums}
+        .report-table tbody tr:hover{background:#f8fafc}
+        .report-table tfoot td{background:#f0f5fa;color:#173b66;font-weight:800}
+        .fin-modal-note{margin:0 0 10px;color:#748398;font-size:11px}
+        .fin-modal-table{max-height:min(65vh,620px);overflow:auto;border:1px solid #e5eaf0;border-radius:10px}
+        .fin-modal-table table{width:100%;border-collapse:collapse;min-width:720px}
+        .fin-modal-table th,.fin-modal-table td{padding:9px 10px;border-bottom:1px solid #edf1f5;text-align:left;font-size:11px;white-space:nowrap}
+        .fin-modal-table th{position:sticky;top:0;background:#f5f8fb;color:#68788d;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+        .fin-modal-table td:nth-last-child(-n+3),.fin-modal-table th:nth-last-child(-n+3){text-align:right;font-variant-numeric:tabular-nums}
+        .fin-empty{padding:18px;margin:0;color:#6b7c90;font-size:13px}
+        @media(max-width:1250px){.fin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.report-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+        @media(max-width:800px){.report-main{padding:12px;gap:13px}.report-hero{padding:20px;border-radius:17px}.report-hero-content{align-items:flex-start;flex-direction:column}.report-actions{justify-content:flex-start}.report-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.report-filter-meta{grid-column:1/-1}.report-grid{grid-template-columns:1fr}.report-section-heading{align-items:flex-start;flex-direction:column;gap:4px}}
+        @media(max-width:520px){.fin-overview{padding:14px}.fin-overview-head{align-items:flex-start}.fin-updated{font-size:0;padding:8px}.fin-updated .fin-live-dot{width:8px;height:8px}.fin-grid{grid-template-columns:1fr 1fr;gap:8px}.fin-card{padding:12px;border-radius:12px}.fin-card-featured,.fin-card-zero{padding-top:10px}.fin-main-value{font-size:17px}.fin-card h3{font-size:12px}.fin-card-caption{font-size:9px;min-height:26px}.fin-split{gap:5px}.fin-split b{font-size:10px}.fin-split span{font-size:8px}.fin-zero-row strong{font-size:27px}.fin-list-link{font-size:9px}.report-filters{gap:9px;padding:11px}.report-filter-action{width:100%}.report-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.report-hero h1{font-size:25px}}
+        @media print{#appNav,#appTop,#appBackdrop,#appPwModal,#appDayBtn,#appDayModal,.no-print{display:none!important}.report-main{max-width:none;padding:0}.report-grid{grid-template-columns:1fr 1fr}.fin-card,.report-card{box-shadow:none;break-inside:avoid}}
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
 <div class="min-h-screen flex flex-col md:flex-row">
     <aside id="appNav"></aside>
-    <main class="flex-1 min-w-0 p-3 md:p-8 space-y-4">
-        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 page-hero p-5 md:p-7 rounded-2xl">
-            <div><div class="page-kicker mb-2">Shibra Campus · Insights</div><h1 class="text-xl md:text-2xl font-extrabold text-indigo-950">Business Reports</h1><p class="text-sm text-slate-500">School-wide operational and financial overview</p></div>
-            <div class="flex flex-wrap gap-2 no-print"><button id="expandAllReports" class="px-3 py-2 rounded-xl border bg-white text-sm font-semibold">Expand all</button><button id="collapseAllReports" class="px-3 py-2 rounded-xl border bg-white text-sm font-semibold">Collapse all</button><button id="printReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Print</button><button id="exportReport" class="px-4 py-2 rounded-xl border bg-white text-sm font-semibold">Export CSV</button><button id="refreshReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Refresh</button></div>
+    <main class="report-main">
+        <header class="report-hero no-print">
+            <div class="report-hero-content">
+                <div><div class="page-kicker">Shibra Campus · Management dashboard</div><h1>Business Reports</h1><p>Financial performance, fee recovery and operational insights</p></div>
+                <div class="report-actions"><button id="expandAllReports" class="report-action">Expand all</button><button id="collapseAllReports" class="report-action">Collapse all</button><button id="printReport" class="report-action">Print</button><button id="exportReport" class="report-action">Export CSV</button><button id="refreshReport" class="report-action primary">↻ Refresh</button></div>
+            </div>
         </header>
-        <section class="report-filters bg-white p-3 md:p-4 rounded-2xl border border-slate-200 no-print">
-            <div><label for="preset" class="block text-xs font-semibold text-slate-600 mb-1">Period</label><select id="preset" class="w-full border rounded-lg p-2 text-sm"><option value="today">Today</option><option value="month">This month</option><option value="last_month">Last month</option><option value="year">This year</option><option value="last_year">Last year</option><option value="custom">Custom</option></select></div>
-            <div><label for="fromDate" class="block text-xs font-semibold text-slate-600 mb-1">From</label><input id="fromDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
-            <div><label for="toDate" class="block text-xs font-semibold text-slate-600 mb-1">To</label><input id="toDate" type="date" class="w-full border rounded-lg p-2 text-sm"></div>
-            <p class="report-filters-note text-[11px] text-slate-500">Transactions follow the selected period. Student and staff counts are current snapshots.</p>
-            <button id="applyReport" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Apply</button>
+        <section class="report-filters no-print">
+            <div class="report-field"><label for="preset">Reporting period</label><select id="preset"><option value="today">Today</option><option value="month">This month</option><option value="last_month">Last month</option><option value="year">This year</option><option value="last_year">Last year</option><option value="custom">Custom range</option></select></div>
+            <div class="report-field"><label for="fromDate">From date</label><input id="fromDate" type="date"></div>
+            <div class="report-field"><label for="toDate">To date</label><input id="toDate" type="date"></div>
+            <button id="applyReport" class="report-filter-action">Apply filters</button>
+            <div class="report-filter-meta"><span>Fee balances are calculated through the selected end date.</span><span id="periodLabel"></span></div>
         </section>
         <div id="reportStatus" class="hidden rounded-xl border px-4 py-3 text-sm" role="status"></div>
-        <p id="periodLabel" class="text-xs text-slate-500"></p>
-        <section id="kpis" class="grid grid-cols-2 gap-3"></section>
+        <section id="financialOverview" class="fin-overview" aria-live="polite"><div class="fin-empty">Loading financial overview…</div></section>
+        <section id="kpis" class="report-kpis" aria-label="School snapshot"></section>
+        <div class="report-section-heading"><div><span>More insights</span><h2>Operational breakdowns</h2></div><p>Student mix, account activity, attendance and follow-up</p></div>
         <section class="report-grid">
             <div class="report-group pt-2"><h2 class="text-sm font-extrabold uppercase tracking-wider text-indigo-950">People</h2><p class="text-xs text-slate-500">Enrolment and fee structure</p></div>
             <article class="report-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -84,6 +158,6 @@
         <p class="text-[11px] text-slate-500">Generated from saved records. Student/staff counts and monthly tuition-fee distribution are current snapshots; monthly fee and payroll records are included when their month overlaps the selected range. Account inflow/outflow uses all dated account entries in range. Books without a saved date cannot be period-filtered.</p>
     </main>
 </div>
-<script src="js/pages/reports.js?v=20261029-1"></script>
+<script src="js/pages/reports.js?v=20261119-1"></script>
 </body>
 </html>
