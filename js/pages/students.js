@@ -45,6 +45,7 @@
         // DIRECTORY: load, KPIs, filters, table, profile, export
         // ====================================================================================
         let FEE_BY_ADM = new Map(), FEES_OK = false, ANNUAL_FUND_OK = false, ANNUAL_FUND_TOTAL = 0, ISSUES_ONLY = false, SHOWN = 300, VIEW = [];
+        let STUDENT_SORT_KEY = 'sr', STUDENT_SORT_DIRECTION = 'asc';
         const r2 = n => Math.round((Number(n) || 0) * 100) / 100, money = n => UI.fmt(n);
         const admKey = a => String(a ?? '').trim().toLowerCase();
         const todayIso = () => (typeof todayYmd === 'function' ? todayYmd() : new Date().toLocaleDateString('en-CA'));
@@ -156,6 +157,10 @@
 
         function filterStudents() {
             const cls = document.getElementById('classFilter').value, stf = document.getElementById('statusFilter').value, sort = document.getElementById('sortBy').value;
+            if(sort !== STUDENT_SORT_KEY) {
+                STUDENT_SORT_KEY = sort;
+                STUDENT_SORT_DIRECTION = sort === 'due' || sort === 'doj' ? 'desc' : 'asc';
+            }
             const toks = (document.getElementById('studentSearch').value || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
             const t = allStudentsCache.filter(row => {
                 if(cls !== 'ALL' && String(row.class || '').trim() !== cls) return false;
@@ -166,17 +171,46 @@
                 return true;
             });
             const dueOf = r => (FEE_BY_ADM.get(admKey(r.admis_no)) || { due: 0 }).due;
+            const textCmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), undefined, { numeric: true, sensitivity: 'base' });
             const cmp = {
                 sr: (a, b) => (parseFloat(a.sr_no) || 0) - (parseFloat(b.sr_no) || 0),
-                name: (a, b) => String(a.student_name || '').localeCompare(String(b.student_name || '')),
-                class: (a, b) => String(a.class || '').localeCompare(String(b.class || ''), undefined, { numeric: true }) || String(a.student_name || '').localeCompare(String(b.student_name || '')),
-                doj: (a, b) => String(b.doj || '').localeCompare(String(a.doj || '')),
-                due: (a, b) => dueOf(b) - dueOf(a)
+                adm: (a, b) => textCmp(a.admis_no, b.admis_no),
+                name: (a, b) => textCmp(a.student_name, b.student_name),
+                class: (a, b) => textCmp(a.class, b.class) || textCmp(a.student_name, b.student_name),
+                contact: (a, b) => textCmp([a.contact_no_father, a.contact_no_mother].filter(Boolean).join(' '), [b.contact_no_father, b.contact_no_mother].filter(Boolean).join(' ')),
+                monthly: (a, b) => tuitionOf(a) - tuitionOf(b),
+                other: (a, b) => otherOf(a) - otherOf(b),
+                doj: (a, b) => textCmp(a.doj, b.doj),
+                due: (a, b) => dueOf(a) - dueOf(b),
+                status: (a, b) => textCmp(a.status || 'Active', b.status || 'Active')
             }[sort] || (() => 0);
-            t.sort(cmp); VIEW = t; SHOWN = 300;
+            const direction = STUDENT_SORT_DIRECTION === 'asc' ? 1 : -1;
+            t.sort((a, b) => cmp(a, b) * direction); VIEW = t; SHOWN = 300;
+            updateStudentSortIndicators();
             const note = document.getElementById('stuFilterNote');
             note.innerHTML = ISSUES_ONLY ? `Showing only records with missing details. <button type="button" class="ui-link" style="color:var(--action)" onclick="toggleIssues()">Show all</button>` : '';
             renderTable(t);
+        }
+
+        function sortStudents(key) {
+            const select = document.getElementById('sortBy');
+            if(select.value === key && STUDENT_SORT_KEY === key) {
+                STUDENT_SORT_DIRECTION = STUDENT_SORT_DIRECTION === 'asc' ? 'desc' : 'asc';
+            } else {
+                select.value = key;
+                STUDENT_SORT_KEY = key;
+                STUDENT_SORT_DIRECTION = key === 'due' ? 'desc' : 'asc';
+            }
+            filterStudents();
+        }
+
+        function updateStudentSortIndicators() {
+            document.querySelectorAll('#studentTableHead th[data-sort-key]').forEach(th => {
+                const active = th.dataset.sortKey === STUDENT_SORT_KEY;
+                th.setAttribute('aria-sort', active ? (STUDENT_SORT_DIRECTION === 'asc' ? 'ascending' : 'descending') : 'none');
+                const indicator = th.querySelector('.student-sort-indicator');
+                if(indicator) indicator.textContent = active ? (STUDENT_SORT_DIRECTION === 'asc' ? '▲' : '▼') : '↕';
+            });
         }
 
         function feeOf(row, names) { for(const n of names) { const v = parseFloat(row[n]); if(!isNaN(v)) return v; } return 0; }
