@@ -39,6 +39,7 @@
                     </div>
                     <div class="page-actions">
                         <button id="addStudentBtn" type="button" onclick="addStudentClick()">＋ Add student</button>
+                        <button id="classMoveBtn" type="button" onclick="openClassMoveModal()">🎓 Promote / demote</button>
                         <button type="button" onclick="exportStudents()">⬇️ Export CSV</button>
                         <button type="button" onclick="window.print()">🖨️ Print list</button>
                     </div>
@@ -82,7 +83,7 @@
     <!-- Settings Modal -->
     
 
-    <script src="js/pages/students.js?v=20261119-3"></script>
+    <script src="js/pages/students.js?v=20261119-5"></script>
 <!-- ADD / EDIT STUDENT (modal) -->
 <style>#studentForm input:disabled, #studentForm select:disabled { background: #f1f5f9; cursor: not-allowed; }</style>
 <div id="studentModal" class="fixed inset-0 z-50 hidden flex items-start sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4">
@@ -195,6 +196,47 @@
       </div>
     </form>
   </div>
+</div>
+
+<div id="classMoveModal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-slate-900/60 p-3 sm:p-5 no-print" role="dialog" aria-modal="true" aria-labelledby="classMoveTitle">
+    <section class="w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+        <header class="border-b border-slate-200 px-4 py-4 sm:px-6">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 id="classMoveTitle" class="text-lg font-bold text-indigo-950">Promote / demote students</h2>
+                    <p class="ui-muted mt-1">Select active students from one class and choose their destination class. Only their class field changes.</p>
+                </div>
+                <button type="button" class="ui-btn" onclick="closeClassMoveModal()" aria-label="Close class movement dialog">✕</button>
+            </div>
+            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="text-xs font-semibold text-slate-600">Current class
+                    <select id="classMoveFrom" class="ui-input mt-1" onchange="classMoveSourceChanged()"><option value="">Select current class</option></select>
+                </label>
+                <label class="text-xs font-semibold text-slate-600">Destination class
+                    <select id="classMoveTo" class="ui-input mt-1" onchange="updateClassMoveSummary()"><option value="">Select destination class</option></select>
+                </label>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+                <input id="classMoveSearch" type="search" class="ui-input min-w-[180px] flex-1" placeholder="Search active students…" aria-label="Search students to move" oninput="renderClassMoveStudents()">
+                <button type="button" class="ui-btn" onclick="selectVisibleClassMoveStudents()">Select visible</button>
+                <button type="button" class="ui-btn" onclick="clearClassMoveSelection()">Clear selection</button>
+            </div>
+            <p class="ui-muted mt-2">Students with missing or duplicate admission numbers are disabled until those records are corrected.</p>
+        </header>
+        <div class="min-h-0 flex-1 overflow-auto">
+            <table class="ui-table w-full">
+                <thead class="sticky top-0 bg-slate-50"><tr><th></th><th>Adm #</th><th>Student</th><th>Current class</th></tr></thead>
+                <tbody id="classMoveStudentList"><tr><td colspan="4" class="ui-empty">Choose a current class to list its active students.</td></tr></tbody>
+            </table>
+        </div>
+        <footer class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 sm:px-6">
+            <span id="classMoveCount" class="text-sm font-semibold text-slate-600">0 students selected</span>
+            <div class="flex gap-2">
+                <button type="button" class="ui-btn" onclick="closeClassMoveModal()">Cancel</button>
+                <button id="classMoveApply" type="button" class="ui-btn" onclick="applyClassMove()" disabled>Move selected students</button>
+            </div>
+        </footer>
+    </section>
 </div>
 </body>
 </html>
