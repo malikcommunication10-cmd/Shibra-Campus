@@ -2,6 +2,10 @@
 //  Shared connection helpers. A missing saved connection must never select a project implicitly.
 // ============================================================================
 const SB_CONFIG_STORAGE_KEY = 'shibra_supabase_config_v1';
+const DEFAULT_SUPABASE_CONFIG = Object.freeze({
+    url: 'https://lhhwvlaexuxnlyqyvner.supabase.co',
+    key: 'sb_publishable_-1P9Wh6P5_LNWAy_xcoigQ_ogY6XAK1'
+});
 function normalizeSupabaseConfig(config) {
     const url = String(config && config.url || '').trim().replace(/\/+$/, '');
     const key = String(config && config.key || '').trim();
@@ -25,7 +29,7 @@ function readSupabaseConfig() {
         return null;
     }
 }
-const _initialSupabaseConfig = readSupabaseConfig();
+const _initialSupabaseConfig = readSupabaseConfig() || DEFAULT_SUPABASE_CONFIG;
 let SB_URL = _initialSupabaseConfig ? _initialSupabaseConfig.url : '';
 let SB_KEY = _initialSupabaseConfig ? _initialSupabaseConfig.key : '';
 let SB_CONFIG_READY = !!_initialSupabaseConfig;
@@ -51,9 +55,9 @@ function persistSupabaseConfig(config) {
 }
 function clearSupabaseConfig() {
     localStorage.removeItem(SB_CONFIG_STORAGE_KEY);
-    SB_URL = '';
-    SB_KEY = '';
-    SB_CONFIG_READY = false;
+    SB_URL = DEFAULT_SUPABASE_CONFIG.url;
+    SB_KEY = DEFAULT_SUPABASE_CONFIG.key;
+    SB_CONFIG_READY = true;
 }
 window.addEventListener('storage', event => {
     if (event.key !== SB_CONFIG_STORAGE_KEY) return;
