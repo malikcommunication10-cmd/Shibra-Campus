@@ -26,8 +26,8 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const isArr=r=>(r.type||'').trim().toLowerCase()==='arrears';
 const today=()=>new Date().toISOString().split('T')[0];
 const fmt=n=>Number(n||0).toLocaleString('en-PK');
-const showLoading=t=>{$('loadingText').innerText=t||'Processing...';$('loadingOverlay').classList.remove('hidden');$('loadingOverlay').classList.add('flex')};
-const hideLoading=()=>{$('loadingOverlay').classList.add('hidden');$('loadingOverlay').classList.remove('flex')};
+const showLoading=t=>sbShowLoadingIndicator(t||'Processing...');
+const hideLoading=()=>sbHideLoadingIndicator();
 const showAlert=m=>{$('alertMsg').innerText=m;$('alertModal').classList.add('open')};
 const closeAlert=()=>$('alertModal').classList.remove('open');
 function showConfirm(msg,cb){
@@ -38,6 +38,11 @@ function showConfirm(msg,cb){
 }
 function toggleMenu(){$('sidebar').classList.toggle('-translate-x-full');$('menuBackdrop').classList.toggle('hidden')}
 function toggleGen(){$('genBox').classList.toggle('hidden');$('genArrow').innerText=$('genBox').classList.contains('hidden')?'▼':'▲'}
+function selectFullSchoolYear(){
+  const period=$('voucherPeriod'),allYear=[...period.options].find(option=>option.value==='ALL_YEAR');
+  if(!allYear){showAlert('The school-year periods are still loading. Please try again.');return}
+  period.value='ALL_YEAR';renderPicker();
+}
 
 function getStudentArrears(st){for(const c of STUDENT_ARREARS_COLS){if(st[c]!=null&&String(st[c]).trim()!=='')return String(st[c]).trim()}return null}
 function getStudentSiblings(st){const v=st[STUDENT_SIBLINGS_COL];return(v==null||String(v).trim()==='')?null:String(v).trim()}
@@ -76,6 +81,8 @@ async function initFeePage(){
   try {
     loaded = await Promise.all([settingsPromise, ERP.db.feeVoucherData()]);
     setFeeSchoolYear(await getSchoolYear());
+    $('schoolYearVoucherYear').innerText=`${SCHOOL_YEAR} (Jan–Dec)`;
+    $('schoolYearVoucherGuide').innerText=`Configured School Year is ${SCHOOL_YEAR}. Select “Generate all” to create Jan–Dec vouchers for this year. To prepare another year, update School Year in Settings and reopen this page.`;
     payChoices = await fillPaySelects(['payToAccount','bulkAccount']);
   } catch (e) {
     console.error(e);
