@@ -7,10 +7,15 @@
     <script>window.__show=function(){document.documentElement.style.visibility='visible'};</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="document.documentElement.style.visibility='hidden';setTimeout(__show,4000);var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <link rel="stylesheet" href="css/theme.css?v=20261104-1">
-    <script src="js/core/config.js?v=20261104-1"></script><script src="js/core/cache.js?v=20261104-1"></script><script src="js/core/auth.js?v=20261104-1"></script><script src="js/core/permissions.js?v=20261104-1"></script><script src="js/core/data.js?v=20261104-1"></script><script src="js/core/settings.js?v=20261104-1"></script>
+    <script src="js/core/config.js?v=20261119-2"></script><script src="js/core/cache.js?v=20261104-1"></script><script src="js/core/auth.js?v=20261118-1"></script><script src="js/core/permissions.js?v=20261118-1"></script><script src="js/core/data.js?v=20261104-1"></script><script src="js/core/settings.js?v=20261104-1"></script>
     <script src="js/core/db.js?v=20261104-1"></script>
     <script src="js/core/nav.js?v=20261104-1"></script>
     <script src="js/core/ui.js?v=20261104-1"></script>
+    <style>
+        .student-sort { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; padding: 0; white-space: nowrap; }
+        .student-sort:hover { color: var(--action); }
+        .student-sort-indicator { color: #64748b; font-size: .75em; margin-left: .25em; }
+    </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans" onload="initPage()">
     
@@ -46,13 +51,23 @@
                         <input id="studentSearch" type="search" oninput="filterStudents()" placeholder="Search name, admission no, class, phone, family…" class="ui-input grow" aria-label="Search students">
                         <select id="classFilter" onchange="filterStudents()" class="ui-input" aria-label="Class"><option value="ALL">All classes</option></select>
                         <select id="statusFilter" onchange="filterStudents()" class="ui-input" aria-label="Status"><option value="ACTIVE">Active students</option><option value="LEFT">Left students</option><option value="ALL">All students</option></select>
-                        <select id="sortBy" onchange="filterStudents()" class="ui-input" aria-label="Sort"><option value="sr">Sort: Serial no</option><option value="name">Sort: Name</option><option value="class">Sort: Class</option><option value="doj">Sort: Newest admission</option><option value="due">Sort: Highest fee due</option></select>
+                        <select id="sortBy" onchange="filterStudents()" class="ui-input" aria-label="Sort"><option value="sr">Sort: Serial no</option><option value="adm">Sort: Admission no</option><option value="name">Sort: Name</option><option value="class">Sort: Class</option><option value="contact">Sort: Contact</option><option value="monthly">Sort: Monthly fee</option><option value="other">Sort: Other fees</option><option value="doj">Sort: Newest admission</option><option value="due">Sort: Highest fee due</option><option value="status">Sort: Status</option></select>
                         <button type="button" onclick="initPage()" class="ui-btn">🔄 Refresh</button>
                     </div>
                     <div id="stuFilterNote" class="ui-muted no-print" style="margin-bottom:8px"></div>
                     <div class="ui-scroll" style="max-height:640px">
                         <table class="ui-table" style="min-width:980px">
-                            <thead><tr><th>Adm #</th><th>Student</th><th>Class</th><th>Contact</th><th class="n">Monthly fee</th><th class="n">Other fees</th><th>Fee position</th><th>Status</th><th class="no-print" style="text-align:right">Actions</th></tr></thead>
+                            <thead id="studentTableHead"><tr>
+                                <th data-sort-key="adm" aria-sort="none"><button type="button" class="student-sort" onclick="sortStudents('adm')" aria-label="Sort by admission number">Adm # <span class="student-sort-indicator" aria-hidden="true">↕</span></button></th>
+                                <th data-sort-key="name" aria-sort="none"><button type="button" class="student-sort" onclick="sortStudents('name')" aria-label="Sort by student name">Student <span class="student-sort-indicator" aria-hidden="true">↕</span></button></th>
+                                <th data-sort-key="class" aria-sort="none"><button type="button" class="student-sort" onclick="sortStudents('class')" aria-label="Sort by class">Class <span class="student-sort-indicator" aria-hidden="true">↕</span></button></th>
+                                <th data-sort-key="contact" aria-sort="none"><button type="button" class="student-sort" onclick="sortStudents('contact')" aria-label="Sort by contact">Contact <span class="student-sort-indicator" aria-hidden="true">↕</span></button></th>
+                                <th class="n" data-sort-key="monthly" aria-sort="none"><button type="button" class="student-sort" onclick="sortStudents('monthly')" aria-label="Sort by monthly fee">Monthly fee <span class="student-sort-indicator" aria-hidden="true">↕</span></button></th>
+                                <th class="n" data-sort-key="other" aria-sort="none"><button type="button" class="student-sort" onclick="sortStudents('other')" aria-label="Sort by other fees">Other fees <span class="student-sort-indicator" aria-hidden="true">↕</span></button></th>
+                                <th data-sort-key="due" aria-sort="none"><button type="button" class="student-sort" onclick="sortStudents('due')" aria-label="Sort by fee position">Fee position <span class="student-sort-indicator" aria-hidden="true">↕</span></button></th>
+                                <th data-sort-key="status" aria-sort="none"><button type="button" class="student-sort" onclick="sortStudents('status')" aria-label="Sort by status">Status <span class="student-sort-indicator" aria-hidden="true">↕</span></button></th>
+                                <th class="no-print" style="text-align:right">Actions</th>
+                            </tr></thead>
                             <tbody id="studentTableBody"><tr><td colspan="9" class="ui-empty">Loading records…</td></tr></tbody>
                             <tfoot id="studentTableFoot"></tfoot>
                         </table>
@@ -67,7 +82,7 @@
     <!-- Settings Modal -->
     
 
-    <script src="js/pages/students.js?v=20261104-1"></script>
+    <script src="js/pages/students.js?v=20261119-3"></script>
 <!-- ADD / EDIT STUDENT (modal) -->
 <style>#studentForm input:disabled, #studentForm select:disabled { background: #f1f5f9; cursor: not-allowed; }</style>
 <div id="studentModal" class="fixed inset-0 z-50 hidden flex items-start sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4">
