@@ -82,7 +82,7 @@ async function initFeePage(){
     loaded = await Promise.all([settingsPromise, ERP.db.feeVoucherData()]);
     setFeeSchoolYear(await getSchoolYear());
     $('schoolYearVoucherYear').innerText=`${SCHOOL_YEAR} (Jan–Dec)`;
-    $('schoolYearVoucherGuide').innerText=`Configured School Year is ${SCHOOL_YEAR}. Select “Generate all” to create Jan–Dec vouchers for this year. To prepare another year, update School Year in Settings and reopen this page.`;
+    $('schoolYearVoucherGuide').innerText=`Configured School Year is ${SCHOOL_YEAR}. Select “Generate all” to create Jan–Dec vouchers for this year. A tuition increment effective before this year carries its new fee forward from January; an increment effective during this year starts from that month. To prepare another year, update School Year in Settings and reopen this page.`;
     payChoices = await fillPaySelects(['payToAccount','bulkAccount']);
   } catch (e) {
     console.error(e);
@@ -627,12 +627,7 @@ function generateVouchers(withUpdate){
       }
       if(pv<sv||(ev!==null&&pv>ev))return;
       const inc=incrementsCacheMap[adm],cm=monthOrder[period]||0,em=inc?periodNum(inc.effective_period):0;
-      let tp=parseFloat(st.monthly_tution_fee)||0,rm='';
-      if(inc){
-        if(em>0&&cm>=em){if(parseFloat(inc.new_fee)>0)tp=parseFloat(inc.new_fee)}
-        else tp=parseFloat(inc.old_fee)||parseFloat(st.monthly_tution_fee)||0;
-        if(inc.remarks)rm=inc.remarks;
-      }
+      const tp=expectedTuition(st,period),rm=inc&&inc.remarks?inc.remarks:'';
       add(st,adm,sn,period,'tuition fee',tp,rm,null);
       if(period===ARREARS_PERIOD){const a=parseFloat(getStudentArrears(st))||0;if(a>0)add(st,adm,sn,period,'arrears',a,`${ARREARS_SOURCE_YEAR} arrears (one-time carry-forward)`,String(a))}
       if(inc&&parseFloat(inc.annual_fund)>0&&(inc.fee_type||'').trim().toLowerCase()==='annual fund'&&em>0&&cm===em)
@@ -752,12 +747,31 @@ function eligibility(st,period){
   }
   return'ok';
 }
+function parseIncrementEffectivePeriod(value) {
+  const text=String(value||'').trim().toLowerCase();
+  if(!text)return null;
+  const yearMatch=text.match(/(\d{4})/);
+  let year=yearMatch?Number(yearMatch[1]):SCHOOL_YEAR;
+  const names=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  let month=names.findIndex(name=>text.includes(name));
+  if(month<0){
+    const monthYear=text.match(/^(\d{1,2})[\/\-.](\d{4})$/);
+    const yearMonth=text.match(/^(\d{4})[\/\-.](\d{1,2})(?:[\/\-.]\d{1,2})?$/);
+    if(monthYear){month=Number(monthYear[1])-1;year=Number(monthYear[2])}
+    else if(yearMonth){year=Number(yearMonth[1]);month=Number(yearMonth[2])-1}
+  }
+  if(!Number.isInteger(year)||month<0||month>11)return null;
+  return {year,month:month+1};
+}
 function expectedTuition(st,period){
-  const inc=incrementsCacheMap[(st.admis_no||'').trim().toLowerCase()],cm=monthOrder[period]||0;
-  let t=parseFloat(st.monthly_tution_fee)||0;
-  if(inc){const em=periodNum(inc.effective_period);
-    if(em>0&&cm>=em){if(parseFloat(inc.new_fee)>0)t=parseFloat(inc.new_fee)}else t=parseFloat(inc.old_fee)||t}
-  return t;
+  const inc=incrementsCacheMap[(st.admis_no||st.sr_no||'').trim().toLowerCase()];
+  const oldFee=(parseFloat(inc&&inc.old_fee)||parseFloat(st.monthly_tution_fee)||0);
+  if(!inc)return oldFee;
+  const newFee=parseFloat(inc.new_fee)||0, effective=parseIncrementEffectivePeriod(inc.effective_period);
+  if(!(newFee>0)||!effective)return oldFee;
+  if(effective.year<SCHOOL_YEAR)return newFee;
+  if(effective.year>SCHOOL_YEAR)return oldFee;
+  return (monthOrder[period]||0)>=effective.month?newFee:oldFee;
 }
 function openSync(){
   syncItems=[];
