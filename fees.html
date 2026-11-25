@@ -7,7 +7,7 @@
 <script>window.__show=function(){document.documentElement.style.visibility='visible'};</script>
     <link rel="stylesheet" href="styles.css" onload="__show()" onerror="document.documentElement.style.visibility='hidden';setTimeout(__show,4000);var s=document.createElement('script');s.src='https://cdn.tailwindcss.com';s.onload=function(){setTimeout(__show,120)};s.onerror=__show;document.head.appendChild(s)">
     <link rel="stylesheet" href="css/theme.css?v=20261104-1">
-    <script src="js/core/config.js?v=20261119-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261118-1"></script>    <script src="js/core/permissions.js?v=20261118-1"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261104-1"></script>
+    <script src="js/core/config.js?v=20261119-2"></script><script src="js/core/cache.js?v=20261113-2"></script><script src="js/core/auth.js?v=20261118-1"></script>    <script src="js/core/permissions.js?v=20261123-1"></script><script src="js/core/data.js?v=20261113-1"></script><script src="js/core/settings.js?v=20261104-1"></script>
     <script src="js/core/db.js?v=20261104-1"></script>
     <script src="js/core/nav.js?v=20261107-9"></script>
     <script src="js/core/ui.js?v=20261104-1"></script>
@@ -29,8 +29,25 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-se
 .nav a{display:flex;gap:.6rem;align-items:center;padding:.6rem .8rem;border-radius:.6rem;color:#c7d2fe;font-size:.85rem}
 .nav a:hover{background:rgba(255,255,255,.08)}.nav a.on{background:#4338ca;color:#fff;font-weight:600}
 table.rt th{padding:.65rem .6rem;font-size:.7rem;font-weight:700;color:#475569;text-align:left;white-space:nowrap}
+table.rt th.arrears-heading{background:#fef3c7;color:#92400e}
 table.rt td{padding:.6rem;font-size:.78rem;border-top:1px solid #f1f5f9;vertical-align:top;overflow-wrap:anywhere}
 table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Balance"],table.rt td[data-l="Status"],.badge{white-space:nowrap}
+.fee-filter-set{min-width:0;margin:0;padding:.35rem .55rem;border:1px solid #e2e8f0;border-radius:.65rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.72rem;color:#475569}
+.fee-filter-set legend{padding:0 .2rem;font-size:.68rem;font-weight:700;color:#64748b}
+.fee-filter-set label{display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap}
+.fee-item-chip{display:inline-flex;align-items:center;gap:.2rem}
+.fee-item-chip button{border:0;border-radius:.25rem;background:#e2e8f0;color:#475569;padding:.08rem .22rem;font-size:.65rem;line-height:1.2}
+.fee-item-chip button:hover{background:#cbd5e1;color:#0f172a}
+.fee-footer-totals{display:grid;grid-template-columns:minmax(120px,1.3fr) repeat(4,minmax(78px,1fr));gap:.45rem;align-items:center;flex:1 1 500px;font-size:.72rem}
+.fee-total-cell{text-align:center;min-width:0}
+.fee-total-label span,.fee-total-cell span{display:block;color:#64748b;font-size:.65rem;font-weight:600}
+.fee-total-label strong,.fee-total-cell strong{display:block;color:#1e293b;font-size:.75rem;white-space:nowrap}
+.fee-period-tuition{color:#334155!important;font-weight:700}
+.fee-total-cell[data-total="arrears"] strong{color:#92400e}
+.fee-total-cell[data-total="paid"] strong{color:#047857}
+.fee-total-cell[data-total="balance"] strong{color:#be123c}
+.fee-footer-actions{display:flex;gap:.5rem;flex:0 0 auto}
+@media(max-width:1023px){.fee-footer-totals{grid-template-columns:repeat(4,minmax(78px,1fr))}.fee-total-label{grid-column:1/-1}}
 @media(max-width:767px){
  table.rt thead{display:none}
  table.rt,table.rt tbody{display:block}
@@ -39,6 +56,11 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
  table.rt td::before{content:attr(data-l);color:#94a3b8;font-weight:600;text-align:left}
  table.rt td.nl::before{content:none}
  table.rt td[data-l="Action"]{display:block;min-width:270px}
+ .fee-filter-set{align-items:flex-start}
+ .fee-footer-totals{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .fee-total-label{grid-column:1/-1}
+ .fee-total-cell{text-align:left}
+ .fee-footer-actions{width:100%}
 }
 .ledger-plus{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;color:#1d4ed8;font-weight:800;line-height:1;cursor:pointer;margin-right:4px;vertical-align:middle}
 .ledger-plus:hover{background:#e8eefc}
@@ -74,6 +96,22 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
   <p id="confirmMsg" class="text-sm font-medium text-slate-700" style="white-space:pre-line"></p>
   <div class="flex gap-2"><button id="confirmNo" class="btn b-gh flex-1">Cancel</button><button id="confirmYes" class="btn b-ok flex-1">Proceed</button></div></div></div>
 
+<div id="arrearsDetailModal" class="modal no-print" style="z-index:85"><div class="sheet max-w-3xl space-y-3">
+  <div class="flex items-start justify-between gap-3"><div><h3 id="feeDetailTitle" class="font-bold text-amber-950">Fee details</h3><p id="arrearsDetailPeriod" class="text-xs text-slate-500"></p></div><button type="button" class="btn b-gh" onclick="closeArrearsDetails()">Close</button></div>
+  <div id="arrearsDetailSummary" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+  <div class="overflow-x-auto max-h-[55vh] border rounded-lg"><table class="w-full text-left text-xs">
+    <thead class="sticky top-0 bg-amber-100 text-amber-950"><tr>
+      <th class="p-2 cursor-pointer select-none" data-sort="student" onclick="sortFeeDetails('student')">Student <span data-sort-indicator="student"></span></th>
+      <th class="p-2 cursor-pointer select-none" data-sort="adm" onclick="sortFeeDetails('adm')">Adm no. <span data-sort-indicator="adm"></span></th>
+      <th class="p-2 cursor-pointer select-none" data-sort="period" onclick="sortFeeDetails('period')">Period <span data-sort-indicator="period"></span></th>
+      <th class="p-2 cursor-pointer select-none" data-sort="payable" onclick="sortFeeDetails('payable')">Total / payable <span data-sort-indicator="payable"></span></th>
+      <th class="p-2 cursor-pointer select-none" data-sort="discount" onclick="sortFeeDetails('discount')">Discount <span data-sort-indicator="discount"></span></th>
+      <th class="p-2 cursor-pointer select-none" data-sort="net" onclick="sortFeeDetails('net')">After discount <span data-sort-indicator="net"></span></th>
+      <th class="p-2 cursor-pointer select-none" data-sort="received" onclick="sortFeeDetails('received')">Received <span data-sort-indicator="received"></span></th>
+      <th class="p-2 cursor-pointer select-none" data-sort="pending" onclick="sortFeeDetails('pending')">Pending <span data-sort-indicator="pending"></span></th>
+    </tr></thead><tbody id="arrearsDetailBody"></tbody></table></div>
+</div></div>
+
 <!-- Mobile top bar -->
 <div class="md:flex min-h-screen">
   <aside id="appNav"></aside>
@@ -85,12 +123,51 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
     </div>
 
     <!-- Stats -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Vouchers</div><div id="stCount" class="text-lg font-extrabold text-slate-900">0</div></div>
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Total payable</div><div id="stPayable" class="text-lg font-extrabold text-slate-900">0</div></div>
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Collected</div><div id="stPaid" class="text-lg font-extrabold text-emerald-600">0</div></div>
-      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Pending</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div></div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7 gap-3 no-print">
+      <button id="voucherCoverageCard" type="button" class="text-left bg-white rounded-xl border p-3" onclick="openVoucherCoverage()">
+        <span class="text-[11px] text-slate-500 font-semibold">Vouchers / active students</span>
+        <span id="stCount" class="block text-lg font-extrabold text-slate-900">0 / 0</span>
+        <span id="voucherCoverageNote" class="block text-[10px] text-slate-500">Selected period coverage</span>
+      </button>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Total payable (incl. arrears)</div><div id="stPayable" class="text-lg font-extrabold text-slate-900">0</div><div id="stPayableBreakdown" class="mt-1 text-[10px] leading-4 text-slate-500"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Collected</div><div id="stPaid" class="text-lg font-extrabold text-emerald-600">0</div><div id="stCollectedBreakdown" class="mt-1 text-[10px] leading-4 text-slate-500"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Pending</div><div id="stBal" class="text-lg font-extrabold text-rose-600">0</div><div id="stPendingBreakdown" class="mt-1 text-[10px] leading-4 text-slate-500"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div class="text-[11px] text-slate-500 font-semibold">Expected tuition · selected period</div><div id="stExpectedTuition" class="text-lg font-extrabold text-indigo-700">0</div><div id="stTuitionFormula" class="mt-1 text-[10px] leading-4 text-slate-500"></div></div>
+      <div class="bg-white rounded-xl border p-3"><div id="stToDateLabel" class="text-[11px] text-slate-500 font-semibold">Pending through month</div><div id="stToDateBal" class="text-lg font-extrabold text-rose-600">0</div><div class="text-[10px] text-slate-500">Selected student status · includes older dues</div></div>
+      <button id="feeIssuesCard" type="button" class="text-left bg-white rounded-xl border p-3" aria-expanded="false" onclick="toggleFeeIssues()">
+        <span class="text-[11px] text-slate-500 font-semibold">Needs check</span>
+        <span id="feeIssuesCount" class="block text-lg font-extrabold text-amber-700">0</span>
+        <span id="feeIssuesNote" class="block text-[10px] text-slate-500">Missing or inconsistent vouchers</span>
+      </button>
     </div>
+
+    <section id="feeIssuesPanel" class="hidden bg-amber-50 rounded-xl border border-amber-300 p-3 no-print">
+      <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+        <div><h3 class="font-bold text-amber-950 text-sm">Fee vouchers to check</h3><p id="feeIssuesSummary" class="text-xs text-amber-900 mt-1"></p></div>
+        <button type="button" class="btn b-gh" onclick="toggleFeeIssues()">Hide</button>
+      </div>
+      <div class="overflow-x-auto max-h-80 bg-white rounded-lg border border-amber-200">
+        <table class="w-full text-left text-xs">
+          <thead class="sticky top-0 bg-amber-100 text-amber-950"><tr><th class="p-2">Issue</th><th class="p-2">Student</th><th class="p-2">Admission no.</th><th class="p-2">Period</th><th class="p-2">Details</th><th class="p-2">Inspect</th></tr></thead>
+          <tbody id="feeIssuesBody"></tbody>
+        </table>
+      </div>
+      <p class="text-[11px] text-amber-900 mt-2">This report does not create or change vouchers. Review the student or ledger, then use Generate / Sync only after confirming the record.</p>
+    </section>
+
+    <section id="feeDiscountRequestsPanel" class="hidden bg-white rounded-xl border p-3 no-print">
+      <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+        <div><h3 class="font-bold text-indigo-950 text-sm">Discount requests &amp; Admin approval</h3><p id="feeDiscountRequestsNote" class="text-xs text-slate-600 mt-1">Loading discount requests…</p></div>
+        <button type="button" class="btn b-gh" onclick="loadFeeDiscountRequests()">Refresh requests</button>
+      </div>
+      <div class="overflow-x-auto max-h-80 rounded-lg border">
+        <table class="w-full text-left text-xs">
+          <thead class="sticky top-0 bg-indigo-50 text-indigo-950"><tr><th class="p-2">Status</th><th class="p-2">Voucher / student</th><th class="p-2">Requested by</th><th class="p-2">Previous</th><th class="p-2">Requested</th><th class="p-2">Reason</th><th class="p-2">Review</th></tr></thead>
+          <tbody id="feeDiscountRequestsBody"></tbody>
+        </table>
+      </div>
+      <p class="text-[11px] text-slate-500 mt-2">A separate active Admin must approve a request. The requester cannot approve their own discount.</p>
+    </section>
 
     <div id="afBanner" class="hidden no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3"></div>
 
@@ -168,14 +245,25 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
           <input id="searchInput" oninput="filterVouchers()" placeholder="Search ID or name..." class="inp col-span-2">
           <select id="filterPeriod" onchange="filterVouchers()" class="inp"><option value="ALL">All periods</option></select>
-          <select id="filterStatus" onchange="filterVouchers()" class="inp">
-            <option value="ALL">All status</option><option>Unpaid</option><option>Partial</option><option>Paid</option></select>
           <select id="filterItem" onchange="filterVouchers()" class="inp"><option value="ALL">All fee items</option></select>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <fieldset class="fee-filter-set">
+            <legend>Payment status</legend>
+            <label><input id="filterUnpaid" type="checkbox" class="fee-status-filter" value="Unpaid" checked onchange="filterVouchers()"> Unpaid</label>
+            <label><input id="filterPartial" type="checkbox" class="fee-status-filter" value="Partial" checked onchange="filterVouchers()"> Partial</label>
+            <label><input id="filterPaid" type="checkbox" class="fee-status-filter" value="Paid" checked onchange="filterVouchers()"> Paid</label>
+          </fieldset>
+          <fieldset class="fee-filter-set">
+            <legend>Student status</legend>
+            <label><input id="filterStudentActive" type="checkbox" class="fee-student-filter" checked onchange="filterVouchers()"> Active</label>
+            <label><input id="filterStudentInactive" type="checkbox" class="fee-student-filter" onchange="filterVouchers()"> Inactive / Left</label>
+          </fieldset>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
           <div><label class="lbl">From month</label><select id="fromMonth" class="inp" onchange="filterVouchers()"></select></div>
           <div><label class="lbl">To month</label><select id="toMonth" class="inp" onchange="filterVouchers()"></select></div>
-          <button onclick="resetRange()" class="btn b-gh col-span-2 md:col-span-1">Reset (Jan to current month)</button>
+          <button onclick="resetRange()" class="btn b-gh col-span-2 md:col-span-1">Reset (current month)</button>
         </div>
         <label class="md:hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" onchange="toggleSelectAll(this)"> Select all</label>
       </div>
@@ -183,8 +271,8 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
         <table class="rt w-full border-collapse">
           <thead class="bg-slate-50 sticky top-0"><tr>
             <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
-            <th>Voucher</th><th>Student</th><th>Items</th><th>Payable</th><th>Paid</th><th>Balance</th><th>Status</th><th style="min-width:270px">Action</th></tr></thead>
-          <tbody id="feesTableBody"><tr><td colspan="9" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
+            <th>Voucher</th><th>Student</th><th>Items</th><th class="arrears-heading">Arrears</th><th>Payable</th><th>Paid</th><th>Balance</th><th>Status</th><th style="min-width:270px">Action</th></tr></thead>
+          <tbody id="feesTableBody"><tr><td colspan="10" class="nl p-6 text-center text-slate-400">Loading...</td></tr></tbody>
         </table>
       </div>
       <div id="summaryView" class="hidden overflow-x-auto md:max-h-[70vh]">
@@ -241,6 +329,7 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
       <div><label class="lbl">Amount</label><input type="number" id="payAmountIn" required class="inp font-bold text-emerald-600"></div>
       <div><label class="lbl">Date</label><input type="date" id="payDate" required class="inp"></div></div>
     <div><label class="lbl">Remarks</label><input id="payRemarks" placeholder="Optional" class="inp"></div>
+    <p class="text-xs text-slate-500">To clear previous arrears oldest-first, use Bulk pay.</p>
     <div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closePayModal()" class="btn b-gh">Cancel</button><button type="button" onclick="openStudentBulkPay()" class="btn b-pri" title="Pay all dues of this student up to today, oldest first">⚡ Bulk pay</button><button type="submit" class="btn b-ok">Save receipt</button></div>
   </form>
 </div></div>
@@ -309,18 +398,19 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
 </div></div>
 
 <div id="addItemModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
- <h3 class="font-bold text-indigo-800 border-b pb-2">➕ Add a fee to this voucher</h3>
+ <h3 id="aiTitle" class="font-bold text-indigo-800 border-b pb-2">➕ Add a fee to this voucher</h3>
  <div class="grid grid-cols-2 gap-2"><div><label class="lbl">Voucher ID</label><input id="aiVid" readonly class="inp font-mono"></div><div><label class="lbl">Student / month</label><input id="aiStudent" readonly class="inp"></div></div>
  <p id="aiExisting" class="text-xs text-slate-500"></p>
  <div><label class="lbl">Fee name</label><input id="aiType" list="aiTypes" placeholder="e.g. annual fund" class="inp"><datalist id="aiTypes"><option value="annual fund"><option value="registration fee"><option value="admission fee"><option value="exam fee"><option value="late fee"><option value="lamination"><option value="stationery"><option value="other"></datalist></div>
  <div class="grid grid-cols-2 gap-2"><div><label class="lbl">Amount (PKR)</label><input id="aiAmt" type="number" min="1" class="inp font-bold"></div><div><label class="lbl">Discount (optional)</label><input id="aiDisc" type="number" min="0" class="inp text-indigo-700"></div></div>
  <div><label class="lbl">Remarks (required if discount)</label><input id="aiRemarks" class="inp"></div>
- <p class="text-xs text-slate-500">It is saved as its own row, but under the same voucher number.</p>
- <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="document.getElementById('addItemModal').classList.remove('open')" class="btn b-gh">Cancel</button><button onclick="saveAddItem()" class="btn b-pri">Add to voucher</button></div>
+ <p class="text-xs text-slate-500">Each fee is saved as its own row under the voucher number. Recorded payments remain attached to the voucher.</p>
+ <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="document.getElementById('addItemModal').classList.remove('open')" class="btn b-gh">Cancel</button><button id="aiSaveButton" onclick="saveAddItem()" class="btn b-pri">Add to voucher</button></div>
 </div></div>
 
 <div id="discountModal" class="modal no-print"><div class="sheet max-w-md space-y-3">
   <h3 class="font-bold text-indigo-800 border-b pb-2">% Voucher discount</h3>
+  <p class="text-xs text-slate-600">Discounts are applied only after a different active Admin approves the request.</p>
   <div id="dcItemWrap" class="hidden"><label class="lbl">Fee item</label><select id="dcItem" onchange="dcPick()" class="inp"></select></div>
  <div class="grid grid-cols-2 gap-2">
  <div><label class="lbl">Voucher ID</label><input id="dcVid" readonly class="inp font-mono"></div>
@@ -329,10 +419,10 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
     <div><label class="lbl">Payable</label><input id="dcPayable" readonly class="inp font-bold"></div>
     <div><label class="lbl">Discount amount (0 = remove)</label><input type="number" id="dcAmt" min="0" class="inp font-bold text-indigo-700"></div></div>
   <div><label class="lbl">Remarks (required)</label><input id="dcRemarks" placeholder="Reason for relief" class="inp"></div>
-  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Save discount</button></div>
+  <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Submit for approval</button></div>
 </div></div>
 
-<script src="js/pages/fees.js?v=20261119-3"></script>
+<script src="js/pages/fees.js?v=20261125-2"></script>
 <script src="js/pages/challan.js?v=20261107-2"></script>
 </body>
 </html>
