@@ -24,6 +24,7 @@ The checked-in `styles.css` is the compiled Tailwind output. Rebuild it after ch
 9. Run `sql/supabase_require_previous_day_close.sql` once to install additive RLS gates for the optional role-based previous-day close requirement. Attendance changes are covered by this gate as well.
 10. Run `sql/supabase_reports_audit.sql` to add permission-checked system-wide reports and the append-only audit trail. It adds Reports and Audit Trail → View to the built-in Admin role and existing Admin users with explicit permission overrides; grant those page permissions separately to any other role that needs them. The audit log begins recording after this migration and does not backfill earlier changes.
 10a. Run `sql/supabase_business_report_financials.sql` after the reports/audit migration to enable the Business Reports collection dashboard and its permission-checked student balance lists. It is additive and does not change tables or existing records.
+10b. After installing the fee-discount approval workflow, run `supabase_fee_discount_request_delete.sql` as a database owner to enable Admin-only removal of request rows. The existing audit trigger records deletions; removing an approved request does not reverse its discount.
 11. Create the first administrator in Supabase Authentication. Then, in SQL Editor, add that exact email to `public.app_users` with role `Admin`, for example:
 
    ```sql
