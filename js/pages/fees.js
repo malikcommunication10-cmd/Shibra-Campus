@@ -19,9 +19,10 @@ function setFeeSchoolYear(year) {
 }
 setFeeSchoolYear(SCHOOL_YEAR);
 
-let accountsRaw=[],importPlan=null,syncItems=[],allFeesCache=[], allStudentsCache=[], incrementsCacheMap={}, accountsDataMap={}, filtered=[];
+let accountsRaw=[],importPlan=null,syncItems=[],allFeesCache=[], allStudentsCache=[], incrementsCacheMap={}, accountsDataMap={}, filtered=[],currentTuitionTotal=0,feeDiscountRequests=[];
 
 const $=id=>document.getElementById(id);
+$('filterStudentActive').checked=true;$('filterStudentInactive').checked=false;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const isArr=r=>(r.type||'').trim().toLowerCase()==='arrears';
 const today=()=>new Date().toISOString().split('T')[0];
@@ -87,7 +88,7 @@ async function initFeePage(){
   } catch (e) {
     console.error(e);
     hideLoading();
-    $('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`;
+    $('feesTableBody').innerHTML=`<tr><td colspan="10" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`;
     return;
   }
   if(!$('voucherPeriod').options.length){
@@ -118,8 +119,9 @@ async function initFeePage(){
       });
       regroupFees();populateItemFilter();renderAfBanner();populatePeriodDropdown(allFeesCache);filterVouchers();updateVidHint();renderPicker();
       if(!window.__ledgerDeepLink){window.__ledgerDeepLink=true;const q=new URLSearchParams(location.search).get('student');if(q){const hit=allFeesCache.find(x=>normAdm(x.admis_no)===normAdm(q));if(hit)openStudentLedger(hit.student_name,hit.admis_no)}}
-    }else{allFeesCache=[];$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-slate-400">No fee vouchers found.</td></tr>`}
-  }catch(e){console.error(e);$('feesTableBody').innerHTML=`<tr><td colspan="15" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`}
+    }else{allFeesCache=[];$('feesTableBody').innerHTML=`<tr><td colspan="10" class="nl p-6 text-center text-slate-400">No fee vouchers found.</td></tr>`}
+  }catch(e){console.error(e);$('feesTableBody').innerHTML=`<tr><td colspan="10" class="nl p-6 text-center text-rose-500">Failed to load records. Check your internet connection.</td></tr>`}
+  loadFeeDiscountRequests();
   hideLoading();
 }
 function populateClassDropdown(data){
@@ -129,23 +131,160 @@ function populateClassDropdown(data){
 function populatePeriodDropdown(data){
   const set=new Set();data.forEach(r=>{if(r.period)set.add(r.period.trim())});
   const cur=$('filterPeriod').value;
-  $('filterPeriod').innerHTML=`<option value="ALL">All periods</option>`+[...set].sort((a,b)=>(monthOrder[a]||99)-(monthOrder[b]||99)).map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  $('filterPeriod').innerHTML=`<option value="ALL">All periods</option>`+[...set].sort((a,b)=>(periodOrdinal(a)??Number.MAX_SAFE_INTEGER)-(periodOrdinal(b)??Number.MAX_SAFE_INTEGER)||a.localeCompare(b)).map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
   if(set.has(cur))$('filterPeriod').value=cur;
 }
+const selectedPaymentStatuses=()=>['filterUnpaid','filterPartial','filterPaid'].filter(id=>$(id).checked).map(id=>$(id).value);
+const studentIsActive=student=>{const status=String(student&&student.status||'Active').trim().toLowerCase();return !status||status==='active'};
+function buildStudentIndex(){
+  const index=new Map();
+  allStudentsCache.forEach(student=>{
+    const adm=normAdm(student.admis_no);if(!adm)return;
+    const records=index.get(adm)||[];records.push(student);index.set(adm,records);
+  });
+  return index;
+}
+function studentStatusForAdm(adm,index){
+  const records=index.get(normAdm(adm))||[];
+  if(!records.length)return null;
+  return records.some(studentIsActive)?'active':'inactive';
+}
+function studentStatusMatches(adm,index=buildStudentIndex()){
+  const active=$('filterStudentActive').checked,inactive=$('filterStudentInactive').checked;
+  if(active&&inactive)return true;
+  const status=studentStatusForAdm(adm,index);
+  return status==='active'?active:status==='inactive'?inactive:false;
+}
+function balanceThroughSelectedMonth(){
+  const month=+$('toMonth').value||12,cutoff=periodOrdinal(`${MONTHS[month-1]} ${SCHOOL_YEAR}`),students=buildStudentIndex(),balances=new Map();
+  buildGroups(allFeesCache).forEach(group=>{
+    if(!studentStatusMatches(group.adm,students))return;
+    const key=normAdm(group.adm)||String(group.student||'').trim().toLowerCase();if(!key)return;
+    const period=periodOrdinal(group.period),balance=period!==null&&period>cutoff?-group.paid:group.balance;
+    balances.set(key,(balances.get(key)||0)+balance);
+  });
+  return Math.round([...balances.values()].reduce((sum,balance)=>sum+balance,0)*100)/100;
+}
+let feeIssuesOpen=false,feeIssueRows=[];
+function collectFeeIssueReport(){
+  const students=buildStudentIndex(),issues=[],seen=new Set(),from=+$('fromMonth').value||1,to=+$('toMonth').value||12;
+  const rangeStart=SCHOOL_YEAR*12+from-1,rangeEnd=SCHOOL_YEAR*12+to-1;
+  const inRange=period=>rangeStart<=rangeEnd&&period!==null&&period>=rangeStart&&period<=rangeEnd;
+  const studentsByName=new Map();
+  allStudentsCache.forEach(student=>{
+    const name=String(student.student_name||'').trim().toLowerCase().replace(/\s+/g,' ');if(!name)return;
+    const records=studentsByName.get(name)||[];records.push(student);studentsByName.set(name,records);
+  });
+  const tuitionByAdmPeriod=new Map();
+  allFeesCache.forEach(row=>{
+    if(!isTuition(row))return;
+    const adm=normAdm(row.admis_no),ordinal=periodOrdinal(row.period);if(!adm||!inRange(ordinal))return;
+    const key=`${adm}|${ordinal}`,vouchers=tuitionByAdmPeriod.get(key)||new Map(),id=(row.voucher_id||'').trim();
+    const voucher=vouchers.get(id)||{id,rows:[],payable:0};
+    voucher.rows.push(row);voucher.payable+=parseFloat(row.payable)||0;vouchers.set(id,voucher);tuitionByAdmPeriod.set(key,vouchers);
+  });
+  const add=(issue,student,adm,period,details)=>{
+    const key=[issue,normAdm(adm),period,details].join('|');if(seen.has(key))return;seen.add(key);
+    issues.push({issue,student:student||'',adm:adm||'',period:period||'',details:details||''});
+  };
+  const activeByAdm=new Map();let activeRows=0;
+  allStudentsCache.forEach(student=>{
+    const adm=normAdm(student.admis_no);
+    if(!adm)add('Missing admission number',student.student_name,'','', 'Cannot reliably match a fee voucher to this student.');
+    if(!studentIsActive(student))return;
+    activeRows++;
+    if(adm&&!activeByAdm.has(adm))activeByAdm.set(adm,student);
+  });
+  const auditByAdm=new Map();
+  students.forEach((records,adm)=>auditByAdm.set(adm,records.find(studentIsActive)||records[0]));
+  auditByAdm.forEach((student,adm)=>{
+    const records=students.get(adm)||[];
+    if(records.length>1)add('Duplicate admission number',student.student_name,student.admis_no,'',`${records.length} student records share this admission number; check the Students Directory.`);
+    if(startVal(student)===null){add('Missing joining date',student.student_name,student.admis_no,'','Voucher eligibility cannot be verified until the date of joining is entered.');return}
+    let hasEligiblePeriod=false,hasTuitionFee=false,missingLeftReported=false;
+    for(let month=from;month<=to;month++){
+      const period=MONTHS[month-1],ordinal=SCHOOL_YEAR*12+month-1;
+      const state=eligibility(student,period);
+      if(state==='nolf'){
+        if(!missingLeftReported)add('Missing left date',student.student_name,student.admis_no,period,'Student status is inactive, so a valid left date is needed to determine which months are eligible.');
+        missingLeftReported=true;continue;
+      }
+      if(state!=='ok')continue;
+      hasEligiblePeriod=true;
+      const fee=expectedTuition(student,period);
+      if(!(fee>0))continue;
+      hasTuitionFee=true;
+      const vouchers=tuitionByAdmPeriod.get(`${adm}|${ordinal}`)||new Map();
+      const found=[...vouchers.values()];
+      if(!found.length){
+        add('Missing tuition voucher',student.student_name,student.admis_no,period,'This active student is eligible for the selected month, but no tuition voucher was found.');
+        continue;
+      }
+      if(found.length>1)add('Duplicate tuition vouchers',student.student_name,student.admis_no,period,`${found.length} separate tuition vouchers exist: ${found.map(v=>v.id).join(', ')}.`);
+      const billed=found.reduce((sum,v)=>sum+v.payable,0);
+      if(Math.abs(billed-fee)>0.01)add('Tuition amount differs',student.student_name,student.admis_no,period,`Expected PKR ${fmt(fee)} from the current fee settings; voucher(s) total PKR ${fmt(billed)}.`);
+    }
+    if(hasEligiblePeriod&&!hasTuitionFee)add('No monthly tuition fee',student.student_name,student.admis_no,'','Set a monthly fee or confirm that this student is intentionally fee-free.');
+  });
+  const checkedVouchers=new Set();
+  buildGroups(allFeesCache).forEach(group=>{
+    const ordinal=periodOrdinal(group.period);if(!inRange(ordinal))return;
+    const adm=normAdm(group.adm),records=students.get(adm)||[],id=group.vid||`${adm}|${group.period}`;
+    if(checkedVouchers.has(id))return;checkedVouchers.add(id);
+    const admissions=new Set(group.rows.map(row=>normAdm(row.admis_no)).filter(Boolean));
+    const periods=new Set(group.rows.map(row=>String(row.period||'').trim()).filter(Boolean));
+    if(admissions.size>1)add('Voucher ID shared by students',group.student,group.adm,group.period,`Voucher ${group.vid} contains fee rows for ${admissions.size} admission numbers.`);
+    if(periods.size>1)add('Voucher ID spans periods',group.student,group.adm,group.period,`Voucher ${group.vid} contains fee rows from multiple periods.`);
+    const name=String(group.student||'').trim().toLowerCase().replace(/\s+/g,' '),activeNameMatches=(studentsByName.get(name)||[]).filter(studentIsActive);
+    if(!records.length){
+      if(activeNameMatches.length===1)add('Admission number mismatch',group.student,group.adm,group.period,`This name matches active student ${activeNameMatches[0].student_name} (Adm ${activeNameMatches[0].admis_no}), but the voucher uses a different admission number.`);
+      else add('Voucher has no matching student',group.student,group.adm,group.period,`Voucher ${group.vid||'(no ID)'} is not linked to a Students Directory record.`);
+      return;
+    }
+    if(activeNameMatches.length===1&&normAdm(activeNameMatches[0].admis_no)!==adm)add('Admission number mismatch',group.student,group.adm,group.period,`This name matches active student ${activeNameMatches[0].student_name} (Adm ${activeNameMatches[0].admis_no}), but the voucher uses a different admission number.`);
+    const student=records.find(studentIsActive)||records[0],month=MONTHS[ordinal-SCHOOL_YEAR*12];
+    if(!month)return;
+    const state=eligibility(student,month);
+    if(state==='out')add('Voucher outside student dates',student.student_name,student.admis_no,group.period,`Voucher ${group.vid} is before the joining date or after the leaving date.`);
+    else if(state==='nolf')add('Missing left date',student.student_name,student.admis_no,group.period,`Student status is inactive, but there is no usable left date to verify this voucher.`);
+  });
+  return {issues,activeRows,activeUnique:activeByAdm.size,missingVouchers:issues.filter(issue=>issue.issue==='Missing tuition voucher').length};
+}
+function renderFeeIssues(){
+  const report=collectFeeIssueReport();feeIssueRows=report.issues;
+  $('feeIssuesCount').innerText=report.issues.length;
+  $('feeIssuesNote').innerText=report.issues.length?`${report.missingVouchers} missing voucher(s) · ${report.activeRows} active rows / ${report.activeUnique} unique admission numbers`:'No missing or inconsistent vouchers found';
+  $('feeIssuesSummary').innerText=`Selected range: ${MONTHS[(+$('fromMonth').value||1)-1]} – ${MONTHS[(+$('toMonth').value||12)-1]} · ${report.activeRows} active student rows, ${report.activeUnique} unique admission numbers, ${report.missingVouchers} eligible student-month voucher(s) missing.`;
+  $('feeIssuesPanel').classList.toggle('hidden',!feeIssuesOpen);
+  $('feeIssuesCard').setAttribute('aria-expanded',String(feeIssuesOpen));
+  $('feeIssuesBody').innerHTML=report.issues.length?report.issues.slice(0,200).map((issue,index)=>`<tr class="border-t align-top"><td class="p-2 font-semibold text-amber-900">${esc(issue.issue)}</td><td class="p-2">${esc(issue.student)||'-'}</td><td class="p-2 font-mono">${esc(issue.adm)||'-'}</td><td class="p-2">${esc(issue.period)||'-'}</td><td class="p-2">${esc(issue.details)}</td><td class="p-2">${issue.student||issue.adm?`<button type="button" class="text-indigo-700 underline" data-i="${index}" onclick="inspectFeeIssue(this)">Open ledger</button>`:'-'}</td></tr>`).join('')+(report.issues.length>200?`<tr><td colspan="6" class="p-2 text-center text-slate-500">Showing the first 200 of ${report.issues.length} issues.</td></tr>`:''):`<tr><td colspan="6" class="p-3 text-center text-emerald-700">No missing or inconsistent vouchers were found for this range.</td></tr>`;
+}
+function toggleFeeIssues(){feeIssuesOpen=!feeIssuesOpen;renderFeeIssues()}
+function inspectFeeIssue(button){
+  const issue=feeIssueRows[Number(button.dataset.i)];if(issue)openStudentLedger(issue.student,issue.adm);
+}
 function filterVouchers(){
-  const p=$('filterPeriod').value,s=$('filterStatus').value,q=$('searchInput').value.trim().toLowerCase();
+  const p=$('filterPeriod').value,q=$('searchInput').value.trim().toLowerCase();
+  const statuses=selectedPaymentStatuses();
+  const activeSelected=$('filterStudentActive').checked,inactiveSelected=$('filterStudentInactive').checked;
   let t=allFeesCache;
   if(p!=='ALL')t=t.filter(r=>(r.period||'').trim()===p);
   
   const mf=+$('fromMonth').value||1,mt=+$('toMonth').value||12;
-  const inR=r=>{const m=monthOrder[(r.period||'').trim()];return!m||(m>=mf&&m<=mt)};
+  const fromPeriod=SCHOOL_YEAR*12+mf-1,toPeriod=SCHOOL_YEAR*12+mt-1;
+  const inR=r=>{const period=periodOrdinal(r.period);return period===null||(period>=fromPeriod&&period<=toPeriod)};
   if(!q)t=t.filter(inR);
   t.forEach(r=>{r._out=!inR(r)});
   if(q)t=t.filter(r=>(r.voucher_id||'').toLowerCase().includes(q)||(r.student_name||'').toLowerCase().includes(q)||(r.admis_no||'').toLowerCase().includes(q));
   const itf=$('filterItem').value;
+ if(!(activeSelected&&inactiveSelected)){
+    const studentsByAdm=buildStudentIndex();
+    t=t.filter(r=>studentStatusMatches(r.admis_no,studentsByAdm));
+ }
+ if(statuses.length<3){const ok=new Set(addArrearsToGroups(buildGroups(t)).filter(g=>statuses.includes(g.displayStatus)).map(g=>g.vid));t=t.filter(r=>ok.has((r.voucher_id||'').trim()))}
+ currentTuitionTotal=t.filter(r=>!r._out&&isTuition(r)).reduce((sum,r)=>sum+(r.net??(parseFloat(r.payable)||0)),0);
  if(itf!=='ALL'){const okv=new Set(t.filter(r=>(r.type||'').trim().toLowerCase()===itf).map(r=>(r.voucher_id||'').trim()));t=t.filter(r=>okv.has((r.voucher_id||'').trim()))}
- if(s!=='ALL'){const ok=new Set(buildGroups(t).filter(g=>g.status===s).map(g=>g.vid));t=t.filter(r=>ok.has((r.voucher_id||'').trim()))}
- filtered=t;renderFeesTable(t);renderStudentSummary();
+ filtered=t;renderFeesTable(t);renderStudentSummary();renderFeeIssues();
 }
 let viewMode='vouchers';
 function toggleView(){
@@ -156,31 +295,106 @@ function toggleView(){
   renderStudentSummary();
 }
 function renderStudentSummary(){
-  const mt=+$('toMonth').value||12,q=$('searchInput').value.trim().toLowerCase();
+  const q=$('searchInput').value.trim().toLowerCase(),statuses=selectedPaymentStatuses(),studentsByAdm=buildStudentIndex();
   const lbl=($('toMonth').selectedOptions[0]||{}).text||'Month';
-  const by={};
-  allFeesCache.forEach(r=>{
-    const m=monthOrder[(r.period||'').trim()];if(!m)return;
-const k=normAdm(r.admis_no)||String(r.student_name||'').toLowerCase();
-const o=by[k]??={adm:r.admis_no,name:r.student_name,cls:r.class,prev:0,pay:0,paid:0,bal:0};
-const net=r.net??(parseFloat(r.payable)||0),paid=parseFloat(r.totalPaid)||0;
-if(m>mt){o.bal-=paid;return}
-o.bal+=net-paid;
-    if(m<mt)o.prev+=net-paid;else{o.pay+=net;o.paid+=paid}
+  const target=periodOrdinal(`${lbl} ${SCHOOL_YEAR}`),by=new Map();
+  buildGroups(allFeesCache).forEach(g=>{
+    const period=periodOrdinal(g.period)??(g.rows.every(isArr)?Number.MIN_SAFE_INTEGER:null);if(period===null||period>target)return;
+    const k=normAdm(g.adm)||String(g.student||'').trim().toLowerCase();
+    if(!k)return;
+    const o=by.get(k)||{adm:g.adm,name:g.student,cls:g.cls,prior:0,net:0,paid:0};
+    if(period<target)o.prior+=g.balance;
+    else{o.net+=g.net;o.paid+=g.paid}
+    by.set(k,o);
   });
-  let list=Object.values(by).filter(o=>!q||(o.name||'').toLowerCase().includes(q)||String(o.adm||'').toLowerCase().includes(q)).sort((a,b)=>b.bal-a.bal);
-  const T={prev:0,pay:0,paid:0,bal:0};
-  $('sumHead').innerHTML=`<tr><th>Adm No</th><th>Student</th><th>Class</th><th>Previous balance</th><th>${esc(lbl)} payable</th><th>${esc(lbl)} paid</th><th>Total balance</th></tr>`;
+  let list=[...by.values()].map(o=>{
+    const currentPaid=o.paid;
+    o.arrears=Math.max(0,o.prior);
+    o.pay=o.arrears+o.net;
+    o.paid=currentPaid+Math.max(0,-o.prior);
+    o.bal=o.prior+o.net-currentPaid;
+    return o;
+  }).filter(o=>{
+    const status=o.bal<=0?'Paid':o.paid>0?'Partial':'Unpaid';
+    return studentStatusMatches(o.adm,studentsByAdm)&&statuses.includes(status)&&(!q||(o.name||'').toLowerCase().includes(q)||String(o.adm||'').toLowerCase().includes(q));
+  }).sort((a,b)=>b.bal-a.bal);
+  const T={arrears:0,pay:0,paid:0,bal:0};
+  $('sumHead').innerHTML=`<tr><th>Adm No</th><th>Student</th><th>Class</th><th>Arrears</th><th>${esc(lbl)} payable (incl. arrears)</th><th>Paid</th><th>Total balance</th></tr>`;
   $('sumBody').innerHTML=list.map(o=>{
-    T.prev+=o.prev;T.pay+=o.pay;T.paid+=o.paid;T.bal+=o.bal;
+    T.arrears+=o.arrears;T.pay+=o.pay;T.paid+=o.paid;T.bal+=o.bal;
     return`<tr><td data-l="Adm No" class="font-mono">${esc(o.adm)||'-'}</td>
     <td data-l="Student" class="font-semibold"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(o.name||'')}'),decodeURIComponent('${encodeURIComponent(o.adm||'')}'))" class="text-indigo-600 underline">${esc(o.name)||'-'}</a></td>
     <td data-l="Class">${esc(o.cls)||'-'}</td>
-    <td data-l="Previous balance" class="${o.prev>0?'text-rose-600 font-bold':''}">PKR ${fmt(o.prev)}</td>
+    <td data-l="Arrears" class="${o.arrears>0?'text-amber-700 font-bold':''}">PKR ${fmt(o.arrears)}</td>
     <td data-l="${esc(lbl)} payable">PKR ${fmt(o.pay)}</td>
     <td data-l="${esc(lbl)} paid" class="text-emerald-600 font-bold">PKR ${fmt(o.paid)}</td>
     <td data-l="Total balance" class="font-extrabold ${o.bal>0?'text-rose-600':o.bal<0?'text-indigo-600':'text-slate-500'}">${o.bal<0?'Adv '+fmt(-o.bal):'PKR '+fmt(o.bal)}</td></tr>`}).join('')
-    +(list.length?`<tr class="bg-slate-100 font-bold"><td colspan="3" class="nl text-right">Total (${list.length} students, up to ${esc(lbl)}):</td><td data-l="Previous">PKR ${fmt(T.prev)}</td><td data-l="Payable">PKR ${fmt(T.pay)}</td><td data-l="Paid">PKR ${fmt(T.paid)}</td><td data-l="Balance" class="text-rose-600">PKR ${fmt(T.bal)}</td></tr>`:`<tr><td colspan="7" class="nl p-6 text-center text-slate-400">No students found.</td></tr>`);
+    +(list.length?`<tr class="bg-slate-100 font-bold"><td colspan="3" class="nl text-right">Total (${list.length} students, up to ${esc(lbl)}):</td><td data-l="Arrears">PKR ${fmt(T.arrears)}</td><td data-l="Payable">PKR ${fmt(T.pay)}</td><td data-l="Paid">PKR ${fmt(T.paid)}</td><td data-l="Balance" class="text-rose-600">PKR ${fmt(T.bal)}</td></tr>`:`<tr><td colspan="7" class="nl p-6 text-center text-slate-400">No students found.</td></tr>`);
+}
+function periodOrdinal(value){
+  const text=String(value||'').trim().toLowerCase();
+  if(!text)return null;
+  const short=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  let month=-1;
+  for(let i=0;i<short.length;i++)if(new RegExp(`\\b(?:${short[i]}\\w*)\\b`).test(text)){month=i;break}
+  let year=Number((text.match(/(20\d{2})/)||[])[1])||SCHOOL_YEAR;
+  if(month<0){
+    const m=text.match(/^(\d{1,2})[\/\-.](20\d{2})$/)||text.match(/^(20\d{2})[\/\-.](\d{1,2})$/);
+    if(m){const a=Number(m[1]),b=Number(m[2]);month=(a>31?b:a)-1;year=a>31?a:b}
+  }
+  return month>=0&&month<12?year*12+month:null;
+}
+function historicalBalanceIndex(groups){
+  const students=new Map();
+  groups.forEach(g=>{
+    const period=periodOrdinal(g.period)??(g.rows.every(isArr)?Number.MIN_SAFE_INTEGER:null),student=normAdm(g.adm)||String(g.student||'').trim().toLowerCase();
+    if(period===null||!student)return;
+    if(!students.has(student))students.set(student,[]);
+    students.get(student).push({period,balance:g.balance});
+  });
+  const index=new Map();
+  students.forEach((items,student)=>{
+    items.sort((a,b)=>a.period-b.period);
+    let balance=0;
+    for(let i=0;i<items.length;){
+      const period=items[i].period,key=`${student}|${period}`;
+      index.set(key,Math.round(balance*100)/100);
+      let periodBalance=0;
+      while(i<items.length&&items[i].period===period)periodBalance+=items[i++].balance;
+      balance=Math.round((balance+periodBalance)*100)/100;
+    }
+  });
+  return index;
+}
+let historicalBalanceSource=null,historicalBalanceCache=new Map();
+function getHistoricalBalanceIndex(){
+  if(historicalBalanceSource!==allFeesCache){
+    historicalBalanceCache=historicalBalanceIndex(buildGroups(allFeesCache));
+    historicalBalanceSource=allFeesCache;
+  }
+  return historicalBalanceCache;
+}
+function addArrearsToGroups(groups){
+  const index=getHistoricalBalanceIndex(),first=new Map();
+  groups.forEach(g=>{
+    const period=periodOrdinal(g.period),student=normAdm(g.adm)||String(g.student||'').trim().toLowerCase();
+    if(period===null||!student)return;
+    const old=first.get(student);
+    if(!old||period<old.period||(period===old.period&&g.vid<old.vid))first.set(student,{period,vid:g.vid});
+  });
+  groups.forEach(g=>{
+    const period=periodOrdinal(g.period),student=normAdm(g.adm)||String(g.student||'').trim().toLowerCase();
+    const selected=period!==null&&student&&first.get(student);
+    const getsArrears=!!selected&&selected.period===period&&selected.vid===g.vid;
+    const prior=getsArrears?index.get(`${student}|${period}`)||0:0;
+    g.arrears=Math.max(0,prior);
+    g.displayPayable=g.payable+g.arrears;
+    g.displayNet=g.net+g.arrears;
+    g.displayBalance=prior+g.balance;
+    g.displayPaid=g.displayNet-g.displayBalance;
+    g.displayStatus=g.displayBalance<=0?'Paid':(g.displayPaid>0?'Partial':'Unpaid');
+  });
+  return groups;
 }
 function parsePeriod(x) {
   const t = String(x || '').trim().toLowerCase(); if(!t) return null;
@@ -263,7 +477,7 @@ let payChoices=[{value:'cash',label:'Cash'}];
 const matchPay=t=>{const s=String(t||'').trim().toLowerCase();if(!s)return 'cash';const c=payChoices.find(o=>o.value.toLowerCase()===s||o.label.toLowerCase().replace(/^[^a-z0-9]+/,'')===s);return c?c.value:s};
 function resetRange(silent){
   const d=new Date(),ci=d.getFullYear()===SCHOOL_YEAR?d.getMonth()+1:(d.getFullYear()>SCHOOL_YEAR?12:1);
-  $('fromMonth').value=1;$('toMonth').value=ci;if(!silent)filterVouchers();
+  $('fromMonth').value=ci;$('toMonth').value=ci;if(!silent)filterVouchers();
 }
 const isLocked=id=>{const a=accountsDataMap[(id||'').trim()];return!!(a&&a.transactions.length)};
 function toggleSelectAll(m){document.querySelectorAll('.row-checkbox').forEach(cb=>{if(!cb.disabled)cb.checked=m.checked})}
@@ -284,35 +498,248 @@ function buildGroups(rows){
     return g;
   });
 }
+function calculateExpectedTuitionBreakdown(){
+  const from=+$('fromMonth').value||1,to=+$('toMonth').value||12,periodFilter=$('filterPeriod').value;
+  const active=$('filterStudentActive').checked,inactive=$('filterStudentInactive').checked,q=$('searchInput').value.trim().toLowerCase();
+  let base=0,increment=0;
+  if(from>to)return{base,increment,total:0};
+  const students=allStudentsCache.filter(student=>{
+    const activeStudent=studentIsActive(student);
+    if(!(active&&activeStudent||inactive&&!activeStudent))return false;
+    return !q||String(student.student_name||'').toLowerCase().includes(q)||String(student.admis_no||'').toLowerCase().includes(q);
+  });
+  students.forEach(student=>{
+    for(let month=from;month<=to;month++){
+      const period=MONTHS[month-1];
+      if(periodFilter!=='ALL'&&periodFilter!==period)continue;
+      if(eligibility(student,period)!=='ok')continue;
+      const storedNet=parseFloat(student.monthly_tution_pay),gross=parseFloat(student.monthly_tution_fee)||0;
+      const inc=incrementsCacheMap[(student.admis_no||student.sr_no||'').trim().toLowerCase()];
+      const oldGross=parseFloat(inc&&inc.old_fee)||gross;
+      base+=Number.isFinite(storedNet)?storedNet:gross;
+      increment+=expectedTuition(student,period)-oldGross;
+    }
+  });
+  return{base,increment,total:base+increment};
+}
+function calculateVoucherCoverage(){
+  const from=+$('fromMonth').value||1,to=+$('toMonth').value||12;
+  const studentsByAdm=buildStudentIndex(),activePairs=new Set(),voucherPairs=new Set();
+  for(let month=from;month<=to;month++){
+    const period=MONTHS[month-1];
+    if(!period)continue;
+    allStudentsCache.forEach(student=>{
+      const adm=normAdm(student.admis_no);
+      if(!adm||studentStatusForAdm(adm,studentsByAdm)!=='active')return;
+      if(eligibility(student,period)!=='ok')return;
+      activePairs.add(`${adm}|${period}`);
+    });
+  }
+  allFeesCache.forEach(row=>{
+    if(!isTuition(row))return;
+    const adm=normAdm(row.admis_no),period=String(row.period||'').trim();
+    if(!adm||periodOrdinal(period)===null)return;
+    const month=periodOrdinal(period)-SCHOOL_YEAR*12+1;
+    if(month>=from&&month<=to&&activePairs.has(`${adm}|${period}`))voucherPairs.add(`${adm}|${period}`);
+  });
+  const missing=[...activePairs].filter(key=>!voucherPairs.has(key)).length;
+  return{active:activePairs.size,vouchers:voucherPairs.size,missing};
+}
+const closeArrearsDetails=()=>$('arrearsDetailModal').classList.remove('open');
+let feeDetailMode='all',feeDetailRows=[],feeDetailSort={key:'pending',dir:'desc'};
+function openArrearsDetails(mode='all'){openFeeDetails(mode)}
+function directoryAnnualFund(student,voucherDiscount=0){
+  const savedDiscount=Math.max(0,parseFloat(student.annual_fund_disc)||0);
+  const savedNet=parseFloat(student.annual_fund_pay);
+  const directoryGross=Math.max(0,parseFloat(student.annual_fund)||0);
+  if(Number.isFinite(savedNet)){
+    const net=Math.max(0,savedNet);
+    const discount=Math.max(savedDiscount,directoryGross?directoryGross-net:0);
+    return{payable:Math.max(directoryGross,net+discount),discount,net};
+  }
+  const discount=Math.min(directoryGross,Math.max(savedDiscount,Math.max(0,voucherDiscount)));
+  return{payable:directoryGross,discount,net:Math.max(0,directoryGross-discount)};
+}
+function annualFundLedgerThroughMonth(){
+  const to=+$('toMonth').value||12,yearStart=SCHOOL_YEAR*12,toOrdinal=yearStart+to-1;
+  const students=buildStudentIndex(),receivedByAdm=new Map(),discountByAdm=new Map(),periodsByAdm=new Map();
+  const activeSelected=$('filterStudentActive').checked,inactiveSelected=$('filterStudentInactive').checked,studentRows=new Map();
+  allStudentsCache.forEach((student,index)=>{
+    const adm=normAdm(student.admis_no),key=adm||`row:${index}`,previous=studentRows.get(key);
+    if(!previous||(!studentIsActive(previous)&&studentIsActive(student)))studentRows.set(key,student);
+  });
+  allFeesCache.forEach(row=>{
+    const type=(row.type||'').trim().toLowerCase();
+    const adm=normAdm(row.admis_no),ordinal=periodOrdinal(row.period);
+    if(!/annual/.test(type)||!adm||ordinal===null||ordinal<yearStart||ordinal>toOrdinal||!studentStatusMatches(adm,students))return;
+    receivedByAdm.set(adm,(receivedByAdm.get(adm)||0)+(parseFloat(row.totalPaid)||0));
+    discountByAdm.set(adm,(discountByAdm.get(adm)||0)+(parseFloat(row.discount)||0));
+    const periods=periodsByAdm.get(adm)||new Set();periods.add(String(row.period||'').trim());periodsByAdm.set(adm,periods);
+  });
+  const rows=[];
+  studentRows.forEach(student=>{
+    const adm=normAdm(student.admis_no);
+    const selected=adm?studentStatusMatches(adm,students):(activeSelected&&inactiveSelected)||(studentIsActive(student)?activeSelected:inactiveSelected);
+    if(!selected)return;
+    const fee=directoryAnnualFund(student,discountByAdm.get(adm)||0),received=receivedByAdm.get(adm)||0;
+    if(fee.payable<=0&&fee.net<=0&&received<=0)return;
+    rows.push({student:student.student_name||'-',adm:student.admis_no||'-',
+      period:[...(periodsByAdm.get(adm)||[])].sort((a,b)=>(periodOrdinal(a)||0)-(periodOrdinal(b)||0)).join(', ')||'Not billed',
+      payable:fee.payable,discount:fee.discount,net:fee.net,received,pending:fee.net-received});
+  });
+  return rows;
+}
+function openFeeDetails(mode='all'){
+  feeDetailMode=mode;
+  feeDetailSort={key:'pending',dir:'desc'};
+  const from=+$('fromMonth').value||1,to=+$('toMonth').value||12;
+  const fromOrdinal=SCHOOL_YEAR*12+from-1,toOrdinal=SCHOOL_YEAR*12+to-1;
+  const totals={payable:0,discount:0,net:0,received:0,pending:0};
+  feeDetailRows=[];
+  if(mode==='annual'){
+    feeDetailRows=annualFundLedgerThroughMonth();
+    feeDetailRows.forEach(row=>{
+      totals.payable+=row.payable;totals.discount+=row.discount;totals.net+=row.net;
+      totals.received+=row.received;totals.pending+=row.pending;
+    });
+  }
+  const students=buildStudentIndex();
+  if(mode!=='annual')allFeesCache.forEach(row=>{
+    const adm=normAdm(row.admis_no);
+    if(!studentStatusMatches(adm,students))return;
+    const ordinal=periodOrdinal(row.period);
+    if(ordinal===null)return;
+    const type=(row.type||'').trim().toLowerCase();
+    let include=false;
+    if(mode==='tuition')include=isTuition(row)&&ordinal>=fromOrdinal&&ordinal<=toOrdinal;
+    else if(mode==='annual')include=/annual/.test(type)&&ordinal<=toOrdinal;
+    else if(mode==='other')include=!isArr(row)&&!isTuition(row)&&!/annual/.test(type)&&ordinal>=fromOrdinal&&ordinal<=toOrdinal;
+    else if(mode==='arrears')include=isArr(row)&&ordinal>=fromOrdinal&&ordinal<=toOrdinal;
+    else include=(mode==='all'&&(ordinal>=fromOrdinal&&ordinal<=toOrdinal)||/annual/.test(type)&&ordinal<=toOrdinal);
+    if(!include)return;
+    const payable=parseFloat(row.payable)||0,discount=parseFloat(row.discount)||0,net=payable-discount;
+    const received=parseFloat(row.totalPaid)||0,pending=net-received;
+    totals.payable+=payable;totals.discount+=discount;totals.net+=net;totals.received+=received;totals.pending+=pending;
+    feeDetailRows.push({student:row.student_name||'-',adm:row.admis_no||'-',period:row.period||'-',payable,discount,net,received,pending,ordinal});
+  });
+  const titles={all:'All fee details',tuition:'Tuition fee details',annual:'Annual fund details (Students Directory, received till selected month)',other:'Other fee details',arrears:'Arrears details'};
+  $('feeDetailTitle').innerText=titles[mode]||'Fee details';
+  $('arrearsDetailPeriod').innerText=mode==='annual'?`January ${SCHOOL_YEAR} through ${MONTHS[to-1]}`:fromPeriodLabel();
+  const labels=[['Total / payable',totals.payable,'text-slate-800'],['Discount',totals.discount,'text-indigo-700'],['After discount',totals.net,'text-indigo-800'],['Received',totals.received,'text-emerald-700'],['Pending',totals.pending,'text-rose-700']];
+  $('arrearsDetailSummary').innerHTML=labels.map(([label,value,color])=>`<div class="bg-white border rounded-lg p-2"><div class="text-[10px] text-slate-500">${esc(label)}</div><div class="font-extrabold ${color}">PKR ${fmt(value)}</div></div>`).join('');
+  renderFeeDetails();
+  $('arrearsDetailModal').classList.add('open');
+}
+function sortFeeDetails(key){
+  if(feeDetailSort.key===key)feeDetailSort.dir=feeDetailSort.dir==='asc'?'desc':'asc';
+  else feeDetailSort={key,dir:'asc'};
+  renderFeeDetails();
+}
+function renderFeeDetails(){
+  const dir=feeDetailSort.dir==='asc'?1:-1,key=feeDetailSort.key;
+  const rows=[...feeDetailRows].sort((a,b)=>{
+    let av=key==='period'?a.ordinal:a[key];
+    let bv=key==='period'?b.ordinal:b[key];
+    if(typeof av==='string'){av=av.toLowerCase();bv=String(bv||'').toLowerCase()}
+    if(av<bv)return -1*dir;if(av>bv)return 1*dir;return 0;
+  });
+  document.querySelectorAll('[data-sort-indicator]').forEach(el=>el.innerText=el.dataset.sortIndicator===key?(feeDetailSort.dir==='asc'?'▲':'▼'):'');
+  $('arrearsDetailBody').innerHTML=rows.length?rows.map(row=>`<tr class="border-t">
+    <td class="p-2 font-semibold">${esc(row.student)}</td><td class="p-2 font-mono">${esc(row.adm)}</td><td class="p-2">${esc(row.period)}</td>
+    <td class="p-2">PKR ${fmt(row.payable)}</td><td class="p-2">PKR ${fmt(row.discount)}</td><td class="p-2">PKR ${fmt(row.net)}</td>
+    <td class="p-2 text-emerald-700 font-semibold">PKR ${fmt(row.received)}</td><td class="p-2 ${row.pending>0?'text-rose-700 font-bold':row.pending<0?'text-indigo-700 font-bold':''}">${row.pending<0?'Advance ':''}PKR ${fmt(Math.abs(row.pending))}</td></tr>`).join(''):'<tr><td colspan="8" class="p-4 text-center text-slate-400">No matching fee details found.</td></tr>';
+}
+function fromPeriodLabel(){
+  const from=($('fromMonth').selectedOptions[0]||{}).text||'',to=($('toMonth').selectedOptions[0]||{}).text||'';
+  return from&&to?(from===to?from:`${from} – ${to}`):'Selected period';
+}
+function openVoucherCoverage(){
+  feeIssuesOpen=true;
+  renderFeeIssues();
+  const panel=$('feeIssuesPanel');
+  if(panel)panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function renderFeeSummaryDetails(groups){
+  const totals={payable:{tuition:0,annual:0,other:0,arrears:0},collected:{tuition:0,annual:0,other:0,arrears:0},pending:{tuition:0,annual:0,other:0,arrears:0}};
+  groups.filter(group=>!group._out).forEach(group=>{
+    totals.payable.arrears+=group.arrears||0;
+    totals.pending.arrears+=group.arrears||0;
+    group.rows.forEach(row=>{
+      const type=(row.type||'').trim().toLowerCase();
+      const bucket=isArr(row)?'arrears':isTuition(row)?'tuition':/annual/.test(type)?'annual':'other';
+      const collectedBucket=isTuition(row)?'tuition':/annual/.test(type)?'annual':'other';
+      totals.payable[bucket]+=Number(row.net??(parseFloat(row.payable)||0));
+      totals.collected[collectedBucket]+=parseFloat(row.totalPaid)||0;
+      totals.pending[bucket]+=parseFloat(row.balance)||0;
+    });
+  });
+  const annual=annualFundLedgerThroughMonth().reduce((sum,row)=>{
+    sum.payable+=row.net;sum.received+=row.received;sum.pending+=row.pending;return sum;
+  },{payable:0,received:0,pending:0});
+  totals.payable.annual=annual.payable;
+  totals.collected.annual=annual.received;
+  totals.pending.annual=annual.pending;
+  const amount=value=>value<0?`Advance PKR ${fmt(-value)}`:`PKR ${fmt(value)}`;
+  const rows=(values,arrearsLabel,otherLabel='Other fees')=>[
+    `<button type="button" class="w-full flex justify-between gap-1 text-indigo-700" onclick="openFeeDetails('tuition')"><span>Tuition fee</span><b>${amount(values.tuition)}</b></button>`,
+    `<button type="button" class="w-full flex justify-between gap-1 text-amber-700" onclick="openFeeDetails('annual')"><span>Annual fund</span><b>${amount(values.annual)}</b></button>`,
+    `<button type="button" class="w-full flex justify-between gap-1 text-slate-700" onclick="openFeeDetails('other')"><span>${otherLabel}</span><b>${amount(values.other)}</b></button>`,
+    arrearsLabel?`<button type="button" class="w-full flex justify-between gap-1 text-amber-700" onclick="openFeeDetails('arrears')" title="View arrears and fee details"><span>${arrearsLabel}</span><b>${amount(values.arrears)}</b></button>`:''
+  ].join('');
+  $('stPayableBreakdown').innerHTML=rows(totals.payable,'Arrears');
+  $('stCollectedBreakdown').innerHTML=rows(totals.collected,'','Other fees + arrears');
+  $('stPendingBreakdown').innerHTML=rows(totals.pending,'Arrears');
+  const expected=calculateExpectedTuitionBreakdown();
+  $('stExpectedTuition').innerText=`PKR ${fmt(expected.total)}`;
+  $('stTuitionFormula').innerText=`Directory base after discount PKR ${fmt(expected.base)} ${expected.increment<0?'−':'+'} increment PKR ${fmt(Math.abs(expected.increment))}`;
+}
 function renderFeesTable(rowsIn){
-  const groups=buildGroups(rowsIn);currentGroups=groups;
+  const groups=addArrearsToGroups(buildGroups(rowsIn));currentGroups=groups;
   const tb=$('feesTableBody'),tf=$('feesTableFooter');$('selectAllCheckbox').checked=false;
-  if(!groups.length){tb.innerHTML=`<tr><td colspan="9" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
-   ['stCount','stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');return}
-  let sp=0,sd=0,sb=0,html='';
+  const toMonth=+$('toMonth').value||12,toMonthLabel=MONTHS[toMonth-1]||'selected month';
+  $('stToDateLabel').innerText=`Pending through ${toMonthLabel}`;
+  const toDateBalance=balanceThroughSelectedMonth();
+  $('stToDateBal').innerText=toDateBalance<0?`Adv ${fmt(-toDateBalance)}`:fmt(toDateBalance);
+  const coverage=calculateVoucherCoverage();
+  $('stCount').innerText=`${coverage.vouchers} / ${coverage.active}`;
+  $('voucherCoverageNote').innerText=coverage.missing?`${coverage.missing} missing voucher(s) · click to inspect`:'All eligible active students covered';
+  $('voucherCoverageCard').className=`text-left rounded-xl border p-3 ${coverage.missing?'bg-amber-50 border-amber-300':'bg-white'}`;
+  if(!groups.length){tb.innerHTML=`<tr><td colspan="10" class="nl p-6 text-center text-slate-400">No vouchers found.</td></tr>`;tf.innerHTML='';
+   ['stPayable','stPaid','stBal'].forEach(i=>$(i).innerText='0');renderFeeSummaryDetails(groups);return}
+  let sp=0,sd=0,sb=0,arrearsTotal=0,payableTotal=0,html='';
   groups.forEach((g,i)=>{
-    if(!g._out){sp+=g.net;sd+=g.paid;sb+=g.balance}
+    if(!g._out){sp+=g.displayNet;sd+=g.displayPaid;sb+=g.displayBalance;arrearsTotal+=g.arrears;payableTotal+=g.displayPayable}
     const lock=isLocked(g.vid);
-    const badge=g.status==='Paid'?'bg-emerald-50 text-emerald-700':g.status==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
-    const bc=g.balance<0?'text-indigo-600 font-extrabold':g.balance>0?'text-rose-600 font-bold':'text-slate-500';
-    const bt=g.balance<0?`Adv ${fmt(-g.balance)}`:`PKR ${fmt(g.balance)}`;
+    const badge=g.displayStatus==='Paid'?'bg-emerald-50 text-emerald-700':g.displayStatus==='Partial'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-700';
+    const bc=g.displayBalance<0?'text-indigo-600 font-extrabold':g.displayBalance>0?'text-rose-600 font-bold':'text-slate-500';
+    const bt=g.displayBalance<0?`Adv ${fmt(-g.displayBalance)}`:`PKR ${fmt(g.displayBalance)}`;
     const onlyArr=g.rows.every(isArr);
-    const chips=g.rows.map(r=>`<span class="inline-block mr-1 mb-1 px-2 py-0.5 rounded-md border text-[11px] ${isArr(r)?'bg-rose-50 border-rose-200 text-rose-700':(/annual/i.test(r.type||'')?'bg-amber-50 border-amber-300 text-amber-800':'bg-slate-50 border-slate-200 text-slate-700')}">${esc(itemName(r))} <b>${fmt(r.net??r.payable)}</b></span>`).join('');
+    const chips=g.rows.map(r=>{const index=allFeesCache.indexOf(r);return`<span class="fee-item-chip mr-1 mb-1 px-2 py-0.5 rounded-md border text-[11px] ${isArr(r)?'bg-rose-50 border-rose-200 text-rose-700':(/annual/i.test(r.type||'')?'bg-amber-50 border-amber-300 text-amber-800':'bg-slate-50 border-slate-200 text-slate-700')}"><span>${esc(itemName(r))} <b>${fmt(r.net??r.payable)}</b></span><button type="button" onclick="openEditFeeItem(${index})" title="Edit fee item" aria-label="Edit ${esc(itemName(r))}">✎</button><button type="button" onclick="deleteFeeItem(${index})" title="Remove fee item" aria-label="Remove ${esc(itemName(r))}">×</button></span>`}).join('');
     html+=`<tr class="${onlyArr?'bg-rose-50/60':'hover:bg-slate-50'} ${g._out?'opacity-50':''}">
  <td class="nl"><input type="checkbox" class="row-checkbox" data-voucher="${esc(g.vid)}"></td>
  <td data-l="Voucher"><div class="font-mono text-indigo-900">${esc(g.vid)||'-'}${lock?' <span title="Payment recorded in Accounts. Delete it there first.">🔒</span>':''}</div><div class="text-indigo-600 font-medium">${esc(g.period)||'-'}</div></td>
  <td data-l="Student"><a href="javascript:void(0)" onclick="openStudentLedger(decodeURIComponent('${encodeURIComponent(g.student||'')}'),decodeURIComponent('${encodeURIComponent(g.adm||'')}'))" class="text-indigo-600 underline font-semibold">${esc(g.student)||'-'}</a><div class="text-[11px] text-slate-500">Adm ${esc(g.adm)||'-'} · Class ${esc(g.cls)||'-'}</div>${g.sib?`<div class="text-[11px] text-slate-400">Family ${esc(g.sib)}</div>`:''}</td>
  <td data-l="Items">${chips}</td>
- <td data-l="Payable" class="font-bold">PKR ${fmt(g.payable)}${g.discount>0?`<div class="text-[10px] text-indigo-600 font-semibold">Discount -${fmt(g.discount)}</div>`:''}</td>
- <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(g.paid)}${g.dates?`<div class="font-mono font-normal text-[10px] text-indigo-700">${esc(g.dates)}</div>`:''}</td>
+ <td data-l="Arrears" class="${g.arrears>0?'bg-amber-50 text-amber-800 font-bold':'text-slate-500'}">PKR ${fmt(g.arrears)}</td>
+ <td data-l="Payable" class="font-bold">PKR ${fmt(g.displayPayable)}${g.discount>0?`<div class="text-[10px] text-indigo-600 font-semibold">Discount -${fmt(g.discount)}</div>`:''}</td>
+ <td data-l="Paid" class="font-bold text-emerald-600">PKR ${fmt(g.displayPaid)}${g.dates?`<div class="font-mono font-normal text-[10px] text-indigo-700">${esc(g.dates)}</div>`:''}</td>
  <td data-l="Balance" class="${bc}">${bt}</td>
- <td data-l="Status"><span class="badge ${badge}">${g.status}</span></td>
+ <td data-l="Status"><span class="badge ${badge}">${g.displayStatus}</span></td>
  <td data-l="Action" class="nl" style="min-width:270px"><div style="display:flex;flex-wrap:nowrap;gap:.25rem;white-space:nowrap"><button onclick="openPayModal('${esc(g.vid)}')" class="btn b-ok" style="padding:.3rem .38rem;font-size:.68rem">💳 Pay</button><button onclick="openDiscount('${esc(g.vid)}')" class="btn b-gh" style="padding:.3rem .38rem;font-size:.68rem">% Disc</button><button onclick="openAddItem('${esc(g.vid)}')" class="btn b-gh" style="padding:.3rem .38rem;font-size:.68rem" title="Add another fee to this voucher">➕ Item</button><button onclick="printStudentChallan('${encodeURIComponent(g.adm||'')}','${encodeURIComponent(g.student||'')}','${encodeURIComponent(g.cls||'')}','${encodeURIComponent(g.period||'')}')" class="btn b-gh" style="padding:.3rem .38rem;font-size:.68rem" title="Print a fee challan for this student and voucher month">🖨️ Print</button></div></td></tr>`;
   });
+  renderFeeSummaryDetails(groups);
   tb.innerHTML=html;
-  $('stCount').innerText=groups.filter(g=>!g._out).length;$('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
-  tf.innerHTML=`<div class="text-xs font-bold text-slate-700">Total (filtered): Payable ${fmt(sp)} | Paid ${fmt(sd)} | ${sb<0?'Advance '+fmt(-sb):'Balance '+fmt(sb)}${groups.some(g=>g._out)?' <span class="font-normal text-slate-400">(grey rows are outside the selected months, not counted)</span>':''}</div>
- <div class="flex gap-2"><button onclick="openBulkPayModal()" class="btn b-pri flex-1 md:flex-none">⚡ Bulk pay</button>
+  $('stPayable').innerText=fmt(sp);$('stPaid').innerText=fmt(sd);$('stBal').innerText=sb<0?`Adv ${fmt(-sb)}`:fmt(sb);
+  const visibleCount=groups.filter(g=>!g._out).length;
+  const fromLabel=($('fromMonth').selectedOptions[0]||{}).text||'',toLabel=($('toMonth').selectedOptions[0]||{}).text||'';
+  const periodLabel=fromLabel&&toLabel?(fromLabel===toLabel?fromLabel:`${fromLabel} – ${toLabel}`):'selected period';
+  tf.innerHTML=`<div class="fee-footer-totals">
+ <div class="fee-total-label"><strong>Total (filtered)</strong><span>${visibleCount} voucher${visibleCount===1?'':'s'}${groups.some(g=>g._out)?' · grey rows excluded':''}</span><span class="fee-period-tuition">Tuition fee (${esc(periodLabel)}): PKR ${fmt(currentTuitionTotal)}</span></div>
+ <div class="fee-total-cell" data-total="arrears"><span>Arrears</span><strong>PKR ${fmt(arrearsTotal)}</strong></div>
+ <div class="fee-total-cell" data-total="payable"><span>Payable</span><strong>PKR ${fmt(payableTotal)}</strong></div>
+ <div class="fee-total-cell" data-total="paid"><span>Paid</span><strong>PKR ${fmt(sd)}</strong></div>
+ <div class="fee-total-cell" data-total="balance"><span>Balance</span><strong>${sb<0?'Advance '+fmt(-sb):'PKR '+fmt(sb)}</strong></div></div>
+ <div class="fee-footer-actions"><button onclick="openBulkPayModal()" class="btn b-pri flex-1 md:flex-none">⚡ Bulk pay</button>
  <button onclick="sendWhatsAppReminders()" class="btn b-ok flex-1 md:flex-none">WhatsApp reminders</button></div>`;
 }
 
@@ -322,8 +749,8 @@ function downloadVouchersCsv(){
   const list=sel.size?currentGroups.filter(g=>sel.has(g.vid)):currentGroups;
   if(!list.length){showAlert("There are no vouchers to download.");return}
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const head=['Voucher ID','Admis No','Student','Class','Period','Items','Payable','Discount','Net payable','Paid','Balance','Status','Payment date(s)'];
-  const rows=list.map(g=>[g.vid,g.adm,g.student,g.cls,g.period,g.rows.map(r=>`${itemName(r)} ${r.net??r.payable}`).join(' | '),g.payable,g.discount,g.net,g.paid,g.balance,g.status,g.dates==='-'?'':g.dates]);
+  const head=['Voucher ID','Admis No','Student','Class','Period','Items','Arrears','Payable','Discount','Net payable','Paid','Balance','Status','Payment date(s)'];
+  const rows=list.map(g=>[g.vid,g.adm,g.student,g.cls,g.period,g.rows.map(r=>`${itemName(r)} ${r.net??r.payable}`).join(' | '),g.arrears,g.displayPayable,g.discount,g.displayNet,g.displayPaid,g.displayBalance,g.displayStatus,g.dates==='-'?'':g.dates]);
   const csv='\uFEFF'+[head,...rows].map(r=>r.map(q).join(',')).join('\r\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download=`fee-vouchers-${today()}${sel.size?'-selected':''}.csv`;document.body.appendChild(a);a.click();a.remove();
@@ -366,37 +793,138 @@ function downloadArrearsReconciliation(){
 }
 
 /* ---------- Add another fee item to an existing voucher ---------- */
+let feeItemEditIndex=-1;
+const feeItemRemarks=row=>(row.remarks||'').split(' | ').filter(part=>part&&!part.startsWith('Discount ')).join(' | ');
 function openAddItem(vid){
   const rows=allFeesCache.filter(r=>(r.voucher_id||'').trim()===vid);if(!rows.length)return;
   const f=rows[0];
+  feeItemEditIndex=-1;$('aiTitle').innerText='➕ Add a fee to this voucher';$('aiSaveButton').innerText='Add to voucher';$('aiSaveButton').setAttribute('onclick','saveAddItem()');
+  $('aiType').readOnly=false;
   $('aiVid').value=vid;$('aiStudent').value=`${f.student_name||''} - ${f.period||''}`;$('aiType').value='';$('aiAmt').value='';$('aiDisc').value='';$('aiRemarks').value='';
   $('aiExisting').innerText='Already in this voucher: '+rows.map(r=>`${itemName(r)} ${fmt(r.net??r.payable)}`).join(', ');
   $('addItemModal').classList.add('open');setTimeout(()=>$('aiType').focus(),60);
 }
+function openEditFeeItem(index){
+  const row=allFeesCache[Number(index)];if(!row)return;
+  feeItemEditIndex=Number(index);const vid=(row.voucher_id||'').trim(),locked=isLocked(vid);
+  $('aiTitle').innerText='✏️ Edit fee item';$('aiSaveButton').innerText='Save changes';$('aiSaveButton').setAttribute('onclick','saveFeeItem()');
+  $('aiVid').value=vid;$('aiStudent').value=`${row.student_name||''} - ${row.period||''}`;$('aiType').readOnly=locked;$('aiType').value=row.type||'';
+  $('aiAmt').value=parseFloat(row.payable)||'';$('aiDisc').value=parseFloat(row.discount)||'';$('aiRemarks').value=feeItemRemarks(row);
+  $('aiExisting').innerText=locked?'A payment is recorded. The fee name is locked; amount, discount and remarks can be edited. The payment record stays unchanged.':'Edit the fee name, amount, discount or remarks.';
+  $('addItemModal').classList.add('open');setTimeout(()=>$('aiType').focus(),60);
+}
 async function saveAddItem(){
   const vid=$('aiVid').value,rows=allFeesCache.filter(r=>(r.voucher_id||'').trim()===vid),f=rows[0];if(!f)return;
-  const type=$('aiType').value.trim().toLowerCase().replace(/\s+/g,' '),amt=parseFloat($('aiAmt').value)||0,disc=Math.min(parseFloat($('aiDisc').value)||0,amt),rm=$('aiRemarks').value.trim();
+  const type=$('aiType').value.trim().toLowerCase().replace(/\s+/g,' '),amt=parseFloat($('aiAmt').value)||0,disc=parseFloat($('aiDisc').value)||0,rm=$('aiRemarks').value.trim();
   if(!type){showAlert("Please choose or type the fee name.");return}
   if(amt<=0){showAlert("Please enter an amount greater than 0.");return}
+  if(disc<0||disc>amt){showAlert("Discount must be between zero and the fee amount.");return}
   if(rows.some(r=>(r.type||'').trim().toLowerCase()===type)){showAlert(`This voucher already has "${type}". Edit its discount, or use a different name.`);return}
   if(disc>0&&!rm){showAlert("Remarks are required when a discount is given.");return}
-  const row={sr_no:f.sr_no||'',voucher_id:vid,admis_no:f.admis_no||'',student_name:f.student_name||'',type,period:f.period,payable:amt,discount:disc,class:f.class||'',status:'Unpaid',date:today(),remarks:disc>0?`Discount ${disc}: ${rm}`:rm,[FEES_SIBLINGS_COL]:f[FEES_SIBLINGS_COL]??null,[FEES_ARREARS_COL]:null};
+  const row={sr_no:f.sr_no||'',voucher_id:vid,admis_no:f.admis_no||'',student_name:f.student_name||'',type,period:f.period,payable:amt,discount:0,class:f.class||'',status:'Unpaid',date:today(),remarks:rm,[FEES_SIBLINGS_COL]:f[FEES_SIBLINGS_COL]??null,[FEES_ARREARS_COL]:null};
   const go=async()=>{
     showLoading("Adding item...");
     try{
-      const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:HJ,body:JSON.stringify(row)});
-      hideLoading();
-      if(res.ok){$('addItemModal').classList.remove('open');showAlert(`"${tcase(type)}" PKR ${fmt(amt-disc)} added to voucher ${vid}.`);initFeePage()}
-      else showAlert(feeErr("Failed to add: "+await res.text()));
-    }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
+      const res=await fetch(`${SUPABASE_URL}/rest/v1/fees`,{method:'POST',headers:{...HJ,Prefer:'return=representation'},body:JSON.stringify(row)});
+      const text=await res.text();
+      if(!res.ok){hideLoading();showAlert(feeErr("Failed to add: "+text));return}
+      const inserted=text?JSON.parse(text):[];
+      const seq=Number(Array.isArray(inserted)&&inserted[0]&&inserted[0].seq);
+      if(!Number.isSafeInteger(seq)||seq<1){hideLoading();$('addItemModal').classList.remove('open');await initFeePage();showAlert(`"${tcase(type)}" was added at full payable, but the database did not return its fee-line ID. No discount was applied.`);return}
+      if(disc>0){
+        try{
+          const requestId=await requestFeeDiscount(seq,disc,rm);
+          hideLoading();$('addItemModal').classList.remove('open');await initFeePage();
+          showAlert(`"${tcase(type)}" was added. Discount request #${requestId} is pending approval by a different active Admin.`);
+        }catch(error){
+          hideLoading();$('addItemModal').classList.remove('open');await initFeePage();
+          showAlert(`"${tcase(type)}" was added at full payable; its discount request failed: ${error.message||'Unknown database error'}`);
+        }
+      }else{
+        hideLoading();$('addItemModal').classList.remove('open');showAlert(`"${tcase(type)}" PKR ${fmt(amt)} added to voucher ${vid}.`);initFeePage();
+      }
+    }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database while adding the fee item.")}
   };
   if(rows.every(r=>r.status==='Paid')&&rows.length)showConfirm(`Voucher ${vid} is fully paid. Adding this item makes it partly unpaid again. Continue?`,go);else go();
 }
+async function saveFeeItem(){
+  const row=allFeesCache[feeItemEditIndex];if(!row)return;
+  const vid=(row.voucher_id||'').trim(),type=$('aiType').value.trim().toLowerCase().replace(/\s+/g,' '),amt=parseFloat($('aiAmt').value)||0,disc=parseFloat($('aiDisc').value)||0,rm=$('aiRemarks').value.trim();
+  if(!type){showAlert('Please enter a fee name.');return}
+  if(amt<=0){showAlert('Fee amount must be greater than 0. Use Remove to delete this item.');return}
+  if(disc<0||disc>amt){showAlert('Discount must be between 0 and the fee amount.');return}
+  if(allFeesCache.some((r,i)=>i!==feeItemEditIndex&&(r.voucher_id||'').trim()===vid&&(r.type||'').trim().toLowerCase()===type)){showAlert(`This voucher already has "${type}".`);return}
+  if(disc>0&&!rm){showAlert('Remarks are required when a discount is given.');return}
+  const previousDiscount=parseFloat(row.discount)||0,discountChanged=disc!==previousDiscount;
+  if(discountChanged&&!canRequestFeeDiscount()){showAlert('Fees Edit permission is required to request a discount.');return}
+  if(discountChanged&&previousDiscount>amt){showAlert('The current discount exceeds the new payable. Request and approve a lower discount first, then edit the payable amount.');return}
+  const existingDiscountNote=(row.remarks||'').split(' | ').find(part=>part.startsWith('Discount '))||'';
+  const remarks=[rm,discountChanged?'':existingDiscountNote].filter(Boolean).join(' | ');
+  showLoading('Saving fee item...');
+  try{
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/fees?${rowFilter(row)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({type,payable:amt,remarks})});
+    hideLoading();
+    if(!res.ok){showAlert('Failed to update fee item: '+await res.text());return}
+    if(discountChanged){
+      try{
+        const requestId=await requestFeeDiscount(Number(row.seq),disc,rm);
+        $('addItemModal').classList.remove('open');await initFeePage();
+        showAlert(`Fee item updated. Discount request #${requestId} is pending approval by a different active Admin.`);
+      }catch(error){
+        $('addItemModal').classList.remove('open');await initFeePage();
+        showAlert(`Fee item details were updated, but its discount request failed. The previous discount remains: ${error.message||'Unknown database error'}`);
+      }
+    }else{$('addItemModal').classList.remove('open');showAlert('Fee item updated.');initFeePage()}
+  }catch(e){hideLoading();console.error(e);showAlert('Error connecting to database while updating the fee item.')}
+}
+function deleteFeeItem(index){
+  const row=allFeesCache[Number(index)];if(!row)return;
+  const vid=(row.voucher_id||'').trim(),sameVoucher=allFeesCache.filter(r=>(r.voucher_id||'').trim()===vid),locked=isLocked(vid);
+  if(locked&&sameVoucher.length===1){showAlert('This voucher has a recorded payment and this is its only fee item. Delete the payment from Accounts & Daybook before removing the last item.');return}
+  const warning=locked?'\n\nRecorded payments stay on this voucher and will be applied to the remaining fee items.':'';
+  showConfirm(`Remove ${itemName(row)} (PKR ${fmt(row.payable)}) from voucher ${vid}?${warning}`,async()=>{
+    showLoading('Removing fee item...');
+    try{
+      const res=await fetch(`${SUPABASE_URL}/rest/v1/fees?${rowFilter(row)}`,{method:'DELETE',headers:{...H,Prefer:'return=minimal'}});
+      hideLoading();
+      if(res.ok){$('addItemModal').classList.remove('open');showAlert(`${itemName(row)} removed from voucher ${vid}.`);initFeePage()}
+      else showAlert('Failed to remove fee item: '+await res.text());
+    }catch(e){hideLoading();console.error(e);showAlert('Error connecting to database while removing the fee item.')}
+  });
+}
 
 /* ---------- Bulk pay ---------- */
+let bulkDueGroups=[];
+function dueGroupsAfterCredits(groups,cutoff){
+  const ordinal=g=>periodOrdinal(g.period)??(g.rows.every(isArr)?Number.MIN_SAFE_INTEGER:null);
+  const sorted=[...groups].sort((a,b)=>(ordinal(a)??Number.MAX_SAFE_INTEGER)-(ordinal(b)??Number.MAX_SAFE_INTEGER)||normAdm(a.adm).localeCompare(normAdm(b.adm))||a.vid.localeCompare(b.vid));
+  const credits=new Map(),due=[];
+  sorted.forEach(g=>{
+    const period=ordinal(g);if(period===null||period>cutoff)return;
+    const student=normAdm(g.adm)||String(g.student||'').trim().toLowerCase(),credit=credits.get(student)||0,balance=Number(g.balance)||0;
+    if(balance<0){credits.set(student,credit-balance);return}
+    const applied=Math.min(credit,balance),remaining=Math.round((balance-applied)*100)/100;
+    credits.set(student,credit-applied);
+    if(remaining>0.004)due.push({...g,balance:remaining});
+  });
+  return due;
+}
 function openBulkPayModal(){
   if(!filtered.length){showAlert("No vouchers in the current filter.");return}
-  let t=0;filtered.forEach(r=>{const b=parseFloat(r.balance)||0;if(b>0&&!r._out)t+=b});
+  const targets=new Map();
+  currentGroups.filter(g=>!g._out).forEach(g=>{
+    const key=normAdm(g.adm)||String(g.student||'').trim().toLowerCase(),period=periodOrdinal(g.period);
+    if(!key||period===null)return;
+    targets.set(key,Math.max(targets.get(key)||0,period));
+  });
+  if(!targets.size){showAlert("No dated student vouchers in the current filter.");return}
+  const current=new Date(),cutoff=Math.min(Math.max(...targets.values()),current.getFullYear()*12+current.getMonth());
+  const eligible=buildGroups(allFeesCache).filter(g=>{
+    const key=normAdm(g.adm)||String(g.student||'').trim().toLowerCase(),period=periodOrdinal(g.period)??(g.rows.every(isArr)?Number.MIN_SAFE_INTEGER:null);
+    return targets.has(key)&&period!==null&&period<=cutoff;
+  });
+  bulkDueGroups=dueGroupsAfterCredits(eligible,cutoff);
+  const t=bulkDueGroups.reduce((sum,g)=>sum+g.balance,0);
   $('bulkTotalDues').value=`PKR ${t}`;$('bulkReceivedAmount').value=t>0?t:'';
   $('bulkPayModal').classList.add('open');
 }
@@ -405,8 +933,8 @@ const closeBulkPayModal=()=>$('bulkPayModal').classList.remove('open');
 function sendWhatsAppReminders(){
   if(!filtered.length){showAlert("No students in the current filter.");return}
   const map={};
-  filtered.forEach(r=>{const n=(r.student_name||'').trim(),b=parseFloat(r.balance)||0;
-    if(n&&b>0&&!r._out){(map[n]??={admis_no:(r.admis_no||'').trim(),total:0}).total+=b}});
+  currentGroups.forEach(g=>{const n=(g.student||'').trim(),b=Number(g.displayBalance)||0;
+    if(n&&b>0&&!g._out){(map[n]??={admis_no:(g.adm||'').trim(),total:0}).total+=b}});
   const names=Object.keys(map);
   if(!names.length){showAlert("No pending dues in the current filter.");return}
   showConfirm(`Found ${names.length} student(s) with pending dues. Prepare a WhatsApp reminder for the first one?`,()=>{
@@ -435,16 +963,13 @@ function submitBulkFifoPayment(){
   if(recv<=0){showAlert("Please enter a valid amount greater than 0.");return}
   showConfirm(`PKR ${recv} will be distributed via FIFO. Any extra is saved as advance on the latest voucher. Proceed?`,async()=>{
     closeBulkPayModal();
-    const ord=(a,b,dir)=>{const m1=monthOrder[(a.period||'').trim()]||(dir>0?99:0),m2=monthOrder[(b.period||'').trim()]||(dir>0?99:0);return m1-m2};
-    const sorted=[...filtered].sort((a,b)=>ord(a,b,1)||(isArr(b)-isArr(a)));
-    const newest=[...filtered].sort((a,b)=>ord(b,a,-1)||(isArr(a)-isArr(b)))[0];
-    const label=v=>`${v.type||'Tuition Fee'} (${v.period||''}) - ${v.student_name||''}`;
-    const mk=(v,sfx,amt,rm)=>({voucher_id:`${(v.voucher_id||'').trim()}-${sfx}`,from_account:label(v),to_account:$('bulkAccount').value||'cash',description:rm,amount_in:amt,amount_out:0,date,remarks:rm});
+    const sorted=bulkDueGroups,newest=sorted[sorted.length-1];
+    const label=v=>`${v.rows.length>1?'Admission voucher':itemName(v.rows[0])} (${v.period||''}) - ${v.student||''}`;
+    const mk=(v,sfx,amt,rm)=>({voucher_id:`${v.vid}-${sfx}`,from_account:label(v),to_account:$('bulkAccount').value||'cash',description:rm,amount_in:amt,amount_out:0,date,remarks:rm});
     const nonce=Date.now(),pl=[];let rem=recv;
     for(const v of sorted){
       if(rem<=0)break;const bal=parseFloat(v.balance)||0;let amt=0;
       if(bal>0)amt=Math.min(rem,bal);
-      else if(v.voucher_id===newest.voucher_id)amt=rem;
       if(amt>0){pl.push(mk(v,`${nonce}-${Math.floor(Math.random()*1000)}`,amt,remarks));rem-=amt}
     }
     if(rem>0&&newest)pl.push(mk(newest,`${nonce}-adv`,rem,remarks+" (Advance)"));
@@ -852,20 +1377,91 @@ function dcPick(){
  const d=(r.remarks||'').split(' | ').find(x=>x.startsWith('Discount '));$('dcRemarks').value=d?d.replace(/^Discount [^:]*: /,''):'';
 }
 const closeDiscount=()=>$('discountModal').classList.remove('open');
+const canRequestFeeDiscount=()=>typeof can==='function'&&can('fees','e');
+const canReviewFeeDiscount=()=>!!(ME&&ME.role==='Admin');
+async function postFeeDiscountRpc(name,payload){
+  const res=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:{...HJ,Prefer:'return=representation'},body:JSON.stringify(payload)});
+  const body=await res.text();
+  if(!res.ok)throw new Error(body||`HTTP ${res.status}`);
+  try{return body?JSON.parse(body):null}catch(e){throw new Error(`The database response from ${name} was invalid.`)}
+}
+async function requestFeeDiscount(seq,amount,reason){
+  const id=await postFeeDiscountRpc('app_request_fee_discount',{p_fee_seq:seq,p_discount:amount,p_reason:reason});
+  if(!Number.isSafeInteger(Number(id))||Number(id)<1)throw new Error('The database did not return a valid discount request ID.');
+  return Number(id);
+}
+async function loadFeeDiscountRequests(){
+  const panel=$('feeDiscountRequestsPanel');
+  if(!panel)return;
+  if(!canRequestFeeDiscount()&&!canReviewFeeDiscount()){panel.classList.add('hidden');return}
+  panel.classList.remove('hidden');
+  $('feeDiscountRequestsNote').innerText='Loading discount requests…';
+  try{
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/fee_discount_requests?select=id,fee_seq,previous_discount,requested_discount,reason,requested_by,status,created_at,admin_note&order=created_at.desc&limit=100`,{headers:H});
+    const text=await res.text();
+    if(!res.ok)throw new Error(text||`HTTP ${res.status}`);
+    const data=text?JSON.parse(text):[];
+    if(!Array.isArray(data))throw new Error('The database returned an invalid discount request list.');
+    feeDiscountRequests=data;
+    renderFeeDiscountRequests();
+  }catch(error){
+    console.error('Could not load fee discount requests:',error);
+    feeDiscountRequests=[];
+    $('feeDiscountRequestsNote').innerText=`Could not load discount requests: ${error.message||'Unknown database error'}`;
+    $('feeDiscountRequestsBody').innerHTML='<tr><td colspan="7" class="p-3 text-center text-rose-700">Discount request workflow is unavailable. Verify that its Supabase migration is installed.</td></tr>';
+  }
+}
+function renderFeeDiscountRequests(){
+  const admin=canReviewFeeDiscount(),email=String(ME&&ME.email||'').trim().toLowerCase();
+  const pending=feeDiscountRequests.filter(request=>request.status==='Pending').length;
+  $('feeDiscountRequestsNote').innerText=`${pending} pending · showing ${feeDiscountRequests.length} recent request(s).`;
+  $('feeDiscountRequestsBody').innerHTML=feeDiscountRequests.length?feeDiscountRequests.map(request=>{
+    const fee=allFeesCache.find(row=>Number(row.seq)===Number(request.fee_seq));
+    const self=String(request.requested_by||'').trim().toLowerCase()===email;
+    const review=request.status!=='Pending'?(esc(request.admin_note||'—')):
+      !admin?'<span class="text-amber-700">Awaiting Admin</span>':
+      self?'<span class="text-amber-700">Another Admin must review</span>':
+      `<div class="flex gap-1"><button type="button" class="btn b-ok" onclick="reviewFeeDiscountRequest(${Number(request.id)},true)">Approve</button><button type="button" class="btn b-rd" onclick="reviewFeeDiscountRequest(${Number(request.id)},false)">Reject</button></div>`;
+    return`<tr class="border-t align-top"><td class="p-2 font-semibold">${esc(request.status||'')}</td><td class="p-2">${esc(fee?fee.voucher_id:`Fee line #${request.fee_seq}`)}<div class="text-slate-500">${esc(fee?fee.student_name||fee.admis_no||'':'Fee line unavailable')}</div></td><td class="p-2">${esc(request.requested_by||'')}</td><td class="p-2">${fmt(request.previous_discount)}</td><td class="p-2">${fmt(request.requested_discount)}</td><td class="p-2">${esc(request.reason||'—')}</td><td class="p-2">${review}</td></tr>`;
+  }).join(''):'<tr><td colspan="7" class="p-3 text-center text-slate-500">No discount requests yet.</td></tr>';
+}
+function reviewFeeDiscountRequest(id,approve){
+  if(!canReviewFeeDiscount()){showAlert('Only an active Admin can review discount requests.');return}
+  const request=feeDiscountRequests.find(item=>Number(item.id)===Number(id));
+  if(!request){showAlert('This discount request is no longer available. Refresh and try again.');return}
+  if(String(request.requested_by||'').trim().toLowerCase()===String(ME.email||'').trim().toLowerCase()){
+    showAlert('A requester cannot approve or reject their own discount. Sign in as a different active Admin to review it.');
+    return;
+  }
+  showConfirm(`Confirm ${approve?'approval':'rejection'} of discount request #${id} for ${request.requested_discount}?`,async()=>{
+    showLoading(`${approve?'Approving':'Rejecting'} discount request...`);
+    try{
+      await postFeeDiscountRpc('app_review_fee_discount_request',{p_request_id:Number(id),p_approve:!!approve,p_admin_note:null});
+      hideLoading();showAlert(`Discount request #${id} ${approve?'approved':'rejected'}.`);
+      await initFeePage();
+    }catch(error){
+      hideLoading();console.error('Could not review fee discount request:',error);
+      showAlert(`Could not ${approve?'approve':'reject'} discount request: ${error.message||'Unknown database error'}`);
+    }
+  });
+}
 async function saveDiscount(){
   const vid=$('dcVid').value,amt=parseFloat($('dcAmt').value)||0,rs=$('dcRemarks').value.trim(),pay=parseFloat($('dcPayable').value)||0;
   if(amt<0||amt>pay){showAlert("Discount must be between 0 and the payable amount.");return}
   if(amt>0&&!rs){showAlert("Remarks are required for a discount.");return}
   const r=allFeesCache.filter(x=>(x.voucher_id||'').trim()===vid)[+$('dcItem').value||0]||{};
- const parts=(r.remarks||'').split(' | ').filter(x=>x&&!x.startsWith('Discount '));
-  if(amt>0)parts.push(`Discount ${amt}: ${rs}`);
+  const seq=Number(r.seq),currentDiscount=parseFloat(r.discount)||0;
+  if(!Number.isSafeInteger(seq)||seq<1){showAlert('This fee line has no database sequence number. Refresh the Fee page and try again.');return}
+  if(amt===currentDiscount){showAlert('The requested discount is already applied to this fee line.');return}
+  if(!canRequestFeeDiscount()){showAlert('Fees Edit permission is required to request a discount.');return}
   showLoading("Saving discount...");
   try{
-    const res=await fetch(`${SUPABASE_URL}/rest/v1/fees?${rowFilter(r)}`,{method:'PATCH',headers:HJ,body:JSON.stringify({discount:amt,remarks:parts.join(' | ')})});
-    hideLoading();
-    if(res.ok){closeDiscount();showAlert("Discount saved.");initFeePage()}
-    else showAlert("Failed to save: "+await res.text());
-  }catch(e){hideLoading();console.error(e);showAlert("Error connecting to database.")}
+    const requestId=await requestFeeDiscount(seq,amt,rs);
+    hideLoading();closeDiscount();
+    showAlert(`Discount request #${requestId} submitted. It will apply after a different active Admin approves it.`);
+    await loadFeeDiscountRequests();
+    $('feeDiscountRequestsPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+  }catch(error){hideLoading();console.error('Could not submit fee discount request:',error);showAlert(`Could not submit discount request: ${error.message||'Unknown database error'}`)}
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.open').forEach(m=>m.classList.remove('open'))});
 
@@ -885,10 +1481,10 @@ function openStudentBulkPay(){
   const vid=($('payVoucherId').value||'').trim(),row=allFeesCache.find(r=>(r.voucher_id||'').trim()===vid);if(!row)return;
   const adm=normAdm(row.admis_no),nm=(row.student_name||'').trim().toLowerCase();
   const groups=buildGroups(allFeesCache.filter(r=>adm?normAdm(r.admis_no)===adm:(r.student_name||'').trim().toLowerCase()===nm));
-  const t=sbToday(),ym=t.slice(0,7),key=g=>g.rows.every(isArr)?'0000-00':periodStart(g.period).slice(0,7);
-  groups.sort((a,b)=>key(a).localeCompare(key(b))||a.vid.localeCompare(b.vid));
-  const dueAll=groups.filter(g=>key(g)<=ym),future=groups.filter(g=>key(g)>ym&&g.balance>0.5);
-  const due=dueAll.filter(g=>g.balance>0.5),total=Math.round(due.reduce((s,g)=>s+g.balance,0)*100)/100;
+  const t=sbToday(),d=new Date(t+'T00:00:00'),cutoff=d.getFullYear()*12+d.getMonth(),key=g=>g.rows.every(isArr)?Number.MIN_SAFE_INTEGER:(periodOrdinal(g.period)??Number.MAX_SAFE_INTEGER);
+  groups.sort((a,b)=>key(a)-key(b)||a.vid.localeCompare(b.vid));
+  const dueAll=groups.filter(g=>key(g)<=cutoff),future=groups.filter(g=>key(g)>cutoff&&g.balance>0.5);
+  const due=dueGroupsAfterCredits(dueAll,cutoff),total=Math.round(due.reduce((s,g)=>s+g.balance,0)*100)/100;
   SB={name:row.student_name||'',due,dueAll,future,total,noTarget:0};
   $('sbName').innerText=SB.name+(row.admis_no?` (Adm ${row.admis_no})`:'');$('sbUpTo').innerText=new Date(t+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
   $('sbDues').innerHTML=due.length?`<table class="w-full text-xs"><thead class="bg-slate-50 text-slate-600"><tr><th class="p-1.5 text-left">Month</th><th class="p-1.5 text-left">Voucher</th><th class="p-1.5 text-left">Fee</th><th class="p-1.5 text-right">Pending</th></tr></thead><tbody>${due.map(g=>`<tr class="border-b"><td class="p-1.5 text-indigo-600">${esc(g.period)||'-'}</td><td class="p-1.5 font-mono">${esc(g.vid)}</td><td class="p-1.5">${esc(g.rows.length>1?'Admission voucher':itemName(g.rows[0]))}</td><td class="p-1.5 text-right font-bold text-rose-600">PKR ${fmt(g.balance)}</td></tr>`).join('')}</tbody></table>`:'<p class="text-xs text-emerald-700 font-semibold">No dues up to today. Anything you enter will be saved as an advance.</p>';
