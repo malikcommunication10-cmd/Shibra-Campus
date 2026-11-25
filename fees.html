@@ -155,6 +155,9 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
       <p class="text-[11px] text-amber-900 mt-2">This report does not create or change vouchers. Review the student or ledger, then use Generate / Sync only after confirming the record.</p>
     </section>
 
+    <div id="feeDiscountRequestsControl" class="hidden flex justify-end no-print">
+      <button id="feeDiscountRequestsToggle" type="button" class="btn b-gh" onclick="toggleFeeDiscountRequests()" aria-expanded="false">Show discount requests</button>
+    </div>
     <section id="feeDiscountRequestsPanel" class="hidden bg-white rounded-xl border p-3 no-print">
       <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
         <div><h3 class="font-bold text-indigo-950 text-sm">Discount requests &amp; Admin approval</h3><p id="feeDiscountRequestsNote" class="text-xs text-slate-600 mt-1">Loading discount requests…</p></div>
@@ -162,11 +165,11 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
       </div>
       <div class="overflow-x-auto max-h-80 rounded-lg border">
         <table class="w-full text-left text-xs">
-          <thead class="sticky top-0 bg-indigo-50 text-indigo-950"><tr><th class="p-2">Status</th><th class="p-2">Voucher / student</th><th class="p-2">Requested by</th><th class="p-2">Previous</th><th class="p-2">Requested</th><th class="p-2">Reason</th><th class="p-2">Review</th></tr></thead>
+          <thead class="sticky top-0 bg-indigo-50 text-indigo-950"><tr><th class="p-2">Status</th><th class="p-2">Voucher / student</th><th class="p-2">Requested by</th><th class="p-2">Previous</th><th class="p-2">Requested</th><th class="p-2">Reason</th><th class="p-2">Review</th><th class="p-2">Delete</th></tr></thead>
           <tbody id="feeDiscountRequestsBody"></tbody>
         </table>
       </div>
-      <p class="text-[11px] text-slate-500 mt-2">A separate active Admin must approve a request. The requester cannot approve their own discount.</p>
+      <p class="text-[11px] text-slate-500 mt-2">A separate active Admin must approve a request. The requester cannot approve their own discount. Deleted rows remain in the audit log; deleting an approved request does not reverse its discount.</p>
     </section>
 
     <div id="afBanner" class="hidden no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3"></div>
@@ -422,7 +425,7 @@ table.rt td[data-l="Payable"],table.rt td[data-l="Paid"],table.rt td[data-l="Bal
   <div class="flex justify-end gap-2 pt-2 border-t"><button onclick="closeDiscount()" class="btn b-gh">Cancel</button><button onclick="saveDiscount()" class="btn b-pri">Submit for approval</button></div>
 </div></div>
 
-<script src="js/pages/fees.js?v=20261125-2"></script>
+<script src="js/pages/fees.js?v=20261125-4"></script>
 <script src="js/pages/challan.js?v=20261107-2"></script>
 </body>
 </html>
