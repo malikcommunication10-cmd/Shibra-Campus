@@ -19,7 +19,7 @@ function setFeeSchoolYear(year) {
 }
 setFeeSchoolYear(SCHOOL_YEAR);
 
-let accountsRaw=[],importPlan=null,syncItems=[],allFeesCache=[], allStudentsCache=[], incrementsCacheMap={}, accountsDataMap={}, filtered=[],currentTuitionTotal=0,feeDiscountRequests=[];
+let accountsRaw=[],importPlan=null,syncItems=[],allFeesCache=[], allStudentsCache=[], incrementsCacheMap={}, accountsDataMap={}, filtered=[],currentTuitionTotal=0,feeDiscountRequests=[],feeDiscountRequestsExpanded=false,feeDiscountRequestsLoaded=false,feeDiscountPendingIds=new Set();
 
 const $=id=>document.getElementById(id);
 $('filterStudentActive').checked=true;$('filterStudentInactive').checked=false;
@@ -1379,6 +1379,20 @@ function dcPick(){
 const closeDiscount=()=>$('discountModal').classList.remove('open');
 const canRequestFeeDiscount=()=>typeof can==='function'&&can('fees','e');
 const canReviewFeeDiscount=()=>!!(ME&&ME.role==='Admin');
+function syncFeeDiscountRequestsVisibility(){
+  const toggle=$('feeDiscountRequestsToggle'),panel=$('feeDiscountRequestsPanel');
+  if(!toggle||!panel)return;
+  const pending=feeDiscountRequests.filter(request=>request.status==='Pending').length;
+  toggle.innerText=`${feeDiscountRequestsExpanded?'Hide':'Show'} discount requests (${pending} pending)`;
+  toggle.setAttribute('aria-expanded',String(feeDiscountRequestsExpanded));
+  panel.classList.toggle('hidden',!feeDiscountRequestsExpanded);
+}
+function toggleFeeDiscountRequests(){
+  if(!canRequestFeeDiscount()&&!canReviewFeeDiscount())return;
+  feeDiscountRequestsExpanded=!feeDiscountRequestsExpanded;
+  syncFeeDiscountRequestsVisibility();
+  if(feeDiscountRequestsExpanded)loadFeeDiscountRequests();
+}
 async function postFeeDiscountRpc(name,payload){
   const res=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:{...HJ,Prefer:'return=representation'},body:JSON.stringify(payload)});
   const body=await res.text();
@@ -1393,8 +1407,9 @@ async function requestFeeDiscount(seq,amount,reason){
 async function loadFeeDiscountRequests(){
   const panel=$('feeDiscountRequestsPanel');
   if(!panel)return;
-  if(!canRequestFeeDiscount()&&!canReviewFeeDiscount()){panel.classList.add('hidden');return}
-  panel.classList.remove('hidden');
+  const toggle=$('feeDiscountRequestsControl');
+  if(!canRequestFeeDiscount()&&!canReviewFeeDiscount()){panel.classList.add('hidden');if(toggle)toggle.classList.add('hidden');return}
+  if(toggle)toggle.classList.remove('hidden');
   $('feeDiscountRequestsNote').innerText='Loading discount requests…';
   try{
     const res=await fetch(`${SUPABASE_URL}/rest/v1/fee_discount_requests?select=id,fee_seq,previous_discount,requested_discount,reason,requested_by,status,created_at,admin_note&order=created_at.desc&limit=100`,{headers:H});
@@ -1402,13 +1417,18 @@ async function loadFeeDiscountRequests(){
     if(!res.ok)throw new Error(text||`HTTP ${res.status}`);
     const data=text?JSON.parse(text):[];
     if(!Array.isArray(data))throw new Error('The database returned an invalid discount request list.');
+    const pendingIds=new Set(data.filter(request=>request.status==='Pending').map(request=>String(request.id)));
+    if((!feeDiscountRequestsLoaded&&pendingIds.size)||[...pendingIds].some(id=>!feeDiscountPendingIds.has(id)))feeDiscountRequestsExpanded=true;
     feeDiscountRequests=data;
+    feeDiscountPendingIds=pendingIds;feeDiscountRequestsLoaded=true;
     renderFeeDiscountRequests();
   }catch(error){
     console.error('Could not load fee discount requests:',error);
     feeDiscountRequests=[];
+    feeDiscountPendingIds=new Set();feeDiscountRequestsLoaded=false;feeDiscountRequestsExpanded=true;
     $('feeDiscountRequestsNote').innerText=`Could not load discount requests: ${error.message||'Unknown database error'}`;
-    $('feeDiscountRequestsBody').innerHTML='<tr><td colspan="7" class="p-3 text-center text-rose-700">Discount request workflow is unavailable. Verify that its Supabase migration is installed.</td></tr>';
+    $('feeDiscountRequestsBody').innerHTML='<tr><td colspan="8" class="p-3 text-center text-rose-700">Discount request workflow is unavailable. Verify that its Supabase migration is installed.</td></tr>';
+    syncFeeDiscountRequestsVisibility();
   }
 }
 function renderFeeDiscountRequests(){
@@ -1422,8 +1442,10 @@ function renderFeeDiscountRequests(){
       !admin?'<span class="text-amber-700">Awaiting Admin</span>':
       self?'<span class="text-amber-700">Another Admin must review</span>':
       `<div class="flex gap-1"><button type="button" class="btn b-ok" onclick="reviewFeeDiscountRequest(${Number(request.id)},true)">Approve</button><button type="button" class="btn b-rd" onclick="reviewFeeDiscountRequest(${Number(request.id)},false)">Reject</button></div>`;
-    return`<tr class="border-t align-top"><td class="p-2 font-semibold">${esc(request.status||'')}</td><td class="p-2">${esc(fee?fee.voucher_id:`Fee line #${request.fee_seq}`)}<div class="text-slate-500">${esc(fee?fee.student_name||fee.admis_no||'':'Fee line unavailable')}</div></td><td class="p-2">${esc(request.requested_by||'')}</td><td class="p-2">${fmt(request.previous_discount)}</td><td class="p-2">${fmt(request.requested_discount)}</td><td class="p-2">${esc(request.reason||'—')}</td><td class="p-2">${review}</td></tr>`;
-  }).join(''):'<tr><td colspan="7" class="p-3 text-center text-slate-500">No discount requests yet.</td></tr>';
+    const remove=admin?`<button type="button" class="text-rose-600 hover:text-rose-800 font-bold px-2" title="Delete request" aria-label="Delete discount request ${Number(request.id)}" onclick="deleteFeeDiscountRequest(${Number(request.id)})">×</button>`:'—';
+    return`<tr class="border-t align-top"><td class="p-2 font-semibold">${esc(request.status||'')}</td><td class="p-2">${esc(fee?fee.voucher_id:`Fee line #${request.fee_seq}`)}<div class="text-slate-500">${esc(fee?fee.student_name||fee.admis_no||'':'Fee line unavailable')}</div></td><td class="p-2">${esc(request.requested_by||'')}</td><td class="p-2">${fmt(request.previous_discount)}</td><td class="p-2">${fmt(request.requested_discount)}</td><td class="p-2">${esc(request.reason||'—')}</td><td class="p-2">${review}</td><td class="p-2 text-center">${remove}</td></tr>`;
+  }).join(''):'<tr><td colspan="8" class="p-3 text-center text-slate-500">No discount requests yet.</td></tr>';
+  syncFeeDiscountRequestsVisibility();
 }
 function reviewFeeDiscountRequest(id,approve){
   if(!canReviewFeeDiscount()){showAlert('Only an active Admin can review discount requests.');return}
@@ -1442,6 +1464,31 @@ function reviewFeeDiscountRequest(id,approve){
     }catch(error){
       hideLoading();console.error('Could not review fee discount request:',error);
       showAlert(`Could not ${approve?'approve':'reject'} discount request: ${error.message||'Unknown database error'}`);
+    }
+  });
+}
+function deleteFeeDiscountRequest(id){
+  if(!canReviewFeeDiscount()){showAlert('Only an active Admin can delete discount requests.');return}
+  const request=feeDiscountRequests.find(item=>Number(item.id)===Number(id));
+  if(!request){showAlert('This discount request is no longer available. Refresh and try again.');return}
+  const effect=request.status==='Pending'
+    ?'This will cancel the pending approval.'
+    :request.status==='Approved'
+      ?'This removes the request row only; the approved discount will not be reversed.'
+      :'This removes the request row.';
+  showConfirm(`Delete discount request #${id}? ${effect} The deletion remains in the audit log.`,async()=>{
+    showLoading('Deleting discount request...');
+    try{
+      await postFeeDiscountRpc('app_delete_fee_discount_request',{p_request_id:Number(id)});
+      hideLoading();
+      feeDiscountRequests=feeDiscountRequests.filter(item=>Number(item.id)!==Number(id));
+      feeDiscountPendingIds.delete(String(id));
+      renderFeeDiscountRequests();
+      showAlert(`Discount request #${id} deleted. The action is recorded in the audit log.`);
+      await loadFeeDiscountRequests();
+    }catch(error){
+      hideLoading();console.error('Could not delete fee discount request:',error);
+      showAlert(`Could not delete discount request: ${error.message||'Unknown database error'}`);
     }
   });
 }
